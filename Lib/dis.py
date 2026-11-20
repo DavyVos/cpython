@@ -644,8 +644,11 @@ def _get_const_value(op, arg, co_consts):
 
     argval = UNKNOWN
     if co_consts is not None:
-        argval = co_consts[arg]
-    return argval
+        try:
+            argval = co_consts[arg]
+            return argval
+        except IndexError as e:
+            return argval
 
 def _get_const_info(op, arg, co_consts):
     """Helper to get optional details about const references
