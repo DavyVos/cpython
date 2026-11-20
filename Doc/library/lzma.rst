@@ -4,6 +4,9 @@
 .. module:: lzma
    :synopsis: A Python wrapper for the liblzma compression library.
 
+.. moduleauthor:: Nadeem Vawda <nadeem.vawda@gmail.com>
+.. sectionauthor:: Nadeem Vawda <nadeem.vawda@gmail.com>
+
 .. versionadded:: 3.3
 
 **Source code:** :source:`Lib/lzma.py`
@@ -19,8 +22,6 @@ The interface provided by this module is very similar to that of the :mod:`bz2`
 module. Note that :class:`LZMAFile` and :class:`bz2.BZ2File` are *not*
 thread-safe, so if you need to use a single :class:`LZMAFile` instance
 from multiple threads, it is necessary to protect it with a lock.
-
-.. include:: ../includes/optional-module.rst
 
 
 .. exception:: LZMAError
@@ -314,50 +315,6 @@ Miscellaneous
    feature set.
 
 
-Information about the version of the lzma library in use is available through
-the following constants:
-
-
-.. data:: LZMA_VERSION
-
-   The version string of the lzma library that was used for building the module.
-   This may be different from the lzma library actually used at runtime, which
-   is available as :const:`lzma_version`.
-
-   .. versionadded:: 3.16
-
-
-.. data:: lzma_version
-
-   The version string of the lzma library actually loaded by the interpreter.
-
-   .. versionadded:: 3.16
-
-
-.. data:: LZMA_VERSION_INFO
-
-   A named tuple containing the four components of the lzma library
-   version that was used for building the module:
-   *major*, *minor*, *patch*, and *stability*.
-   All values except *stability* are integers; *stability* is ``'alpha'``,
-   ``'beta'``, or ``'stable'``.
-   The components can also be accessed by name, so ``lzma.LZMA_VERSION_INFO[0]``
-   is equivalent to ``lzma.LZMA_VERSION_INFO.major`` and so on.
-   This may be different from the lzma library actually used at runtime, which
-   is available as :const:`lzma_version_info`.
-
-   .. versionadded:: 3.16
-
-
-.. data:: lzma_version_info
-
-   A named tuple containing the version of the lzma library
-   actually loaded by the interpreter,
-   with the same fields as :const:`LZMA_VERSION_INFO`.
-
-   .. versionadded:: 3.16
-
-
 .. _filter-chain-specs:
 
 Specifying custom filter chains
@@ -385,20 +342,6 @@ options. Valid filter IDs are as follows:
   * :const:`!FILTER_ARMTHUMB`
   * :const:`!FILTER_POWERPC`
   * :const:`!FILTER_SPARC`
-
-    The above work on all lzma runtime library versions.
-
-  * :const:`!FILTER_ARM64`
-
-    Only works if the lzma version is 5.4.0 or later.
-
-    .. versionadded:: 3.16
-
-  * :const:`!FILTER_RISCV`
-
-    Only works if the lzma version is 5.6.0 or later.
-
-    .. versionadded:: 3.16
 
 A filter chain can consist of up to 4 filters, and cannot be empty. The last
 filter in the chain must be a compression filter, and any other filters must be

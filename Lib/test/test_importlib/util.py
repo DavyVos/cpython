@@ -10,12 +10,12 @@ from test import support
 from test.support import import_helper
 from test.support import is_apple_mobile
 from test.support import os_helper
+from test.support.testcase import ExtraAssertions
 import unittest
 import sys
 import tempfile
 import types
 
-# gh-116303: Skip test module dependent tests if test modules are unavailable
 import_helper.import_module("_testmultiphase")
 
 
@@ -69,8 +69,7 @@ def import_importlib(module_name):
     fresh = ('importlib',) if '.' in module_name else ()
     frozen = import_helper.import_fresh_module(module_name)
     source = import_helper.import_fresh_module(module_name, fresh=fresh,
-                                         blocked=('_frozen_importlib', '_frozen_importlib_external',
-                                                  '_pybuiltins'))
+                                         blocked=('_frozen_importlib', '_frozen_importlib_external'))
     return {'Frozen': frozen, 'Source': source}
 
 
@@ -82,7 +81,7 @@ def specialize_class(cls, kind, base=None, **kwargs):
     elif not isinstance(base, type):
         base = base[kind]
     name = '{}_{}'.format(kind, cls.__name__)
-    bases = (cls, base)
+    bases = (cls, base, ExtraAssertions)
     specialized = types.new_class(name, bases)
     specialized.__module__ = cls.__module__
     specialized._NAME = cls.__name__
@@ -293,9 +292,6 @@ def writes_bytecode_files(fxn):
     tests that require it to be set to False."""
     if sys.dont_write_bytecode:
         return unittest.skip("relies on writing bytecode")(fxn)
-    if sys.implementation.cache_tag is None:
-        return unittest.skip("requires sys.implementation.cache_tag to not be None")(fxn)
-
     @functools.wraps(fxn)
     def wrapper(*args, **kwargs):
         original = sys.dont_write_bytecode

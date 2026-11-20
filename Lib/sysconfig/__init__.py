@@ -23,9 +23,6 @@ __all__ = [
 _ALWAYS_STR = {
     'IPHONEOS_DEPLOYMENT_TARGET',
     'MACOSX_DEPLOYMENT_TARGET',
-    'TVOS_DEPLOYMENT_TARGET',
-    'WATCHOS_DEPLOYMENT_TARGET',
-    'XROS_DEPLOYMENT_TARGET',
 }
 
 _INSTALL_SCHEMES = {
@@ -119,10 +116,8 @@ def _getuserbase():
     if env_base:
         return env_base
 
-    # Emscripten, iOS, tvOS, VxWorks, WASI, and watchOS have no home directories.
-    # Use _PYTHON_HOST_PLATFORM to get the correct platform when cross-compiling.
-    system_name = os.environ.get('_PYTHON_HOST_PLATFORM', sys.platform).split('-')[0]
-    if system_name in {"emscripten", "ios", "tvos", "visionos", "vxworks", "wasi", "watchos"}:
+    # Emscripten, iOS, tvOS, VxWorks, WASI, and watchOS have no home directories
+    if sys.platform in {"emscripten", "ios", "tvos", "vxworks", "wasi", "watchos"}:
         return None
 
     def joinuser(*args):
@@ -185,8 +180,6 @@ _CONFIG_VARS_LOCK = threading.RLock()
 _CONFIG_VARS = None
 # True iff _CONFIG_VARS has been fully initialized.
 _CONFIG_VARS_INITIALIZED = False
-_config_vars_cached_prefix = None
-_config_vars_cached_exec_prefix = None
 _USER_BASE = None
 
 
@@ -224,7 +217,18 @@ if os.name == 'nt':
 if "_PYTHON_PROJECT_BASE" in os.environ:
     _PROJECT_BASE = _safe_realpath(os.environ["_PYTHON_PROJECT_BASE"])
 
-def is_python_build():
+def is_python_build(check_home=None):
+    if check_home is not None:
+        import warnings
+        warnings.warn(
+            (
+                'The check_home argument of sysconfig.is_python_build is '
+                'deprecated and its value is ignored. '
+                'It will be removed in Python 3.15.'
+            ),
+            DeprecationWarning,
+            stacklevel=2,
+        )
     for fn in ("Setup", "Setup.local"):
         if os.path.isfile(os.path.join(_PROJECT_BASE, "Modules", fn)):
             return True
@@ -319,35 +323,15 @@ def get_default_scheme():
 
 def get_makefile_filename():
     """Return the path of the Makefile."""
-
-    # GH-127429: When cross-compiling, use the Makefile from the target, instead of the host Python.
-    if cross_base := os.environ.get('_PYTHON_PROJECT_BASE'):
-        return os.path.join(cross_base, 'Makefile')
-
     if _PYTHON_BUILD:
         return os.path.join(_PROJECT_BASE, "Makefile")
-
     if hasattr(sys, 'abiflags'):
         config_dir_name = f'config-{_PY_VERSION_SHORT}{sys.abiflags}'
     else:
         config_dir_name = 'config'
-
     if hasattr(sys.implementation, '_multiarch'):
         config_dir_name += f'-{sys.implementation._multiarch}'
-
     return os.path.join(get_path('stdlib'), config_dir_name, 'Makefile')
-
-
-def _import_from_directory(path, name):
-    if name not in sys.modules:
-        import importlib.machinery
-        import importlib.util
-
-        spec = importlib.machinery.PathFinder.find_spec(name, [path])
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        sys.modules[name] = module
-    return sys.modules[name]
 
 
 def _get_sysconfigdata_name():
@@ -357,34 +341,26 @@ def _get_sysconfigdata_name():
         f'_sysconfigdata_{sys.abiflags}_{sys.platform}_{multiarch}',
     )
 
-
-def _get_sysconfigdata():
-    import importlib
-
-    name = _get_sysconfigdata_name()
-    path = os.environ.get('_PYTHON_SYSCONFIGDATA_PATH')
-    module = _import_from_directory(path, name) if path else importlib.import_module(name)
-
-    return module.build_time_vars
-
-
-def _installation_is_relocated():
-    """Is the Python installation running from a different prefix than what was targeted when building?"""
-    if os.name != 'posix':
-        raise NotImplementedError('sysconfig._installation_is_relocated() is currently only supported on POSIX')
-
-    data = _get_sysconfigdata()
-    return (
-        data['prefix'] != getattr(sys, 'base_prefix', '')
-        or data['exec_prefix'] != getattr(sys, 'base_exec_prefix', '')
-    )
-
-
 def _init_posix(vars):
     """Initialize the module as appropriate for POSIX systems."""
-    # GH-126920: Make sure we don't overwrite any of the keys already set
-    vars.update(_get_sysconfigdata() | vars)
+    # _sysconfigdata is generated at build time, see _generate_posix_vars()
+    name = _get_sysconfigdata_name()
 
+    # For cross builds, the path to the target's sysconfigdata must be specified
+    # so it can be imported. It cannot be in PYTHONPATH, as foreign modules in
+    # sys.path can cause crashes when loaded by the host interpreter.
+    # Rely on truthiness as a valueless env variable is still an empty string.
+    # See OS X note in _generate_posix_vars re _sysconfigdata.
+    if (path := os.environ.get('_PYTHON_SYSCONFIGDATA_PATH')):
+        from importlib.machinery import FileFinder, SourceFileLoader, SOURCE_SUFFIXES
+        from importlib.util import module_from_spec
+        spec = FileFinder(path, (SourceFileLoader, SOURCE_SUFFIXES)).find_spec(name)
+        _temp = module_from_spec(spec)
+        spec.loader.exec_module(_temp)
+    else:
+        _temp = __import__(name, globals(), locals(), ['build_time_vars'], 0)
+    build_time_vars = _temp.build_time_vars
+    vars.update(build_time_vars)
 
 def _init_non_posix(vars):
     """Initialize the module as appropriate for NT"""
@@ -395,19 +371,8 @@ def _init_non_posix(vars):
     vars['BINLIBDEST'] = get_path('platstdlib')
     vars['INCLUDEPY'] = get_path('include')
 
-    # Add EXT_SUFFIX, SOABI, Py_DEBUG, and Py_GIL_DISABLED
+    # Add EXT_SUFFIX, SOABI, and Py_GIL_DISABLED
     vars.update(_sysconfig.config_vars())
-
-    # NOTE: ABIFLAGS is only an emulated value. It is not present during build
-    #       on Windows. sys.abiflags is absent on Windows and vars['abiflags']
-    #       is already widely used to calculate paths, so it should remain an
-    #       empty string.
-    vars['ABIFLAGS'] = ''.join(
-        (
-            't' if vars['Py_GIL_DISABLED'] else '',
-            '_d' if vars['Py_DEBUG'] else '',
-        ),
-    )
 
     vars['LIBDIR'] = _safe_realpath(os.path.join(get_config_var('installed_base'), 'libs'))
     if hasattr(sys, 'dllhandle'):
@@ -417,13 +382,7 @@ def _init_non_posix(vars):
     vars['EXE'] = '.exe'
     vars['VERSION'] = _PY_VERSION_SHORT_NO_DOT
     vars['BINDIR'] = os.path.dirname(_safe_realpath(sys.executable))
-    # No standard path exists on Windows for this, but we'll check
-    # whether someone is imitating a POSIX-like layout
-    check_tzpath = os.path.join(vars['prefix'], 'share', 'zoneinfo')
-    if os.path.exists(check_tzpath):
-        vars['TZPATH'] = check_tzpath
-    else:
-        vars['TZPATH'] = ''
+    vars['TZPATH'] = ''
 
 #
 # public APIs
@@ -440,10 +399,8 @@ def parse_config_h(fp, vars=None):
     if vars is None:
         vars = {}
     import re
-    name_rx = '(?:[A-Z]|_Py_)[A-Za-z0-9_]+'
-    define_rx = re.compile(fr"#define ({name_rx}) (.*)\n")
-    undef_rx = re.compile(fr"/[*] #undef ({name_rx}) [*]/\n")
-    quoted_re = re.compile(r'"(.*)"')
+    define_rx = re.compile("#define ([A-Z][A-Za-z0-9_]+) (.*)\n")
+    undef_rx = re.compile("/[*] #undef ([A-Z][A-Za-z0-9_]+) [*]/\n")
 
     while True:
         line = fp.readline()
@@ -452,8 +409,6 @@ def parse_config_h(fp, vars=None):
         m = define_rx.match(line)
         if m:
             n, v = m.group(1, 2)
-            if mq := quoted_re.fullmatch(v):
-                v = mq.group(1)
             try:
                 if n in _ALWAYS_STR:
                     raise ValueError
@@ -472,7 +427,7 @@ def get_config_h_filename():
     """Return the path of pyconfig.h."""
     if _PYTHON_BUILD:
         if os.name == "nt":
-            inc_dir = os.path.join(_PROJECT_BASE, 'PC')
+            inc_dir = os.path.dirname(sys._base_executable)
         else:
             inc_dir = _PROJECT_BASE
     else:
@@ -513,44 +468,29 @@ def get_path(name, scheme=get_default_scheme(), vars=None, expand=True):
 def _init_config_vars():
     global _CONFIG_VARS
     _CONFIG_VARS = {}
-
-    prefix = os.path.normpath(sys.prefix)
-    exec_prefix = os.path.normpath(sys.exec_prefix)
-    base_prefix = _BASE_PREFIX
-    base_exec_prefix = _BASE_EXEC_PREFIX
-
-    try:
-        abiflags = sys.abiflags
-    except AttributeError:
-        abiflags = ''
-
-    if os.name == 'posix':
-        _init_posix(_CONFIG_VARS)
-        # If we are cross-compiling, load the prefixes from the Makefile instead.
-        if '_PYTHON_PROJECT_BASE' in os.environ:
-            prefix = _CONFIG_VARS['host_prefix']
-            exec_prefix = _CONFIG_VARS['host_exec_prefix']
-            base_prefix = _CONFIG_VARS['host_prefix']
-            base_exec_prefix = _CONFIG_VARS['host_exec_prefix']
-            abiflags = _CONFIG_VARS['ABIFLAGS']
-
     # Normalized versions of prefix and exec_prefix are handy to have;
     # in fact, these are the standard versions used most places in the
     # Distutils.
-    _CONFIG_VARS['prefix'] = prefix
-    _CONFIG_VARS['exec_prefix'] = exec_prefix
+    _PREFIX = os.path.normpath(sys.prefix)
+    _EXEC_PREFIX = os.path.normpath(sys.exec_prefix)
+    _CONFIG_VARS['prefix'] = _PREFIX  # FIXME: This gets overwriten by _init_posix.
+    _CONFIG_VARS['exec_prefix'] = _EXEC_PREFIX  # FIXME: This gets overwriten by _init_posix.
     _CONFIG_VARS['py_version'] = _PY_VERSION
     _CONFIG_VARS['py_version_short'] = _PY_VERSION_SHORT
     _CONFIG_VARS['py_version_nodot'] = _PY_VERSION_SHORT_NO_DOT
-    _CONFIG_VARS['installed_base'] = base_prefix
-    _CONFIG_VARS['base'] = prefix
-    _CONFIG_VARS['installed_platbase'] = base_exec_prefix
-    _CONFIG_VARS['platbase'] = exec_prefix
+    _CONFIG_VARS['installed_base'] = _BASE_PREFIX
+    _CONFIG_VARS['base'] = _PREFIX
+    _CONFIG_VARS['installed_platbase'] = _BASE_EXEC_PREFIX
+    _CONFIG_VARS['platbase'] = _EXEC_PREFIX
     _CONFIG_VARS['projectbase'] = _PROJECT_BASE
     _CONFIG_VARS['platlibdir'] = sys.platlibdir
     _CONFIG_VARS['implementation'] = _get_implementation()
     _CONFIG_VARS['implementation_lower'] = _get_implementation().lower()
-    _CONFIG_VARS['abiflags'] = abiflags
+    try:
+        _CONFIG_VARS['abiflags'] = sys.abiflags
+    except AttributeError:
+        # sys.abiflags may not be defined on all platforms.
+        _CONFIG_VARS['abiflags'] = ''
     try:
         _CONFIG_VARS['py_version_nodot_plat'] = sys.winver.replace('.', '')
     except AttributeError:
@@ -559,6 +499,8 @@ def _init_config_vars():
     if os.name == 'nt':
         _init_non_posix(_CONFIG_VARS)
         _CONFIG_VARS['VPATH'] = sys._vpath
+    if os.name == 'posix':
+        _init_posix(_CONFIG_VARS)
     if _HAS_USER_BASE:
         # Setting 'userbase' is done below the call to the
         # init function to enable using 'get_config_var' in
@@ -606,22 +548,9 @@ def get_config_vars(*args):
     each argument in the configuration variable dictionary.
     """
     global _CONFIG_VARS_INITIALIZED
-    global _config_vars_cached_prefix
-    global _config_vars_cached_exec_prefix
 
     # Avoid claiming the lock once initialization is complete.
-    prefix = os.path.normpath(sys.prefix)
-    exec_prefix = os.path.normpath(sys.exec_prefix)
-    if _CONFIG_VARS_INITIALIZED:
-        # GH-126789: If sys.prefix or sys.exec_prefix were updated, invalidate the cache.
-        if _config_vars_cached_prefix != prefix or _config_vars_cached_exec_prefix != exec_prefix:
-            with _CONFIG_VARS_LOCK:
-                _CONFIG_VARS_INITIALIZED = False
-                _init_config_vars()
-                _config_vars_cached_prefix = prefix
-                _config_vars_cached_exec_prefix = exec_prefix
-    else:
-        # Initialize the config_vars cache.
+    if not _CONFIG_VARS_INITIALIZED:
         with _CONFIG_VARS_LOCK:
             # Test again with the lock held to avoid races. Note that
             # we test _CONFIG_VARS here, not _CONFIG_VARS_INITIALIZED,
@@ -629,8 +558,15 @@ def get_config_vars(*args):
             # don't re-enter init_config_vars().
             if _CONFIG_VARS is None:
                 _init_config_vars()
-            _config_vars_cached_prefix = prefix
-            _config_vars_cached_exec_prefix = exec_prefix
+    else:
+        # If the site module initialization happened after _CONFIG_VARS was
+        # initialized, a virtual environment might have been activated, resulting in
+        # variables like sys.prefix changing their value, so we need to re-init the
+        # config vars (see GH-126789).
+        if _CONFIG_VARS['base'] != os.path.normpath(sys.prefix):
+            with _CONFIG_VARS_LOCK:
+                _CONFIG_VARS_INITIALIZED = False
+                _init_config_vars()
 
     if args:
         vals = []
@@ -660,9 +596,6 @@ def get_platform():
     isn't particularly important.
 
     Examples of returned values:
-       linux-x86_64
-       linux-aarch64
-       solaris-2.6-sun4u
 
 
     Windows:
@@ -680,10 +613,12 @@ def get_platform():
 
     For other non-POSIX platforms, currently just returns :data:`sys.platform`."""
     if os.name == 'nt':
-        import _sysconfig
-        platform = _sysconfig.get_platform()
-        if platform:
-            return platform
+        if 'amd64' in sys.version.lower():
+            return 'win-amd64'
+        if '(arm)' in sys.version.lower():
+            return 'win-arm32'
+        if '(arm64)' in sys.version.lower():
+            return 'win-arm64'
         return sys.platform
 
     if os.name != "posix" or not hasattr(os, 'uname'):
@@ -692,42 +627,42 @@ def get_platform():
 
     # Set for cross builds explicitly
     if "_PYTHON_HOST_PLATFORM" in os.environ:
-        osname, _, machine = os.environ["_PYTHON_HOST_PLATFORM"].partition('-')
-        release = None
-    else:
-        # Try to distinguish various flavours of Unix
-        osname, host, release, version, machine = os.uname()
+        return os.environ["_PYTHON_HOST_PLATFORM"]
 
-        # Convert the OS name to lowercase, remove '/' characters, and translate
-        # spaces (for "Power Macintosh")
-        osname = osname.lower().replace('/', '')
-        machine = machine.replace(' ', '_')
-        machine = machine.replace('/', '-')
+    # Try to distinguish various flavours of Unix
+    osname, host, release, version, machine = os.uname()
 
-    if osname == "android" or sys.platform == "android":
-        osname = "android"
-        release = get_config_var("ANDROID_API_LEVEL")
+    # Convert the OS name to lowercase, remove '/' characters, and translate
+    # spaces (for "Power Macintosh")
+    osname = osname.lower().replace('/', '')
+    machine = machine.replace(' ', '_')
+    machine = machine.replace('/', '-')
 
-        # Wheel tags use the ABI names from Android's own tools.
-        # When Python is running on 32-bit ARM Android on a 64-bit ARM kernel,
-        # 'os.uname().machine' is 'armv8l'. Such devices run the same userspace
-        # code as 'armv7l' devices.
-        # During the build process of the Android testbed when targeting 32-bit ARM,
-        # '_PYTHON_HOST_PLATFORM' is 'arm-linux-androideabi', so 'machine' becomes
-        # 'arm'.
-        machine = {
-            "aarch64": "arm64_v8a",
-            "arm": "armeabi_v7a",
-            "armv7l": "armeabi_v7a",
-            "armv8l": "armeabi_v7a",
-            "i686": "x86",
-            "x86_64": "x86_64",
-        }[machine]
-    elif osname == "linux":
-        # At least on Linux/Intel, 'machine' is the processor --
-        # i386, etc.
-        # XXX what about Alpha, SPARC, etc?
-        return  f"{osname}-{machine}"
+    if osname[:5] == "linux":
+        if sys.platform == "android":
+            osname = "android"
+            release = get_config_var("ANDROID_API_LEVEL")
+
+            # Wheel tags use the ABI names from Android's own tools.
+            # When Python is running on 32-bit ARM Android on a 64-bit ARM kernel,
+            # 'os.uname().machine' is 'armv8l'. Such devices run the same userspace
+            # code as 'armv7l' devices.
+            # During the build process of the Android testbed when targeting 32-bit ARM,
+            # '_PYTHON_HOST_PLATFORM' is 'arm-linux-androideabi', so 'machine' becomes
+            # 'arm'.
+            machine = {
+                "aarch64": "arm64_v8a",
+                "arm": "armeabi_v7a",
+                "armv7l": "armeabi_v7a",
+                "armv8l": "armeabi_v7a",
+                "i686": "x86",
+                "x86_64": "x86_64",
+            }[machine]
+        else:
+            # At least on Linux/Intel, 'machine' is the processor --
+            # i386, etc.
+            # XXX what about Alpha, SPARC, etc?
+            return  f"{osname}-{machine}"
     elif osname[:5] == "sunos":
         if release[0] >= "5":           # SunOS 5 == Solaris 2
             osname = "solaris"
@@ -753,25 +688,13 @@ def get_platform():
             release = get_config_vars().get("IPHONEOS_DEPLOYMENT_TARGET", "13.0")
             osname = sys.platform
             machine = sys.implementation._multiarch
-        elif sys.platform == "tvos":
-            release = get_config_vars().get("TVOS_DEPLOYMENT_TARGET", "12.0")
-            osname = sys.platform
-            machine = sys.implementation._multiarch
-        elif sys.platform == "watchos":
-            release = get_config_vars().get("WATCHOS_DEPLOYMENT_TARGET", "9.0")
-            osname = sys.platform
-            machine = sys.implementation._multiarch
-        elif sys.platform == "visionos":
-            release = get_config_vars().get("XROS_DEPLOYMENT_TARGET", "2.0")
-            osname = sys.platform
-            machine = sys.implementation._multiarch
         else:
             import _osx_support
             osname, release, machine = _osx_support.get_platform_osx(
                                                 get_config_vars(),
                                                 osname, release, machine)
 
-    return '-'.join(map(str, filter(None, (osname, release, machine))))
+    return f"{osname}-{release}-{machine}"
 
 
 def get_python_version():
@@ -780,3 +703,32 @@ def get_python_version():
 
 def _get_python_version_abi():
     return _PY_VERSION_SHORT + get_config_var("abi_thread")
+
+
+def expand_makefile_vars(s, vars):
+    """Expand Makefile-style variables -- "${foo}" or "$(foo)" -- in
+    'string' according to 'vars' (a dictionary mapping variable names to
+    values).  Variables not present in 'vars' are silently expanded to the
+    empty string.  The variable values in 'vars' should not contain further
+    variable expansions; if 'vars' is the output of 'parse_makefile()',
+    you're fine.  Returns a variable-expanded version of 's'.
+    """
+    import re
+
+    _findvar1_rx = r"\$\(([A-Za-z][A-Za-z0-9_]*)\)"
+    _findvar2_rx = r"\${([A-Za-z][A-Za-z0-9_]*)}"
+
+    # This algorithm does multiple expansion, so if vars['foo'] contains
+    # "${bar}", it will expand ${foo} to ${bar}, and then expand
+    # ${bar}... and so forth.  This is fine as long as 'vars' comes from
+    # 'parse_makefile()', which takes care of such expansions eagerly,
+    # according to make's variable expansion semantics.
+
+    while True:
+        m = re.search(_findvar1_rx, s) or re.search(_findvar2_rx, s)
+        if m:
+            (beg, end) = m.span()
+            s = s[0:beg] + vars.get(m.group(1)) + s[end:]
+        else:
+            break
+    return s

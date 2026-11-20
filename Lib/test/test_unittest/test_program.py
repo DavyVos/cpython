@@ -135,14 +135,14 @@ class Test_TestProgram(unittest.TestCase):
                                 argv=["foobar"],
                                 testRunner=unittest.TextTestRunner(stream=stream),
                                 testLoader=self.TestLoader(self.FooBar))
-        self.assertHasAttr(program, 'result')
+        self.assertTrue(hasattr(program, 'result'))
         out = stream.getvalue()
         self.assertIn('\nFAIL: testFail ', out)
         self.assertIn('\nERROR: testError ', out)
         self.assertIn('\nUNEXPECTED SUCCESS: testUnexpectedSuccess ', out)
         expected = ('\n\nFAILED (failures=1, errors=1, skipped=1, '
                     'expected failures=1, unexpected successes=1)\n')
-        self.assertEndsWith(out, expected)
+        self.assertTrue(out.endswith(expected))
 
     def test_Exit(self):
         stream = BufferedWriter()
@@ -159,7 +159,7 @@ class Test_TestProgram(unittest.TestCase):
         self.assertIn('\nUNEXPECTED SUCCESS: testUnexpectedSuccess ', out)
         expected = ('\n\nFAILED (failures=1, errors=1, skipped=1, '
                     'expected failures=1, unexpected successes=1)\n')
-        self.assertEndsWith(out, expected)
+        self.assertTrue(out.endswith(expected))
 
     def test_ExitAsDefault(self):
         stream = BufferedWriter()
@@ -174,7 +174,7 @@ class Test_TestProgram(unittest.TestCase):
         self.assertIn('\nUNEXPECTED SUCCESS: testUnexpectedSuccess ', out)
         expected = ('\n\nFAILED (failures=1, errors=1, skipped=1, '
                     'expected failures=1, unexpected successes=1)\n')
-        self.assertEndsWith(out, expected)
+        self.assertTrue(out.endswith(expected))
 
     def test_ExitSkippedSuite(self):
         stream = BufferedWriter()
@@ -186,7 +186,7 @@ class Test_TestProgram(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0)
         out = stream.getvalue()
         expected = '\n\nOK (skipped=1)\n'
-        self.assertEndsWith(out, expected)
+        self.assertTrue(out.endswith(expected))
 
     def test_ExitEmptySuite(self):
         stream = BufferedWriter()
@@ -266,32 +266,6 @@ class TestCommandLineArgs(unittest.TestCase):
             program.verbosity = 1
             program.parseArgs([None, opt])
             self.assertEqual(program.verbosity, 2)
-
-        # -v can be repeated to ask for more details.
-        for args, verbosity in (
-            (['-vv'], 3),
-            (['-v', '-v'], 3),
-            (['--verbose', '--verbose'], 3),
-            (['-vvv'], 4),
-            # -q overrides any number of -v.
-            (['-v', '-q'], 0),
-        ):
-            with self.subTest(args=args):
-                program.verbosity = 1
-                program.parseArgs([None, *args])
-                self.assertEqual(program.verbosity, verbosity)
-
-    def testVerbosityCountedOnce(self):
-        # "python -m unittest -v" falls back to test discovery, which parses
-        # arguments again: -v must not be counted twice.
-        program = self.program
-        program.verbosity = 1
-        program.parseArgs([None, '-v'])
-        self.assertEqual(program.verbosity, 2)
-
-        program.verbosity = 1
-        program.parseArgs([None, 'discover', '-vv'])
-        self.assertEqual(program.verbosity, 3)
 
     def testBufferCatchFailfast(self):
         program = self.program

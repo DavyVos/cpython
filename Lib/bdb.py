@@ -1,180 +1,18 @@
 """Debugger basics"""
 
-import os
+import fnmatch
 import sys
+import os
 from contextlib import contextmanager
 from inspect import CO_GENERATOR, CO_COROUTINE, CO_ASYNC_GENERATOR
-lazy import fnmatch
-lazy import threading
-lazy import weakref
 
 __all__ = ["BdbQuit", "Bdb", "Breakpoint"]
 
 GENERATOR_AND_COROUTINE_FLAGS = CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR
 
 
-class BdbQuit(BaseException):
+class BdbQuit(Exception):
     """Exception to give up completely."""
-
-
-E = sys.monitoring.events
-
-class _MonitoringTracer:
-    EVENT_CALLBACK_MAP = {
-        E.PY_START: 'call',
-        E.PY_RESUME: 'call',
-        E.PY_THROW: 'call',
-        E.LINE: 'line',
-        E.JUMP: 'jump',
-        E.PY_RETURN: 'return',
-        E.PY_YIELD: 'return',
-        E.PY_UNWIND: 'unwind',
-        E.RAISE: 'exception',
-        E.STOP_ITERATION: 'exception',
-        E.INSTRUCTION: 'opcode',
-    }
-
-    GLOBAL_EVENTS = E.PY_START | E.PY_RESUME | E.PY_THROW | E.PY_UNWIND | E.RAISE
-    LOCAL_EVENTS = E.LINE | E.JUMP | E.PY_RETURN | E.PY_YIELD | E.STOP_ITERATION
-
-    def __init__(self):
-        self._tool_id = sys.monitoring.DEBUGGER_ID
-        self._name = 'bdbtracer'
-        self._tracefunc = None
-        self._disable_current_event = False
-        self._tracing_thread = None
-        self._enabled = False
-
-    def start_trace(self, tracefunc):
-        self._tracefunc = tracefunc
-        self._tracing_thread = threading.current_thread()
-        curr_tool = sys.monitoring.get_tool(self._tool_id)
-        if curr_tool is None:
-            sys.monitoring.use_tool_id(self._tool_id, self._name)
-        elif curr_tool == self._name:
-            sys.monitoring.clear_tool_id(self._tool_id)
-        else:
-            raise ValueError('Another debugger is using the monitoring tool')
-        E = sys.monitoring.events
-        all_events = 0
-        for event, cb_name in self.EVENT_CALLBACK_MAP.items():
-            callback = self.callback_wrapper(getattr(self, f'{cb_name}_callback'), event)
-            sys.monitoring.register_callback(self._tool_id, event, callback)
-            if event != E.INSTRUCTION:
-                all_events |= event
-        self.update_local_events()
-        sys.monitoring.set_events(self._tool_id, self.GLOBAL_EVENTS)
-        self._enabled = True
-
-    def stop_trace(self):
-        self._enabled = False
-        self._tracing_thread = None
-        curr_tool = sys.monitoring.get_tool(self._tool_id)
-        if curr_tool != self._name:
-            return
-        sys.monitoring.clear_tool_id(self._tool_id)
-        sys.monitoring.free_tool_id(self._tool_id)
-
-    def disable_current_event(self):
-        self._disable_current_event = True
-
-    def restart_events(self):
-        if sys.monitoring.get_tool(self._tool_id) == self._name:
-            sys.monitoring.restart_events()
-
-    def callback_wrapper(self, func, event):
-        import functools
-
-        @functools.wraps(func)
-        def wrapper(*args):
-            if self._tracing_thread != threading.current_thread():
-                return
-            try:
-                frame = sys._getframe().f_back
-                ret = func(frame, *args)
-                if self._enabled and frame.f_trace:
-                    self.update_local_events()
-                if (
-                    self._disable_current_event
-                    and event not in (E.PY_THROW, E.PY_UNWIND, E.RAISE)
-                ):
-                    return sys.monitoring.DISABLE
-                else:
-                    return ret
-            except BaseException:
-                self.stop_trace()
-                sys._getframe().f_back.f_trace = None
-                raise
-            finally:
-                self._disable_current_event = False
-
-        return wrapper
-
-    def call_callback(self, frame, code, *args):
-        local_tracefunc = self._tracefunc(frame, 'call', None)
-        if local_tracefunc is not None:
-            frame.f_trace = local_tracefunc
-            if self._enabled:
-                sys.monitoring.set_local_events(self._tool_id, code, self.LOCAL_EVENTS)
-
-    def return_callback(self, frame, code, offset, retval):
-        if frame.f_trace:
-            frame.f_trace(frame, 'return', retval)
-
-    def unwind_callback(self, frame, code, *args):
-        if frame.f_trace:
-            frame.f_trace(frame, 'return', None)
-
-    def line_callback(self, frame, code, *args):
-        if frame.f_trace and frame.f_trace_lines:
-            frame.f_trace(frame, 'line', None)
-
-    def jump_callback(self, frame, code, inst_offset, dest_offset):
-        if dest_offset > inst_offset:
-            return sys.monitoring.DISABLE
-        inst_lineno = self._get_lineno(code, inst_offset)
-        dest_lineno = self._get_lineno(code, dest_offset)
-        if inst_lineno != dest_lineno:
-            return sys.monitoring.DISABLE
-        if frame.f_trace and frame.f_trace_lines:
-            frame.f_trace(frame, 'line', None)
-
-    def exception_callback(self, frame, code, offset, exc):
-        if frame.f_trace:
-            if exc.__traceback__ and hasattr(exc.__traceback__, 'tb_frame'):
-                tb = exc.__traceback__
-                while tb:
-                    if tb.tb_frame.f_locals.get('self') is self:
-                        return
-                    tb = tb.tb_next
-            frame.f_trace(frame, 'exception', (type(exc), exc, exc.__traceback__))
-
-    def opcode_callback(self, frame, code, offset):
-        if frame.f_trace and frame.f_trace_opcodes:
-            frame.f_trace(frame, 'opcode', None)
-
-    def update_local_events(self, frame=None):
-        if sys.monitoring.get_tool(self._tool_id) != self._name:
-            return
-        if frame is None:
-            frame = sys._getframe().f_back
-        while frame is not None:
-            if frame.f_trace is not None:
-                if frame.f_trace_opcodes:
-                    events = self.LOCAL_EVENTS | E.INSTRUCTION
-                else:
-                    events = self.LOCAL_EVENTS
-                sys.monitoring.set_local_events(self._tool_id, frame.f_code, events)
-            frame = frame.f_back
-
-    def _get_lineno(self, code, offset):
-        import dis
-        last_lineno = None
-        for start, lineno in dis.findlinestarts(code):
-            if offset < start:
-                return last_lineno
-            last_lineno = lineno
-        return last_lineno
 
 
 class Bdb:
@@ -191,7 +29,7 @@ class Bdb:
     is determined by the __name__ in the frame globals.
     """
 
-    def __init__(self, skip=None, backend='settrace'):
+    def __init__(self, skip=None):
         self.skip = set(skip) if skip else None
         self.breaks = {}
         self.fncache = {}
@@ -201,14 +39,6 @@ class Bdb:
         self.enterframe = None
         self.cmdframe = None
         self.cmdlineno = None
-        self.code_linenos = weakref.WeakKeyDictionary()
-        self.backend = backend
-        if backend == 'monitoring':
-            self.monitoring_tracer = _MonitoringTracer()
-        elif backend == 'settrace':
-            self.monitoring_tracer = None
-        else:
-            raise ValueError(f"Invalid backend '{backend}'")
 
         self._load_breaks()
 
@@ -228,18 +58,6 @@ class Bdb:
             canonic = os.path.normcase(canonic)
             self.fncache[filename] = canonic
         return canonic
-
-    def start_trace(self):
-        if self.monitoring_tracer:
-            self.monitoring_tracer.start_trace(self.trace_dispatch)
-        else:
-            sys.settrace(self.trace_dispatch)
-
-    def stop_trace(self):
-        if self.monitoring_tracer:
-            self.monitoring_tracer.stop_trace()
-        else:
-            sys.settrace(None)
 
     def reset(self):
         """Set values of attributes as ready to start debugging."""
@@ -269,9 +87,12 @@ class Bdb:
                   is entered.
             return: A function or other code block is about to return.
             exception: An exception has occurred.
+            c_call: A C function is about to be called.
+            c_return: A C function has returned.
+            c_exception: A C function has raised an exception.
 
-        For all the events, specialized functions (see the dispatch_*()
-        methods) are called.
+        For the Python events, specialized functions (see the dispatch_*()
+        methods) are called.  For the C events, no action is taken.
 
         The arg parameter depends on the previous event.
         """
@@ -287,6 +108,12 @@ class Bdb:
                 return self.dispatch_return(frame, arg)
             if event == 'exception':
                 return self.dispatch_exception(frame, arg)
+            if event == 'c_call':
+                return self.trace_dispatch
+            if event == 'c_exception':
+                return self.trace_dispatch
+            if event == 'c_return':
+                return self.trace_dispatch
             if event == 'opcode':
                 return self.dispatch_opcode(frame, arg)
             print('bdb.Bdb.dispatch: unknown debugging event:', repr(event))
@@ -306,10 +133,7 @@ class Bdb:
             self.cmdframe == frame and self.cmdlineno == frame.f_lineno
         ):
             self.user_line(frame)
-            self.restart_events()
             if self.quitting: raise BdbQuit
-        elif not self.get_break(frame.f_code.co_filename, frame.f_lineno):
-            self.disable_current_event()
         return self.trace_dispatch
 
     def dispatch_call(self, frame, arg):
@@ -325,18 +149,12 @@ class Bdb:
             self.botframe = frame.f_back # (CT) Note that this may also be None!
             return self.trace_dispatch
         if not (self.stop_here(frame) or self.break_anywhere(frame)):
-            # We already know there's no breakpoint in this function
-            # If it's a next/until/return command, we don't need any CALL event
-            # and we don't need to set the f_trace on any new frame.
-            # If it's a step command, it must either hit stop_here, or skip the
-            # whole module. Either way, we don't need the CALL event here.
-            self.disable_current_event()
+            # No need to trace this function
             return # None
         # Ignore call events in generator except when stepping.
         if self.stopframe and frame.f_code.co_flags & GENERATOR_AND_COROUTINE_FLAGS:
             return self.trace_dispatch
         self.user_call(frame, arg)
-        self.restart_events()
         if self.quitting: raise BdbQuit
         return self.trace_dispatch
 
@@ -350,14 +168,10 @@ class Bdb:
         if self.stop_here(frame) or frame == self.returnframe:
             # Ignore return events in generator except when stepping.
             if self.stopframe and frame.f_code.co_flags & GENERATOR_AND_COROUTINE_FLAGS:
-                # It's possible to trigger a StopIteration exception in
-                # the caller so we must set the trace function in the caller
-                self._set_caller_tracefunc(frame)
                 return self.trace_dispatch
             try:
                 self.frame_returning = frame
                 self.user_return(frame, arg)
-                self.restart_events()
             finally:
                 self.frame_returning = None
             if self.quitting: raise BdbQuit
@@ -385,7 +199,6 @@ class Bdb:
             if not (frame.f_code.co_flags & GENERATOR_AND_COROUTINE_FLAGS
                     and arg[0] is StopIteration and arg[2] is None):
                 self.user_exception(frame, arg)
-                self.restart_events()
                 if self.quitting: raise BdbQuit
         # Stop at the StopIteration or GeneratorExit exception when the user
         # has set stopframe in a generator by issuing a return command, or a
@@ -395,7 +208,6 @@ class Bdb:
                 and self.stopframe.f_code.co_flags & GENERATOR_AND_COROUTINE_FLAGS
                 and arg[0] in (StopIteration, GeneratorExit)):
             self.user_exception(frame, arg)
-            self.restart_events()
             if self.quitting: raise BdbQuit
 
         return self.trace_dispatch
@@ -405,14 +217,10 @@ class Bdb:
         If the debugger stops on the current opcode, invoke
         self.user_opcode(). Raise BdbQuit if self.quitting is set.
         Return self.trace_dispatch to continue tracing in this scope.
-
-        Opcode event will always trigger the user callback. For now the only
-        opcode event is from an inline set_trace() and we want to stop there
-        unconditionally.
         """
-        self.user_opcode(frame)
-        self.restart_events()
-        if self.quitting: raise BdbQuit
+        if self.stop_here(frame) or self.break_here(frame):
+            self.user_opcode(frame)
+            if self.quitting: raise BdbQuit
         return self.trace_dispatch
 
     # Normally derived classes don't override the following
@@ -478,25 +286,9 @@ class Bdb:
         raise NotImplementedError("subclass of bdb must implement do_clear()")
 
     def break_anywhere(self, frame):
-        """Return True if there is any breakpoint in that frame
+        """Return True if there is any breakpoint for frame's filename.
         """
-        filename = self.canonic(frame.f_code.co_filename)
-        if filename not in self.breaks:
-            return False
-        for lineno in self.breaks[filename]:
-            if self._lineno_in_frame(lineno, frame):
-                return True
-        return False
-
-    def _lineno_in_frame(self, lineno, frame):
-        """Return True if the line number is in the frame's code object.
-        """
-        code = frame.f_code
-        if lineno < code.co_firstlineno:
-            return False
-        if code not in self.code_linenos:
-            self.code_linenos[code] = set(lineno for _, _, lineno in code.co_lines())
-        return lineno in self.code_linenos[code]
+        return self.canonic(frame.f_code.co_filename) in self.breaks
 
     # Derived classes should override the user_* methods
     # to gain control.
@@ -530,8 +322,6 @@ class Bdb:
                 if frame is self.botframe:
                     break
                 frame = frame.f_back
-            if self.monitoring_tracer:
-                self.monitoring_tracer.update_local_events()
 
     def _set_stopinfo(self, stopframe, returnframe, stoplineno=0, opcode=False,
                       cmdframe=None, cmdlineno=None):
@@ -572,8 +362,7 @@ class Bdb:
         # the name "until" is borrowed from gdb
         if lineno is None:
             lineno = frame.f_lineno + 1
-        self._set_stopinfo(frame, frame, lineno,
-                           cmdframe=frame, cmdlineno=frame.f_lineno)
+        self._set_stopinfo(frame, frame, lineno)
 
     def set_step(self):
         """Stop after one line of code."""
@@ -592,7 +381,7 @@ class Bdb:
     def set_return(self, frame):
         """Stop when returning from the given frame."""
         if frame.f_code.co_flags & GENERATOR_AND_COROUTINE_FLAGS:
-            self._set_stopinfo(frame, frame, -1)
+            self._set_stopinfo(frame, None, -1)
         else:
             self._set_stopinfo(frame.f_back, frame)
 
@@ -601,14 +390,6 @@ class Bdb:
 
         If frame is not specified, debugging starts from caller's frame.
         """
-
-        if self.enterframe is not None:
-            # If self.enterframe is not None, it means we are already in
-            # dispatched functions. Tracing is disabled when calling a
-            # trace function, so we just skip this set_trace() call.
-            return
-
-        self.stop_trace()
         if frame is None:
             frame = sys._getframe().f_back
         self.reset()
@@ -621,8 +402,7 @@ class Bdb:
                 frame.f_trace_lines = True
                 frame = frame.f_back
             self.set_stepinstr()
-            self.enterframe = None
-        self.start_trace()
+        sys.settrace(self.trace_dispatch)
 
     def set_continue(self):
         """Stop only at breakpoints or when finished.
@@ -633,15 +413,13 @@ class Bdb:
         self._set_stopinfo(self.botframe, None, -1)
         if not self.breaks:
             # no breakpoints; run without debugger overhead
-            self.stop_trace()
+            sys.settrace(None)
             frame = sys._getframe().f_back
             while frame and frame is not self.botframe:
                 del frame.f_trace
                 frame = frame.f_back
             for frame, (trace_lines, trace_opcodes) in self.frame_trace_lines_opcodes.items():
                 frame.f_trace_lines, frame.f_trace_opcodes = trace_lines, trace_opcodes
-            if self.backend == 'monitoring':
-                self.monitoring_tracer.update_local_events()
             self.frame_trace_lines_opcodes = {}
 
     def set_quit(self):
@@ -652,7 +430,7 @@ class Bdb:
         self.stopframe = self.botframe
         self.returnframe = None
         self.quitting = True
-        self.stop_trace()
+        sys.settrace(None)
 
     # Derived classes and clients can call the following methods
     # to manipulate breakpoints.  These methods return an
@@ -755,7 +533,7 @@ class Bdb:
             return 'There are no breakpoints in %s' % filename
         for line in self.breaks[filename]:
             blist = Breakpoint.bplist[filename, line]
-            for bp in blist[:]:
+            for bp in blist:
                 bp.deleteMe()
         del self.breaks[filename]
         return None
@@ -880,16 +658,6 @@ class Bdb:
             s += f'{lprefix}Warning: lineno is None'
         return s
 
-    def disable_current_event(self):
-        """Disable the current event."""
-        if self.backend == 'monitoring':
-            self.monitoring_tracer.disable_current_event()
-
-    def restart_events(self):
-        """Restart all events."""
-        if self.backend == 'monitoring':
-            self.monitoring_tracer.restart_events()
-
     # The following methods can be called by clients to use
     # a debugger to debug a statement or an expression.
     # Both can be given as a string, or a code object.
@@ -907,14 +675,14 @@ class Bdb:
         self.reset()
         if isinstance(cmd, str):
             cmd = compile(cmd, "<string>", "exec")
-        self.start_trace()
+        sys.settrace(self.trace_dispatch)
         try:
             exec(cmd, globals, locals)
         except BdbQuit:
             pass
         finally:
             self.quitting = True
-            self.stop_trace()
+            sys.settrace(None)
 
     def runeval(self, expr, globals=None, locals=None):
         """Debug an expression executed via the eval() function.
@@ -927,14 +695,14 @@ class Bdb:
         if locals is None:
             locals = globals
         self.reset()
-        self.start_trace()
+        sys.settrace(self.trace_dispatch)
         try:
             return eval(expr, globals, locals)
         except BdbQuit:
             pass
         finally:
             self.quitting = True
-            self.stop_trace()
+            sys.settrace(None)
 
     def runctx(self, cmd, globals, locals):
         """For backwards-compatibility.  Defers to run()."""
@@ -949,7 +717,7 @@ class Bdb:
         Return the result of the function call.
         """
         self.reset()
-        self.start_trace()
+        sys.settrace(self.trace_dispatch)
         res = None
         try:
             res = func(*args, **kwds)
@@ -957,7 +725,7 @@ class Bdb:
             pass
         finally:
             self.quitting = True
-            self.stop_trace()
+            sys.settrace(None)
         return res
 
 

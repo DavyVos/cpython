@@ -8,9 +8,11 @@
 --------------
 
 For applications that require data compression, the functions in this module
-allow compression and decompression, using the `zlib library <https://www.zlib.net>`_.
-
-.. include:: ../includes/optional-module.rst
+allow compression and decompression, using the zlib library. The zlib library
+has its own home page at https://www.zlib.net.   There are known
+incompatibilities between the Python module and versions of the zlib library
+earlier than 1.1.3; 1.1.3 has a `security vulnerability <https://zlib.net/zlib_faq.html#faq33>`_, so we recommend using
+1.1.4 or later.
 
 zlib's functions have many options and often need to be used in a particular
 order.  This documentation doesn't attempt to cover all of the permutations;
@@ -41,20 +43,6 @@ The available exception and functions in this module are:
 
    .. versionchanged:: 3.0
       The result is always unsigned.
-
-.. function:: adler32_combine(adler1, adler2, len2, /)
-
-   Combine two Adler-32 checksums into one.
-
-   Given the Adler-32 checksum *adler1* of a sequence ``A`` and the
-   Adler-32 checksum *adler2* of a sequence ``B`` of length *len2*,
-   return the Adler-32 checksum of ``A`` and ``B`` concatenated.
-
-   This function is typically useful to combine Adler-32 checksums
-   that were concurrently computed. To compute checksums sequentially, use
-   :func:`adler32` with the running checksum as the ``value`` argument.
-
-   .. versionadded:: 3.15
 
 .. function:: compress(data, /, level=Z_DEFAULT_COMPRESSION, wbits=MAX_WBITS)
 
@@ -144,20 +132,6 @@ The available exception and functions in this module are:
 
    .. versionchanged:: 3.0
       The result is always unsigned.
-
-.. function:: crc32_combine(crc1, crc2, len2, /)
-
-   Combine two CRC-32 checksums into one.
-
-   Given the CRC-32 checksum *crc1* of a sequence ``A`` and the
-   CRC-32 checksum *crc2* of a sequence ``B`` of length *len2*,
-   return the CRC-32 checksum of ``A`` and ``B`` concatenated.
-
-   This function is typically useful to combine CRC-32 checksums
-   that were concurrently computed. To compute checksums sequentially, use
-   :func:`crc32` with the running checksum as the ``value`` argument.
-
-   .. versionadded:: 3.15
 
 .. function:: decompress(data, /, wbits=MAX_WBITS, bufsize=DEF_BUF_SIZE)
 
@@ -297,7 +271,7 @@ Decompression objects support the following methods and attributes:
 .. method:: Decompress.decompress(data, /, max_length=0)
 
    Decompress *data*, returning a bytes object containing the uncompressed data
-   corresponding to at least part of *data*.  This data should be
+   corresponding to at least part of the data in *string*.  This data should be
    concatenated to the output produced by any preceding calls to the
    :meth:`decompress` method.  Some of the input data may be preserved in internal
    buffers for later processing.
@@ -308,11 +282,6 @@ Decompression objects support the following methods and attributes:
    :attr:`unconsumed_tail`. This bytestring must be passed to a subsequent call to
    :meth:`decompress` if decompression is to continue.  If *max_length* is zero
    then the whole input is decompressed, and :attr:`unconsumed_tail` is empty.
-   For example, the full content could be read like::
-
-     process_output(d.decompress(data, max_length))
-     while chunk := d.decompress(d.unconsumed_tail, max_length):
-         process_output(chunk)
 
    .. versionchanged:: 3.6
       *max_length* can be used as a keyword argument.
@@ -479,67 +448,14 @@ the following constants:
 
    The version string of the zlib library that was used for building the module.
    This may be different from the zlib library actually used at runtime, which
-   is available as :const:`zlib_version`.
+   is available as :const:`ZLIB_RUNTIME_VERSION`.
 
 
 .. data:: ZLIB_RUNTIME_VERSION
-          zlib_version
 
    The version string of the zlib library actually loaded by the interpreter.
 
-   Prefer :const:`!zlib_version` over its :const:`!ZLIB_RUNTIME_VERSION` alias.
-
    .. versionadded:: 3.3
-      The :const:`!ZLIB_RUNTIME_VERSION` constant.
-
-   .. versionadded:: 3.16
-      The :const:`!zlib_version` constant; :const:`!ZLIB_RUNTIME_VERSION` is now
-      an alias for it.
-
-
-.. data:: ZLIB_VERSION_INFO
-
-   A named tuple containing the four components of the zlib library
-   version that was used for building the module:
-   *major*, *minor*, *revision*, and *subversion*.
-   All values are integers.
-   The components can also be accessed by name, so ``zlib.ZLIB_VERSION_INFO[0]``
-   is equivalent to ``zlib.ZLIB_VERSION_INFO.major`` and so on.
-   This may be different from the zlib library actually used at runtime, which
-   is available as :const:`zlib_version_info`.
-
-   .. versionadded:: 3.16
-
-
-.. data:: zlib_version_info
-
-   A named tuple containing the version of the zlib library
-   actually loaded by the interpreter,
-   with the same fields as :const:`ZLIB_VERSION_INFO`.
-
-   .. versionadded:: 3.16
-
-
-The following constants are only present if zlib-ng was used to build
-the module:
-
-
-.. data:: ZLIBNG_VERSION
-
-   The version string of the zlib-ng library that was used for building the
-   module if zlib-ng was used. When present, the :const:`ZLIB_VERSION` and
-   :const:`zlib_version` constants reflect the version of the zlib API
-   provided by zlib-ng.
-
-   .. versionadded:: 3.14
-
-.. data:: ZLIBNG_VERSION_INFO
-
-   A named tuple containing the three components of the zlib-ng library
-   version that was used for building the module:
-   *major*, *minor*, and *revision*.  All values are integers.
-
-   .. versionadded:: 3.16
 
 
 .. seealso::

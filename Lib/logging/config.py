@@ -21,7 +21,7 @@ by Apache's log4j system.
 
 Copyright (C) 2001-2022 Vinay Sajip. All Rights Reserved.
 
-To use, simply 'import logging.config' and log away!
+To use, simply 'import logging' and log away!
 """
 
 import errno
@@ -37,7 +37,6 @@ import struct
 import threading
 import traceback
 
-from bisect import bisect_left
 from socketserver import ThreadingTCPServer, StreamRequestHandler
 
 
@@ -188,8 +187,9 @@ def _handle_existing_loggers(existing, child_loggers, disable_existing):
     what was intended by the user. Also, allow existing loggers to NOT be
     disabled if disable_existing is false.
     """
+    root = logging.root
     for log in existing:
-        logger = logging.root.manager.loggerDict[log]
+        logger = root.manager.loggerDict[log]
         if log in child_loggers:
             if not isinstance(logger, logging.PlaceHolder):
                 logger.setLevel(logging.NOTSET)
@@ -197,20 +197,6 @@ def _handle_existing_loggers(existing, child_loggers, disable_existing):
                 logger.propagate = True
         else:
             logger.disabled = disable_existing
-
-def _forget_existing_logger(name, existing, existing_set, child_loggers):
-    """Forget a configured logger and record its existing children."""
-    prefixed = name + "."
-    i = bisect_left(existing, prefixed)
-    num_existing = len(existing)
-    while i < num_existing:
-        child = existing[i]
-        if not child.startswith(prefixed):
-            break
-        if child in existing_set:
-            child_loggers[child] = None
-        i += 1
-    existing_set.remove(name)
 
 def _install_loggers(cp, handlers, disable_existing):
     """Create and install loggers"""
@@ -250,18 +236,25 @@ def _install_loggers(cp, handlers, disable_existing):
     #named loggers. With a sorted list it is easier
     #to find the child loggers.
     existing.sort()
-    existing_set = set(existing)
     #We'll keep the list of existing loggers
     #which are children of named loggers here...
-    child_loggers = {}
+    child_loggers = []
     #now set up the new ones...
     for log in llist:
         section = cp["logger_%s" % log]
         qn = section["qualname"]
         propagate = section.getint("propagate", fallback=1)
         logger = logging.getLogger(qn)
-        if qn in existing_set:
-            _forget_existing_logger(qn, existing, existing_set, child_loggers)
+        if qn in existing:
+            i = existing.index(qn) + 1 # start with the entry after qn
+            prefixed = qn + "."
+            pflen = len(prefixed)
+            num_existing = len(existing)
+            while i < num_existing:
+                if existing[i][:pflen] == prefixed:
+                    child_loggers.append(existing[i])
+                i += 1
+            existing.remove(qn)
         if "level" in section:
             level = section["level"]
             logger.setLevel(level)
@@ -289,7 +282,6 @@ def _install_loggers(cp, handlers, disable_existing):
     #        logger.propagate = 1
     #    elif disable_existing_loggers:
     #        logger.disabled = 1
-    existing = [name for name in existing if name in existing_set]
     _handle_existing_loggers(existing, child_loggers, disable_existing)
 
 
@@ -647,16 +639,22 @@ class DictConfigurator(BaseConfigurator):
                 #named loggers. With a sorted list it is easier
                 #to find the child loggers.
                 existing.sort()
-                existing_set = set(existing)
                 #We'll keep the list of existing loggers
                 #which are children of named loggers here...
-                child_loggers = {}
+                child_loggers = []
                 #now set up the new ones...
                 loggers = config.get('loggers', EMPTY_DICT)
                 for name in loggers:
-                    if name in existing_set:
-                        _forget_existing_logger(name, existing, existing_set,
-                                                child_loggers)
+                    if name in existing:
+                        i = existing.index(name) + 1 # look after name
+                        prefixed = name + "."
+                        pflen = len(prefixed)
+                        num_existing = len(existing)
+                        while i < num_existing:
+                            if existing[i][:pflen] == prefixed:
+                                child_loggers.append(existing[i])
+                            i += 1
+                        existing.remove(name)
                     try:
                         self.configure_logger(name, loggers[name])
                     except Exception as e:
@@ -676,7 +674,6 @@ class DictConfigurator(BaseConfigurator):
                 #        logger.propagate = True
                 #    elif disable_existing:
                 #        logger.disabled = True
-                existing = [name for name in existing if name in existing_set]
                 _handle_existing_loggers(existing, child_loggers,
                                          disable_existing)
 
@@ -869,7 +866,17 @@ class DictConfigurator(BaseConfigurator):
             else:
                 factory = klass
         kwargs = {k: config[k] for k in config if (k != '.' and valid_ident(k))}
-        result = factory(**kwargs)
+        try:
+            result = factory(**kwargs)
+        except TypeError as te:
+            if "'stream'" not in str(te):
+                raise
+            #The argument name changed from strm to stream
+            #Retry with old name.
+            #This is so that code can be used with older Python versions
+            #(e.g. by Django)
+            kwargs['strm'] = kwargs.pop('stream')
+            result = factory(**kwargs)
         if formatter:
             result.setFormatter(formatter)
         if level is not None:
@@ -1001,8 +1008,7 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT, verify=None):
         A simple TCP socket-based logging config receiver.
         """
 
-        allow_reuse_address = True
-        allow_reuse_port = False
+        allow_reuse_address = 1
 
         def __init__(self, host='localhost', port=DEFAULT_LOGGING_CONFIG_PORT,
                      handler=None, ready=None, verify=None):

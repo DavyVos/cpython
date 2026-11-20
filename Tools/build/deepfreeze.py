@@ -17,7 +17,6 @@ import re
 import time
 import types
 
-import consts_getter
 import umarshal
 
 TYPE_CHECKING = False
@@ -30,7 +29,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 verbose = False
 
 # This must be kept in sync with Tools/cases_generator/analyzer.py
-RESUME = 128
+RESUME = 149
 
 def isprintable(b: bytes) -> bool:
     return all(0x20 <= c < 0x7f for c in b)
@@ -363,9 +362,7 @@ class Printer:
                 self.write(f".ob_digit = {{ {ds} }},")
 
     def generate_int(self, name: str, i: int) -> str:
-        nsmallnegints, nsmallposints = consts_getter.get_nsmallnegints_and_nsmallposints()
-
-        if -nsmallnegints <= i <= nsmallposints:
+        if -5 <= i <= 256:
             return f"(PyObject *)&_PyLong_SMALL_INTS[_PY_NSMALLNEGINTS + {i}]"
         if i >= 0:
             name = f"const_int_{i}"

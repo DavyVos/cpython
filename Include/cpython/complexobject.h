@@ -7,8 +7,7 @@ typedef struct {
     double imag;
 } Py_complex;
 
-/* Operations on complex numbers (soft deprecated
-   since Python 3.15). */
+// Operations on complex numbers.
 PyAPI_FUNC(Py_complex) _Py_c_sum(Py_complex, Py_complex);
 PyAPI_FUNC(Py_complex) _Py_c_diff(Py_complex, Py_complex);
 PyAPI_FUNC(Py_complex) _Py_c_neg(Py_complex);

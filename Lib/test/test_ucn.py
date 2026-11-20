@@ -113,22 +113,15 @@ class UnicodeNamesTest(unittest.TestCase):
 
     def test_tangut_ideographs(self):
         self.checkletter("TANGUT IDEOGRAPH-17000", "\U00017000")
-        self.checkletter("TANGUT IDEOGRAPH-187FF", "\U000187ff")
+        self.checkletter("TANGUT IDEOGRAPH-187F7", "\U000187f7")
         self.checkletter("TANGUT IDEOGRAPH-18D00", "\U00018D00")
-        self.checkletter("TANGUT IDEOGRAPH-18D1E", "\U00018d1e")
-        self.checkletter("tangut ideograph-18d1e", "\U00018d1e")
-
-    def test_egyptian_hieroglyphs(self):
-        self.checkletter("EGYPTIAN HIEROGLYPH-13460", "\U00013460")
-        self.checkletter("EGYPTIAN HIEROGLYPH-143FA", "\U000143fa")
-        self.checkletter("egyptian hieroglyph-143fa", "\U000143fa")
+        self.checkletter("TANGUT IDEOGRAPH-18D08", "\U00018d08")
+        self.checkletter("tangut ideograph-18d08", "\U00018d08")
 
     def test_khitan_small_script_characters(self):
         self.checkletter("KHITAN SMALL SCRIPT CHARACTER-18B00", "\U00018b00")
         self.checkletter("KHITAN SMALL SCRIPT CHARACTER-18CD5", "\U00018cd5")
-        self.checkletter("KHITAN SMALL SCRIPT CHARACTER-18CFF", "\U00018cff")
-        self.checkletter("KHITAN SMALL SCRIPT CHARACTER-18CFF", "\U00018cff")
-        self.checkletter("khitan small script character-18cff", "\U00018cff")
+        self.checkletter("khitan small script character-18cd5", "\U00018cd5")
 
     def test_nushu_characters(self):
         self.checkletter("NUSHU CHARACTER-1B170", "\U0001b170")

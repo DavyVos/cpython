@@ -170,9 +170,6 @@ def _parse_version(version):
         releaselevel = {'a': 'alpha', 'b': 'beta'}[releaselevel]
     return _VersionInfoType(major, minor, micro, releaselevel, serial)
 
-TCL_VERSION_INFO = _parse_version(_tkinter.TCL_PATCH_LEVEL)
-TK_VERSION_INFO = _parse_version(_tkinter.TK_PATCH_LEVEL)
-
 
 @enum._simple_enum(enum.StrEnum)
 class EventType:
@@ -258,10 +255,6 @@ class Event:
     type - type of the event as a number
     widget - widget in which the event occurred
     delta - delta of wheel movement (MouseWheel)
-    detail - certain fixed strings (see Tcl/Tk documentation)
-             (Enter, Leave, FocusIn, FocusOut, ConfigureRequest)
-    user_data - data string which was passed to event_generate() or empty
-                string (VirtualEvent)
     """
 
     def __repr__(self):
@@ -301,8 +294,6 @@ class Event:
             getattr(self.type, 'name', self.type),
             ''.join(' %s=%s' % (k, attrs[k]) for k in keys if k in attrs)
         )
-
-    __class_getitem__ = classmethod(types.GenericAlias)
 
 
 _support_default_root = True
@@ -507,16 +498,10 @@ class Variable:
 
         Return the name of the callback.
 
-        This deprecated method wraps a deprecated Tcl method removed
-        in Tcl 9.0 and will be removed in Python 3.17.  Use trace_add()
-        instead.
+        This deprecated method wraps a deprecated Tcl method that will
+        likely be removed in the future.  Use trace_add() instead.
         """
-        import warnings
-        warnings.warn(
-                "trace_variable() is deprecated and will be removed in Python "
-                "3.17; use trace_add() instead.  It is not supported with "
-                "Tcl 9.",
-                DeprecationWarning, stacklevel=2)
+        # TODO: Add deprecation warning
         cbname = self._register(callback)
         self._tk.call("trace", "variable", self._name, mode, cbname)
         return cbname
@@ -529,16 +514,10 @@ class Variable:
         MODE is one of "r", "w", "u" for read, write, undefine.
         CBNAME is the name of the callback returned from trace_variable or trace.
 
-        This deprecated method wraps a deprecated Tcl method removed
-        in Tcl 9.0 and will be removed in Python 3.17.  Use trace_remove()
-        instead.
+        This deprecated method wraps a deprecated Tcl method that will
+        likely be removed in the future.  Use trace_remove() instead.
         """
-        import warnings
-        warnings.warn(
-                "trace_vdelete() is deprecated and will be removed in Python "
-                "3.17; use trace_remove() instead.  It is not supported with "
-                "Tcl 9.",
-                DeprecationWarning, stacklevel=2)
+        # TODO: Add deprecation warning
         self._tk.call("trace", "vdelete", self._name, mode, cbname)
         cbname = self._tk.splitlist(cbname)[0]
         for m, ca in self.trace_info():
@@ -554,16 +533,10 @@ class Variable:
     def trace_vinfo(self):
         """Return all trace callback information.
 
-        This deprecated method wraps a deprecated Tcl method removed
-        in Tcl 9.0 and will be removed in Python 3.17.  Use trace_info()
-        instead.
+        This deprecated method wraps a deprecated Tcl method that will
+        likely be removed in the future.  Use trace_info() instead.
         """
-        import warnings
-        warnings.warn(
-                "trace_vinfo() is deprecated and will be removed in Python "
-                "3.17; use trace_info() instead.  It is not supported with "
-                "Tcl 9.",
-                DeprecationWarning, stacklevel=2)
+        # TODO: Add deprecation warning
         return [self._tk.splitlist(x) for x in self._tk.splitlist(
             self._tk.call("trace", "vinfo", self._name))]
 
@@ -754,74 +727,7 @@ class Misc:
         self.tk.call(('tk_setPalette',)
               + _flatten(args) + _flatten(list(kw.items())))
 
-    def tk_appname(self, name=None):
-        """Query or set the name used to communicate with this application
-        through the send command.
-
-        With no argument, return the current name; otherwise change it to NAME
-        and return the actual name set (which may have a suffix appended to
-        keep it unique)."""
-        if name is None:
-            return self.tk.call('tk', 'appname')
-        return self.tk.call('tk', 'appname', name)
-
-    def tk_useinputmethods(self, boolean=None, *, displayof=0):
-        """Query or set whether Tk uses the X Input Methods (XIM) for filtering
-        events, and return the resulting state.
-
-        This is significant only on X11; if XIM support is not available it
-        always returns False."""
-        args = ('tk', 'useinputmethods') + self._displayof(displayof)
-        if boolean is not None:
-            args += (boolean,)
-        return self.tk.getboolean(self.tk.call(args))
-
-    def tk_caret(self, *, x=None, y=None, height=None):
-        """Set or query the caret location for this widget's display.
-
-        The caret is the per-display insertion position used for global focus
-        indication (for accessibility) and for placing the input method
-        (XIM or IME) window.  With no argument, return the current location as
-        a dictionary with keys 'x', 'y' and 'height'; otherwise update the
-        given coordinates."""
-        args = ('tk', 'caret', self._w)
-        for option, value in (('-x', x), ('-y', y), ('-height', height)):
-            if value is not None:
-                args += (option, value)
-        if len(args) > 3:
-            self.tk.call(args)
-        else:
-            values = self.tk.splitlist(self.tk.call(args))
-            return {values[i][1:]: self.tk.getint(values[i + 1])
-                    for i in range(0, len(values), 2)}
-
-    def tk_scaling(self, number=None, *, displayof=0):
-        """Query or set the scaling factor used by Tk to convert between
-        physical units and pixels.
-
-        The scaling factor is the number of pixels per point on the display,
-        where a point is 1/72 inch.  With no argument, return the current
-        factor; otherwise set it to the floating-point NUMBER."""
-        args = ('tk', 'scaling') + self._displayof(displayof)
-        if number is not None:
-            self.tk.call(args + (number,))
-        else:
-            return self.tk.getdouble(self.tk.call(args))
-
-    def tk_inactive(self, reset=False, *, displayof=0):
-        """Return the number of milliseconds since the last time the user
-        interacted with the system, or -1 if the windowing system does not
-        support this.
-
-        If RESET is true, reset the inactivity timer to zero instead and
-        return None."""
-        args = ('tk', 'inactive') + self._displayof(displayof)
-        if reset:
-            self.tk.call(args + ('reset',))
-        else:
-            return self.tk.getint(self.tk.call(args))
-
-    def wait_variable(self, name):
+    def wait_variable(self, name='PY_VAR'):
         """Wait until the variable is modified.
 
         A parameter of type IntVar, StringVar, DoubleVar or
@@ -846,11 +752,11 @@ class Misc:
             window = self
         self.tk.call('tkwait', 'visibility', window._w)
 
-    def setvar(self, name, value):
+    def setvar(self, name='PY_VAR', value='1'):
         """Set Tcl variable NAME to VALUE."""
         self.tk.setvar(name, value)
 
-    def getvar(self, name):
+    def getvar(self, name='PY_VAR'):
         """Return value of Tcl variable NAME."""
         return self.tk.getvar(name)
 
@@ -948,7 +854,7 @@ class Misc:
         if not name: return None
         return self._nametowidget(name)
 
-    def after(self, ms, func=None, *args, **kw):
+    def after(self, ms, func=None, *args):
         """Call function once after given time.
 
         MS specifies the time in milliseconds. FUNC gives the
@@ -962,7 +868,7 @@ class Misc:
         else:
             def callit():
                 try:
-                    func(*args, **kw)
+                    func(*args)
                 finally:
                     try:
                         self.deletecommand(name)
@@ -976,13 +882,13 @@ class Misc:
             name = self._register(callit)
             return self.tk.call('after', ms, name)
 
-    def after_idle(self, func, *args, **kw):
+    def after_idle(self, func, *args):
         """Call FUNC once if the Tcl main loop has no event to
         process.
 
         Return an identifier to cancel the scheduling with
         after_cancel."""
-        return self.after('idle', func, *args, **kw)
+        return self.after('idle', func, *args)
 
     def after_cancel(self, id):
         """Cancel scheduling of function identified with ID.
@@ -1335,8 +1241,8 @@ class Misc:
         return self.tk.getint(self.tk.call('winfo', 'depth', self._w))
 
     def winfo_exists(self):
-        """Return True if this widget exists."""
-        return self.tk.getboolean(
+        """Return true if this widget exists."""
+        return self.tk.getint(
             self.tk.call('winfo', 'exists', self._w))
 
     def winfo_fpixels(self, number):
@@ -1363,18 +1269,9 @@ class Misc:
         args = ('winfo', 'interps') + self._displayof(displayof)
         return self.tk.splitlist(self.tk.call(args))
 
-    def winfo_isdark(self): # new in Tk 9.1
-        """Return whether this widget is in "dark mode".
-
-        On macOS and Windows return True if the widget is in "dark mode",
-        and False otherwise.  Always return False on X11.
-        """
-        return self.tk.getboolean(
-            self.tk.call('winfo', 'isdark', self._w))
-
     def winfo_ismapped(self):
-        """Return True if this widget is mapped."""
-        return self.tk.getboolean(
+        """Return true if this widget is mapped."""
+        return self.tk.getint(
             self.tk.call('winfo', 'ismapped', self._w))
 
     def winfo_manager(self):
@@ -1501,8 +1398,8 @@ class Misc:
             'winfo', 'toplevel', self._w))
 
     def winfo_viewable(self):
-        """Return True if the widget and all its higher ancestors are mapped."""
-        return self.tk.getboolean(
+        """Return true if the widget and all its higher ancestors are mapped."""
+        return self.tk.getint(
             self.tk.call('winfo', 'viewable', self._w))
 
     def winfo_visual(self):
@@ -1600,26 +1497,13 @@ class Misc:
         else:
             self.tk.call('bindtags', self._w, tagList)
 
-    def _delete_bind_commands(self, *what):
-        lines = self.tk.call(what).split('\n')
-        p = re.compile(r'if \{"\[([^ ]+) .*\]" == "break"\} break')
-        for line in lines:
-            m = p.fullmatch(line)
-            if m:
-                funcid = m[1]
-                try:
-                    self.deletecommand(funcid)
-                except TclError:
-                    pass
-
-    def _bind(self, what, sequence, func, add):
+    def _bind(self, what, sequence, func, add, needcleanup=1):
         """Internal function."""
         if isinstance(func, str):
             self.tk.call(what + (sequence, func))
         elif func:
-            if not add:
-                self._delete_bind_commands(*what, sequence)
-            funcid = self._register(func, self._substitute, needcleanup=True)
+            funcid = self._register(func, self._substitute,
+                        needcleanup)
             cmd = ('%sif {"[%s %s]" == "break"} break\n'
                    %
                    (add and '+' or '',
@@ -1652,7 +1536,7 @@ class Misc:
         <Alt-A> for pressing A and the Alt key (KeyPress can be omitted).
         An event pattern can also be a virtual event of the form
         <<AString>> where AString can be arbitrary. This
-        event can be generated by event_generate().
+        event can be generated by event_generate.
         If events are concatenated they must appear shortly
         after each other.
 
@@ -1685,7 +1569,6 @@ class Misc:
 
     def _unbind(self, what, funcid=None):
         if funcid is None:
-            self._delete_bind_commands(*what)
             self.tk.call(*what, '')
         else:
             lines = self.tk.call(what).split('\n')
@@ -1702,7 +1585,7 @@ class Misc:
         An additional boolean parameter ADD specifies whether FUNC will
         be called additionally to the other bound function or whether
         it will replace the previous function. See bind for the return value."""
-        return self._root()._bind(('bind', 'all'), sequence, func, add)
+        return self._root()._bind(('bind', 'all'), sequence, func, add, True)
 
     def unbind_all(self, sequence):
         """Unbind for all widgets for event SEQUENCE all functions."""
@@ -1716,7 +1599,7 @@ class Misc:
         whether it will replace the previous function. See bind for
         the return value."""
 
-        return self._root()._bind(('bind', className), sequence, func, add)
+        return self._root()._bind(('bind', className), sequence, func, add, True)
 
     def unbind_class(self, className, sequence):
         """Unbind for all widgets with bindtag CLASSNAME for event SEQUENCE
@@ -1847,7 +1730,7 @@ class Misc:
         w = self
         while w.master is not None: w = w.master
         return w
-    _subst_format = ('%#', '%b', '%d', '%f', '%h', '%k',
+    _subst_format = ('%#', '%b', '%f', '%h', '%k',
              '%s', '%t', '%w', '%x', '%y',
              '%A', '%E', '%K', '%N', '%W', '%T', '%X', '%Y', '%D')
     _subst_format_str = " ".join(_subst_format)
@@ -1868,14 +1751,11 @@ class Misc:
         if any(isinstance(s, tuple) for s in args):
             args = [s[0] if isinstance(s, tuple) and len(s) == 1 else s
                     for s in args]
-        nsign, b, d, f, h, k, s, t, w, x, y, A, E, K, N, W, T, X, Y, D = args
-        # Missing: (a, c, m, o, v, B, R)
+        nsign, b, f, h, k, s, t, w, x, y, A, E, K, N, W, T, X, Y, D = args
+        # Missing: (a, c, d, m, o, v, B, R)
         e = Event()
         # serial field: valid for all events
         # number of button: ButtonPress and ButtonRelease events only
-        # detail: for Enter, Leave, FocusIn, FocusOut and ConfigureRequest
-        # events certain fixed strings (see Tcl/Tk documentation)
-        # user_data: data string from a virtual event or an empty string
         # height field: Configure, ConfigureRequest, Create,
         # ResizeRequest, and Expose events only
         # keycode field: KeyPress and KeyRelease events only
@@ -1889,12 +1769,6 @@ class Misc:
         # KeyRelease, and Motion events
         e.serial = getint(nsign)
         e.num = getint_event(b)
-        if T == EventType.VirtualEvent:
-            e.user_data = d
-            e.detail = '??'
-        else:
-            e.user_data = '??'
-            e.detail = d
         try: e.focus = getboolean(f)
         except TclError: pass
         e.height = getint_event(h)
@@ -1981,7 +1855,6 @@ class Misc:
         return self.tk.call(self._w, 'cget', '-' + key)
 
     __getitem__ = cget
-    __iter__ = None  # prevent using __getitem__ for iteration
 
     def __setitem__(self, key, value):
         self.configure({key: value})
@@ -2018,21 +1891,9 @@ class Misc:
 
     propagate = pack_propagate
 
-    def pack_content(self):
+    def pack_slaves(self):
         """Returns a list of all of the content widgets in the packing order
         for this container."""
-        try:
-            res = self.tk.call('pack', 'content', self._w)
-        except TclError:
-            if self.info_patchlevel() >= (8, 6):
-                raise
-            res = self.tk.call('pack', 'slaves', self._w)
-        return [self._nametowidget(x) for x in self.tk.splitlist(res)]
-
-    content = pack_content
-
-    def pack_slaves(self):
-        """Synonym for pack_content()."""
         return [self._nametowidget(x) for x in
                 self.tk.splitlist(
                    self.tk.call('pack', 'slaves', self._w))]
@@ -2040,19 +1901,9 @@ class Misc:
     slaves = pack_slaves
 
     # Place method that applies to the container widget
-    def place_content(self):
+    def place_slaves(self):
         """Returns a list of all the content widgets for which this widget is
         the container."""
-        try:
-            res = self.tk.call('place', 'content', self._w)
-        except TclError:
-            if self.info_patchlevel() >= (8, 6):
-                raise
-            res = self.tk.call('place', 'slaves', self._w)
-        return [self._nametowidget(x) for x in self.tk.splitlist(res)]
-
-    def place_slaves(self):
-        """Synonym for place_content()."""
         return [self._nametowidget(x) for x in
                 self.tk.splitlist(
                    self.tk.call(
@@ -2173,7 +2024,7 @@ class Misc:
 
     size = grid_size
 
-    def grid_content(self, row=None, column=None):
+    def grid_slaves(self, row=None, column=None):
         """Returns a list of the content widgets.
 
         If no arguments are supplied, a list of all of the content in this
@@ -2181,21 +2032,6 @@ class Misc:
         If ROW or COLUMN is specified, only the content in the row or
         column is returned.
         """
-        args = ()
-        if row is not None:
-            args = args + ('-row', row)
-        if column is not None:
-            args = args + ('-column', column)
-        try:
-            res = self.tk.call('grid', 'content', self._w, *args)
-        except TclError:
-            if self.info_patchlevel() >= (8, 6):
-                raise
-            res = self.tk.call('grid', 'slaves', self._w, *args)
-        return [self._nametowidget(x) for x in self.tk.splitlist(res)]
-
-    def grid_slaves(self, row=None, column=None):
-        """Synonym for grid_content()."""
         args = ()
         if row is not None:
             args = args + ('-row', row)
@@ -2355,7 +2191,7 @@ class Wm:
             # TODO: deprecate
             return self.tk.call('wm', 'attributes', self._w, *args)
         elif args:
-            raise TypeError('wm_attributes() options have been specified as '
+            raise TypeError('wm_attribute() options have been specified as '
                             'positional and keyword arguments')
         else:
             self.tk.call('wm', 'attributes', self._w, *self._options(kwargs))
@@ -2449,22 +2285,6 @@ class Wm:
         return self.tk.call('wm', 'group', self._w, pathName)
 
     group = wm_group
-
-    def wm_iconbadge(self, badge): # new in Tk 9.0
-        """Set a badge for the icon of this widget.
-
-        BADGE can be a positive integer number, for instance the number of
-        new or unread messages, or an exclamation point denoting attention
-        needed. If BADGE is an empty string, the badge image is removed from
-        the application icon.
-
-        The badge is intended for display in the Dock (macOS), taskbar
-        (Windows) or app panel (X11). On X11, the variable
-        ::tk::icons::base_icon(WINDOW) must be set to the image used for the
-        window icon for this command to work."""
-        return self.tk.call('wm', 'iconbadge', self._w, badge)
-
-    iconbadge = wm_iconbadge
 
     def wm_iconbitmap(self, bitmap=None, default=None):
         """Set bitmap for the iconified widget to BITMAP. Return
@@ -2615,25 +2435,6 @@ class Wm:
 
     sizefrom = wm_sizefrom
 
-    def wm_stackorder(self, relation=None, window=None):
-        """Query the stacking order of toplevel windows.
-
-        If called with no arguments, return a list of toplevel widgets in
-        stacking order, from lowest to highest.  The list recursively
-        includes all of this window's children that are toplevels; only
-        toplevels currently mapped to the screen are included.
-
-        If RELATION is "isabove" or "isbelow" and WINDOW is another toplevel,
-        return True if this window is respectively above or below WINDOW in
-        the stacking order, and False otherwise."""
-        if relation is None:
-            return [self._nametowidget(x) for x in self.tk.splitlist(
-                self.tk.call('wm', 'stackorder', self._w))]
-        return self.tk.getboolean(
-            self.tk.call('wm', 'stackorder', self._w, relation, window))
-
-    stackorder = wm_stackorder
-
     def wm_state(self, newstate=None):
         """Query or set the state of this widget as one of normal, icon,
         iconic (see wm_iconwindow), withdrawn, or zoomed (Windows only)."""
@@ -2753,13 +2554,11 @@ class Tk(Misc, Wm):
         if os.path.isfile(class_tcl):
             self.tk.call('source', class_tcl)
         if os.path.isfile(class_py):
-            with open(class_py, 'rb') as f:
-                exec(f.read(), dir)
+            exec(open(class_py).read(), dir)
         if os.path.isfile(base_tcl):
             self.tk.call('source', base_tcl)
         if os.path.isfile(base_py):
-            with open(base_py, 'rb') as f:
-                exec(f.read(), dir)
+            exec(open(base_py).read(), dir)
 
     def report_callback_exception(self, exc, val, tb):
         """Report callback exception on sys.stderr.
@@ -2848,7 +2647,6 @@ class Pack:
 
     info = pack_info
     propagate = pack_propagate = Misc.pack_propagate
-    content = pack_content = Misc.pack_content
     slaves = pack_slaves = Misc.pack_slaves
 
 
@@ -2906,7 +2704,6 @@ class Place:
         return d
 
     info = place_info
-    content = place_content = Misc.place_content
     slaves = place_slaves = Misc.place_slaves
 
 
@@ -2962,7 +2759,6 @@ class Grid:
     propagate = grid_propagate = Misc.grid_propagate
     rowconfigure = grid_rowconfigure = Misc.grid_rowconfigure
     size = grid_size = Misc.grid_size
-    content = grid_content = Misc.grid_content
     slaves = grid_slaves = Misc.grid_slaves
 
 
@@ -2981,20 +2777,16 @@ class BaseWidget(Misc):
             del cnf['name']
         if not name:
             name = self.__class__.__name__.lower()
-            # Generated names are marked with a leading "+", which a user is
-            # unlikely to use, so they do not clash with explicit names.
-            # "+" is also one of the few symbols with no special meaning in
-            # canvas and text tag expressions, so the name can be used as a tag.
             if name[-1].isdigit():
-                name += "+"  # Avoid duplication when calculating names below
+                name += "!"  # Avoid duplication when calculating names below
             if master._last_child_ids is None:
                 master._last_child_ids = {}
             count = master._last_child_ids.get(name, 0) + 1
             master._last_child_ids[name] = count
             if count == 1:
-                name = '+%s' % (name,)
+                name = '!%s' % (name,)
             else:
-                name = '+%s%d' % (name, count)
+                name = '!%s%d' % (name, count)
         self._name = name
         if master._w=='.':
             self._w = '.' + name
@@ -3135,12 +2927,6 @@ class Canvas(Widget, XView, YView):
         state, takefocus, width, xscrollcommand, xscrollincrement,
         yscrollcommand, yscrollincrement."""
         Widget.__init__(self, master, 'canvas', cnf, kw)
-
-    def tk_print(self):
-        """Print the contents of the canvas using the native print dialog.
-
-        Requires Tk 8.7/9.0 or newer."""
-        self.tk.call('tk', 'print', self._w)
 
     def addtag(self, *args):
         """Internal function."""
@@ -3394,22 +3180,6 @@ class Canvas(Widget, XView, YView):
 
     lift = tkraise = tag_raise  # overrides Misc.tkraise
 
-    def rchars(self, *args):
-        """Replace the text or coordinates between indices FIRST and LAST of
-        the items identified by TAGORID with STRING.
-
-        Text items replace their text; line and polygon items replace their
-        coordinates, in which case STRING is a list of coordinates. Other
-        items ignore this operation."""
-        self.tk.call((self._w, 'rchars') + args)
-
-    def rotate(self, *args): # new in Tk 9.0
-        """Rotate the coordinates of the items identified by TAGORID about the
-        origin (XORIGIN, YORIGIN) by ANGLE degrees anticlockwise.
-
-        Negative values of ANGLE rotate clockwise."""
-        self.tk.call((self._w, 'rotate') + args)
-
     def scale(self, *args):
         """Scale item TAGORID with XORIGIN, YORIGIN, XSCALE, YSCALE."""
         self.tk.call((self._w, 'scale') + args)
@@ -3587,14 +3357,6 @@ class Entry(Widget, XView):
         self.tk.call(self._w, 'selection', 'to', index)
 
     select_to = selection_to
-
-    def validate(self):
-        """Force an evaluation of the validation command.
-
-        This evaluates the command given by the validatecommand option,
-        independently of the conditions specified by the validate option.
-        Return whether the value is considered valid."""
-        return self.tk.getboolean(self.tk.call(self._w, 'validate'))
 
 
 class Frame(Widget):
@@ -3875,14 +3637,6 @@ class Menu(Widget):
         """Display a menu at position X,Y."""
         self.tk.call(self._w, 'post', x, y)
 
-    def postcascade(self, index):
-        """Post the submenu of the cascade entry at INDEX, unposting any
-        previously posted submenu.
-
-        Has no effect if INDEX does not name a cascade entry or if this menu
-        is not posted."""
-        self.tk.call(self._w, 'postcascade', index)
-
     def type(self, index):
         """Return the type of the menu item at INDEX."""
         return self.tk.call(self._w, 'type', index)
@@ -4083,12 +3837,6 @@ class Text(Widget, XView, YView):
         """
         Widget.__init__(self, master, 'text', cnf, kw)
 
-    def tk_print(self):
-        """Print the contents of the text widget using the native print dialog.
-
-        Requires Tk 8.7/9.0 or newer."""
-        self.tk.call('tk', 'print', self._w)
-
     def bbox(self, index):  # overrides Misc.bbox
         """Return a tuple of (x,y,width,height) which gives the bounding
         box of the visible part of the character at the given index."""
@@ -4203,22 +3951,6 @@ class Text(Widget, XView, YView):
         """
         return self.tk.call(self._w, 'edit', *args)
 
-    def edit_canredo(self):
-        """Return whether redo is possible.
-
-        Return True if redo is possible, i.e. when the redo stack is
-        not empty, and False otherwise.
-        """
-        return self.tk.getboolean(self.edit("canredo"))
-
-    def edit_canundo(self):
-        """Return whether undo is possible.
-
-        Return True if undo is possible, i.e. when the undo stack is
-        not empty, and False otherwise.
-        """
-        return self.tk.getboolean(self.edit("canundo"))
-
     def edit_modified(self, arg=None):
         """Get or Set the modified flag
 
@@ -4228,8 +3960,6 @@ class Text(Widget, XView, YView):
         modified flag. If boolean is specified, sets the
         modified flag of the widget to arg.
         """
-        if arg is None:
-            return self.tk.getboolean(self.edit("modified"))
         return self.edit("modified", arg)
 
     def edit_redo(self):
@@ -4345,44 +4075,6 @@ class Text(Widget, XView, YView):
         the widget itself)."""
         return self.tk.splitlist(self.tk.call(self._w, 'peer', 'names'))
 
-    def pendingsync(self): # new in Tk 8.5
-        """Return whether the line heights calculations are not up-to-date.
-
-        Return True if the line heights calculations are not up-to-date,
-        and False otherwise.
-        """
-        return self.tk.getboolean(self.tk.call(self._w, 'pendingsync'))
-
-    def sync(self, command=None): # new in Tk 8.5
-        """Control the synchronization of the view of the text widget.
-
-        If command is not specified, immediately bring the line metrics
-        up-to-date by forcing computation of any outdated line heights.
-        The command returns immediately if there is no such outdated line.
-
-        If command is specified, schedule it to be executed (by the event
-        loop) exactly once as soon as all line heights are up-to-date.
-        If there are no pending line metrics calculations, command is
-        executed immediately.
-        """
-        if command is None:
-            self.tk.call(self._w, 'sync')
-        else:
-            def callit():
-                try:
-                    command()
-                finally:
-                    try:
-                        self.deletecommand(name)
-                    except TclError:
-                        pass
-            try:
-                callit.__name__ = command.__name__
-            except AttributeError:
-                callit.__name__ = type(command).__name__
-            name = self._register(callit)
-            self.tk.call(self._w, 'sync', '-command', name)
-
     def replace(self, index1, index2, chars, *args): # new in Tk 8.5
         """Replaces the range of characters between index1 and index2 with
         the given characters and tags specified by args.
@@ -4402,9 +4094,8 @@ class Text(Widget, XView, YView):
         self.tk.call(self._w, 'scan', 'dragto', x, y)
 
     def search(self, pattern, index, stopindex=None,
-            forwards=None, backwards=None, exact=None,
-            regexp=None, nocase=None, count=None,
-            elide=None, *, nolinestop=None, strictlimits=None):
+           forwards=None, backwards=None, exact=None,
+           regexp=None, nocase=None, count=None, elide=None):
         """Search PATTERN beginning from INDEX until STOPINDEX.
         Return the index of the first character of a match or an
         empty string."""
@@ -4416,38 +4107,11 @@ class Text(Widget, XView, YView):
         if nocase: args.append('-nocase')
         if elide: args.append('-elide')
         if count: args.append('-count'); args.append(count)
-        if nolinestop: args.append('-nolinestop')
-        if strictlimits: args.append('-strictlimits')
         if pattern and pattern[0] == '-': args.append('--')
         args.append(pattern)
         args.append(index)
-        if stopindex is not None: args.append(stopindex)
+        if stopindex: args.append(stopindex)
         return str(self.tk.call(tuple(args)))
-
-    def search_all(self, pattern, index, stopindex=None, *,
-            forwards=None, backwards=None, exact=None,
-            regexp=None, nocase=None, count=None,
-            elide=None, nolinestop=None, overlap=None,
-            strictlimits=None):
-        """Search all occurrences of PATTERN from INDEX to STOPINDEX.
-        Return a tuple of indices where matches begin."""
-        args = [self._w, 'search', '-all']
-        if forwards: args.append('-forwards')
-        if backwards: args.append('-backwards')
-        if exact: args.append('-exact')
-        if regexp: args.append('-regexp')
-        if nocase: args.append('-nocase')
-        if elide: args.append('-elide')
-        if count: args.append('-count'); args.append(count)
-        if nolinestop: args.append('-nolinestop')
-        if overlap: args.append('-overlap')
-        if strictlimits: args.append('-strictlimits')
-        if pattern and pattern[0] == '-': args.append('--')
-        args.append(pattern)
-        args.append(index)
-        if stopindex is not None: args.append(stopindex)
-        result = self.tk.call(tuple(args))
-        return self.tk.splitlist(result)
 
     def see(self, index):
         """Scroll such that the character at INDEX is visible."""
@@ -4594,23 +4258,20 @@ class OptionMenu(Menubutton):
         """Construct an optionmenu widget with the parent MASTER, with
         the option textvariable set to VARIABLE, the initially selected
         value VALUE, the other menu values VALUES and an additional
-        keyword argument command.
-
-        Other keyword arguments are passed to the underlying menubutton
-        and may override its default appearance."""
-        name = kwargs.pop("name", None)
-        callback = kwargs.pop("command", None)
-        # Default appearance, which may be overridden by keyword arguments.
-        kw = {"borderwidth": 2, "indicatoron": 1, "relief": RAISED,
-              "anchor": "c", "highlightthickness": 2}
-        kw.update(kwargs)
-        # These options are controlled by OptionMenu itself.
-        kw["textvariable"] = variable
-        kw["name"] = name
+        keyword argument command."""
+        kw = {"borderwidth": 2, "textvariable": variable,
+              "indicatoron": 1, "relief": RAISED, "anchor": "c",
+              "highlightthickness": 2}
         Widget.__init__(self, master, "menubutton", kw)
         self.widgetName = 'tk_optionMenu'
         menu = self.__menu = Menu(self, name="menu", tearoff=0)
         self.menuname = menu._w
+        # 'command' is the only supported keyword
+        callback = kwargs.get('command')
+        if 'command' in kwargs:
+            del kwargs['command']
+        if kwargs:
+            raise TclError('unknown option -'+next(iter(kwargs)))
         menu.add_command(label=value,
                  command=_setit(variable, value, callback))
         for v in values:
@@ -4665,8 +4326,6 @@ class Image:
     def __getitem__(self, key):
         return self.tk.call(self.name, 'configure', '-'+key)
 
-    __iter__ = None  # prevent using __getitem__ for iteration
-
     def configure(self, **kw):
         """Configure the image."""
         res = ()
@@ -4706,13 +4365,6 @@ class PhotoImage(Image):
     def blank(self):
         """Display a transparent image."""
         self.tk.call(self.name, 'blank')
-
-    def redither(self):
-        """Recalculate the dithered image in each window where it is displayed.
-
-        Useful when the image data was supplied in pieces, in which case the
-        dithered image may not be exactly correct."""
-        self.tk.call(self.name, 'redither')
 
     def cget(self, option):
         """Return the value of OPTION."""
@@ -4828,58 +4480,25 @@ class PhotoImage(Image):
             options.extend(('-compositingrule', compositingrule))
         self.tk.call(self.name, 'copy', sourceImage, *options)
 
-    @staticmethod
-    def _metadata(metadata):
-        # A Tcl dict is a flat list of alternating keys and values.  A Python
-        # dict passed directly would expand to its keys only, so flatten it.
-        flat = ()
-        for key, value in metadata.items():
-            flat += (key, value)
-        return flat
+    def get(self, x, y):
+        """Return the color (red, green, blue) of the pixel at X,Y."""
+        return self.tk.call(self.name, 'get', x, y)
 
-    def get(self, x, y, *, withalpha=False):
-        """Return the color of the pixel at X,Y as a tuple of its red, green
-        and blue components.
-
-        If WITHALPHA is true, the returned tuple has a fourth element giving
-        the alpha (opacity) value of the pixel.  This requires Tcl/Tk 9.0 or
-        newer.
-        """
-        args = (self.name, 'get', x, y)
-        if withalpha:
-            args += ('-withalpha',)
-        return self.tk.call(args)
-
-    def put(self, data, to=None, *, format=None, metadata=None):
+    def put(self, data, to=None):
         """Put row formatted colors to image starting from
-        position TO, e.g. image.put("{red green} {blue yellow}", to=(4,6))
-
-        The FORMAT option specifies the format of the image DATA, so that only
-        image file format handlers whose names begin with it are tried.
-
-        The METADATA option, a dictionary passed to the image format driver,
-        requires Tcl/Tk 9.0 or newer.
-        """
+        position TO, e.g. image.put("{red green} {blue yellow}", to=(4,6))"""
         args = (self.name, 'put', data)
-        if format is not None:
-            args += ('-format', format)
-        if metadata is not None:
-            args += ('-metadata', self._metadata(metadata))
         if to:
             if to[0] == '-to':
                 to = to[1:]
-            args += ('-to',) + tuple(to)
+            args = args + ('-to',) + tuple(to)
         self.tk.call(args)
 
-    def read(self, filename, format=None, *, from_coords=None, to=None,
-             shrink=False, metadata=None):
+    def read(self, filename, format=None, *, from_coords=None, to=None, shrink=False):
         """Reads image data from the file named FILENAME into the image.
 
         The FORMAT option specifies the format of the image data in the
         file.
-
-        The METADATA option, a dictionary passed to the image format driver,
-        requires Tcl/Tk 9.0 or newer.
 
         The FROM_COORDS option specifies a rectangular sub-region of the image
         file data to be copied to the destination image.  It must be a tuple
@@ -4900,8 +4519,6 @@ class PhotoImage(Image):
         options = ()
         if format is not None:
             options += ('-format', format)
-        if metadata is not None:
-            options += ('-metadata', self._metadata(metadata))
         if from_coords is not None:
             options += ('-from', *from_coords)
         if shrink:
@@ -4911,15 +4528,12 @@ class PhotoImage(Image):
         self.tk.call(self.name, 'read', filename, *options)
 
     def write(self, filename, format=None, from_coords=None, *,
-              background=None, grayscale=False, metadata=None):
+              background=None, grayscale=False):
         """Writes image data from the image to a file named FILENAME.
 
         The FORMAT option specifies the name of the image file format
         handler to be used to write the data to the file.  If this option
         is not given, the format is guessed from the file extension.
-
-        The METADATA option, a dictionary passed to the image format driver,
-        requires Tcl/Tk 9.0 or newer.
 
         The FROM_COORDS option specifies a rectangular region of the image
         to be written to the image file.  It must be a tuple or a list of 1
@@ -4939,8 +4553,6 @@ class PhotoImage(Image):
         options = ()
         if format is not None:
             options += ('-format', format)
-        if metadata is not None:
-            options += ('-metadata', self._metadata(metadata))
         if from_coords is not None:
             options += ('-from', *from_coords)
         if grayscale:
@@ -4950,16 +4562,13 @@ class PhotoImage(Image):
         self.tk.call(self.name, 'write', filename, *options)
 
     def data(self, format=None, *, from_coords=None,
-             background=None, grayscale=False, metadata=None):
+             background=None, grayscale=False):
         """Returns image data.
-
-        The METADATA option, a dictionary passed to the image format driver,
-        requires Tcl/Tk 9.0 or newer.
 
         The FORMAT option specifies the name of the image file format
         handler to be used.  If this option is not given, this method uses
         a format that consists of a tuple (one element per row) of strings
-        containing space-separated (one element per pixel/column) colors
+        containings space separated (one element per pixel/column) colors
         in “#RRGGBB” format (where RR is a pair of hexadecimal digits for
         the red channel, GG for green, and BB for blue).
 
@@ -4982,8 +4591,6 @@ class PhotoImage(Image):
         options = ()
         if format is not None:
             options += ('-format', format)
-        if metadata is not None:
-            options += ('-metadata', self._metadata(metadata))
         if from_coords is not None:
             options += ('-from', *from_coords)
         if grayscale:
@@ -5206,14 +4813,6 @@ class Spinbox(Widget, XView):
         """Set the variable end of a selection to INDEX."""
         self.selection('to', index)
 
-    def validate(self):
-        """Force an evaluation of the validation command.
-
-        This evaluates the command given by the validatecommand option,
-        independently of the conditions specified by the validate option.
-        Return whether the value is considered valid."""
-        return self.tk.getboolean(self.tk.call(self._w, 'validate'))
-
 ###########################################################################
 
 
@@ -5348,7 +4947,7 @@ class PanedWindow(Widget):
         return self.tk.call(
             (self._w, 'panecget') + (child, '-'+option))
 
-    def paneconfigure(self, child=None, cnf=None, **kw):
+    def paneconfigure(self, tagOrId, cnf=None, **kw):
         """Query or modify the configuration options for a child window.
 
         Similar to configure() except that it applies to the specified
@@ -5410,26 +5009,12 @@ class PanedWindow(Widget):
             Tk_GetPixels.
 
         """
-        if 'tagOrId' in kw:
-            if child is not None:
-                raise TypeError("paneconfigure() got values for both 'child' "
-                                "and its deprecated alias 'tagOrId'")
-            import warnings
-            warnings.warn(
-                    "The 'tagOrId' parameter of PanedWindow.paneconfigure() "
-                    "is deprecated and will be removed in Python 3.18; "
-                    "use 'child' instead.",
-                    DeprecationWarning, stacklevel=2)
-            child = kw.pop('tagOrId')
-        if child is None:
-            raise TypeError("paneconfigure() missing 1 required positional "
-                            "argument: 'child'")
         if cnf is None and not kw:
-            return self._getconfigure(self._w, 'paneconfigure', child)
+            return self._getconfigure(self._w, 'paneconfigure', tagOrId)
         if isinstance(cnf, str) and not kw:
             return self._getconfigure1(
-                self._w, 'paneconfigure', child, '-'+cnf)
-        self.tk.call((self._w, 'paneconfigure', child) +
+                self._w, 'paneconfigure', tagOrId, '-'+cnf)
+        self.tk.call((self._w, 'paneconfigure', tagOrId) +
                  self._options(cnf, kw))
 
     paneconfig = paneconfigure

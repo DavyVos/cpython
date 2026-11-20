@@ -111,17 +111,6 @@ def _validate_tzfile_path(path, _base=_TEST_PATH):
             f"ZoneInfo keys must refer to subdirectories of TZPATH, got: {path}"
         )
 
-    # load_tzdata() joins the last "/"-separated component of the key to the
-    # tzdata package directory on its own.  On Windows a component with a
-    # drive or root, such as "C:\\file" in "America/C:\\file", would replace
-    # that directory instead of being looked up inside it.
-    for component in path.split("/"):
-        drive, root, _ = os.path.splitroot(component)
-        if drive or root:
-            raise ValueError(
-                f"ZoneInfo keys must not contain drives or roots, got: {path}"
-            )
-
 
 del _TEST_PATH
 
@@ -188,10 +177,6 @@ def available_timezones():
         # posixrules is a special symlink-only time zone where it exists, it
         # should not be included in the output
         valid_zones.remove("posixrules")
-    if "localtime" in valid_zones:
-        # localtime is a special symlink-only time zone where it exists, it
-        # should not be included in the output
-        valid_zones.remove("localtime")
 
     return valid_zones
 

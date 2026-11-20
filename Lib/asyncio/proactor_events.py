@@ -164,12 +164,7 @@ class _ProactorBasePipeTransport(transports._FlowControlMixin,
             # just close our end.  First calling shutdown() seems to
             # cure it, but maybe using DisconnectEx() would be better.
             if hasattr(self._sock, 'shutdown') and self._sock.fileno() != -1:
-                try:
-                    self._sock.shutdown(socket.SHUT_RDWR)
-                except ConnectionError:
-                    # The connection is already gone.
-                    # The peer has already reset the connection.
-                    pass
+                self._sock.shutdown(socket.SHUT_RDWR)
             self._sock.close()
             self._sock = None
             server = self._server
@@ -494,8 +489,8 @@ class _ProactorDatagramTransport(_ProactorBasePipeTransport,
 
     def sendto(self, data, addr=None):
         if not isinstance(data, (bytes, bytearray, memoryview)):
-            raise TypeError(f'data argument must be a bytes-like object, '
-                            f'not {type(data).__name__!r}')
+            raise TypeError('data argument must be bytes-like object (%r)',
+                            type(data))
 
         if self._address is not None and addr not in (None, self._address):
             raise ValueError(
@@ -675,7 +670,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
             signal.set_wakeup_fd(self._csock.fileno())
 
     def _make_socket_transport(self, sock, protocol, waiter=None,
-                               extra=None, server=None, context=None):
+                               extra=None, server=None):
         return _ProactorSocketTransport(self, sock, protocol, waiter,
                                         extra, server)
 
@@ -684,7 +679,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
             *, server_side=False, server_hostname=None,
             extra=None, server=None,
             ssl_handshake_timeout=None,
-            ssl_shutdown_timeout=None, context=None):
+            ssl_shutdown_timeout=None):
         ssl_protocol = sslproto.SSLProtocol(
                 self, protocol, sslcontext, waiter,
                 server_side, server_hostname,
@@ -766,7 +761,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
     async def _sock_sendfile_native(self, sock, file, offset, count):
         try:
             fileno = file.fileno()
-        except (AttributeError, io.UnsupportedOperation):
+        except (AttributeError, io.UnsupportedOperation) as err:
             raise exceptions.SendfileNotAvailableError("not a regular file")
         try:
             fsize = os.fstat(fileno).st_size
@@ -794,8 +789,8 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
     async def _sendfile_native(self, transp, file, offset, count):
         resume_reading = transp.is_reading()
         transp.pause_reading()
+        await transp._make_empty_waiter()
         try:
-            await transp._make_empty_waiter()
             return await self.sock_sendfile(transp._sock, file, offset, count,
                                             fallback=False)
         finally:
@@ -869,7 +864,7 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
     def _start_serving(self, protocol_factory, sock,
                        sslcontext=None, server=None, backlog=100,
                        ssl_handshake_timeout=None,
-                       ssl_shutdown_timeout=None, context=None):
+                       ssl_shutdown_timeout=None):
 
         def loop(f=None):
             try:
@@ -879,11 +874,6 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
                         logger.debug("%r got a new connection from %r: %r",
                                      server, addr, conn)
                     protocol = protocol_factory()
-                    if server is not None and not server.is_serving():
-                        # The server was closed after the connection was
-                        # accepted.
-                        conn.close()
-                        return
                     if sslcontext is not None:
                         self._make_ssl_transport(
                             conn, protocol, sslcontext, server_side=True,
@@ -897,13 +887,6 @@ class BaseProactorEventLoop(base_events.BaseEventLoop):
                 if self.is_closed():
                     return
                 f = self._proactor.accept(sock)
-            except (ConnectionResetError, ConnectionAbortedError):
-                # The peer closed the connection before it was accepted.
-                # The listening socket is still usable: keep accepting.
-                if self._debug:
-                    logger.debug("Accept failed on socket %r",
-                                 sock, exc_info=True)
-                self.call_soon(loop)
             except OSError as exc:
                 if sock.fileno() != -1:
                     self.call_exception_handler({

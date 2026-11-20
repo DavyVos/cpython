@@ -113,7 +113,7 @@ The signal module defines three enums:
    .. versionadded:: 3.5
 
 
-The variables defined in the :mod:`!signal` module are:
+The variables defined in the :mod:`signal` module are:
 
 
 .. data:: SIG_DFL
@@ -357,7 +357,7 @@ The variables defined in the :mod:`!signal` module are:
    .. versionadded:: 3.3
 
 
-The :mod:`!signal` module defines one exception:
+The :mod:`signal` module defines one exception:
 
 .. exception:: ItimerError
 
@@ -371,7 +371,7 @@ The :mod:`!signal` module defines one exception:
       alias of :exc:`OSError`.
 
 
-The :mod:`!signal` module defines the following functions:
+The :mod:`signal` module defines the following functions:
 
 
 .. function:: alarm(time)
@@ -513,11 +513,11 @@ The :mod:`!signal` module defines the following functions:
    .. versionadded:: 3.3
 
 
-.. function:: setitimer(which, seconds, interval=0)
+.. function:: setitimer(which, seconds, interval=0.0)
 
    Sets given interval timer (one of :const:`signal.ITIMER_REAL`,
    :const:`signal.ITIMER_VIRTUAL` or :const:`signal.ITIMER_PROF`) specified
-   by *which* to fire after *seconds* (rounded up to microseconds, different from
+   by *which* to fire after *seconds* (float is accepted, different from
    :func:`alarm`) and after that every *interval* seconds (if *interval*
    is non-zero). The interval timer specified by *which* can be cleared by
    setting *seconds* to zero.
@@ -528,17 +528,12 @@ The :mod:`!signal` module defines the following functions:
    :const:`signal.ITIMER_VIRTUAL` sends :const:`SIGVTALRM`,
    and :const:`signal.ITIMER_PROF` will deliver :const:`SIGPROF`.
 
-   The old values are returned as a two-tuple of floats:
-   (``delay``, ``interval``).
+   The old values are returned as a tuple: (delay, interval).
 
    Attempting to pass an invalid interval timer will cause an
    :exc:`ItimerError`.
 
    .. availability:: Unix.
-
-   .. versionchanged:: 3.15
-      Accepts any real numbers as *seconds* and *interval*, not only integers
-      or floats.
 
 
 .. function:: getitimer(which)
@@ -604,8 +599,8 @@ The :mod:`!signal` module defines the following functions:
 
       See the man page :manpage:`siginterrupt(3)` for further information.
 
-   Note that installing a signal handler with :func:`~signal.signal` will reset
-   the restart behaviour to interruptible by implicitly calling
+   Note that installing a signal handler with :func:`signal` will reset the
+   restart behaviour to interruptible by implicitly calling
    :c:func:`!siginterrupt` with a true *flag* value for the given signal.
 
 
@@ -627,7 +622,7 @@ The :mod:`!signal` module defines the following functions:
    see the :ref:`description in the type hierarchy <frame-objects>` or see the
    attribute descriptions in the :mod:`inspect` module).
 
-   On Windows, :func:`~signal.signal` can only be called with :const:`SIGABRT`,
+   On Windows, :func:`signal` can only be called with :const:`SIGABRT`,
    :const:`SIGFPE`, :const:`SIGILL`, :const:`SIGINT`, :const:`SIGSEGV`,
    :const:`SIGTERM`, or :const:`SIGBREAK`.
    A :exc:`ValueError` will be raised in any other case.
@@ -714,9 +709,6 @@ The :mod:`!signal` module defines the following functions:
       The function is now retried with the recomputed *timeout* if interrupted
       by a signal not in *sigset* and the signal handler does not raise an
       exception (see :pep:`475` for the rationale).
-
-   .. versionchanged:: 3.15
-      Accepts any real number as *timeout*, not only integer or float.
 
 
 .. _signal-example:

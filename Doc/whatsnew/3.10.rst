@@ -402,7 +402,7 @@ Tracing events, with the correct line number, are generated for all lines of cod
 The :attr:`~frame.f_lineno` attribute of frame objects will always contain the
 expected line number.
 
-The :attr:`!codeobject.co_lnotab` attribute of
+The :attr:`~codeobject.co_lnotab` attribute of
 :ref:`code objects <code-objects>` is deprecated and
 will be removed in 3.12.
 Code that needs to convert from offset to line number should use the new
@@ -723,10 +723,10 @@ PEP 604: New Type Union Operator
 
 A new type union operator was introduced which enables the syntax ``X | Y``.
 This provides a cleaner way of expressing 'either type X or type Y' instead of
-using :class:`typing.Union`, especially in type hints.
+using :data:`typing.Union`, especially in type hints.
 
 In previous versions of Python, to apply a type hint for functions accepting
-arguments of multiple types, :class:`typing.Union` was used::
+arguments of multiple types, :data:`typing.Union` was used::
 
    def square(number: Union[int, float]) -> Union[int, float]:
        return number ** 2
@@ -1622,7 +1622,7 @@ Deprecated
   compatibility. Specifically,
   :meth:`!find_loader`/:meth:`!find_module`
   (superseded by :meth:`~importlib.abc.MetaPathFinder.find_spec`),
-  ``importlib.abc.Loader.load_module``
+  :meth:`~importlib.abc.Loader.load_module`
   (superseded by :meth:`~importlib.abc.Loader.exec_module`),
   :meth:`!module_repr` (which the import system
   takes care of for you), the ``__package__`` attribute
@@ -1648,11 +1648,11 @@ Deprecated
   :meth:`~importlib.abc.Loader.exec_module` instead.
   (Contributed by Brett Cannon in :issue:`26131`.)
 
-* :meth:`!zipimport.zipimporter.load_module` has been deprecated in
+* :meth:`!zimport.zipimporter.load_module` has been deprecated in
   preference for :meth:`~zipimport.zipimporter.exec_module`.
   (Contributed by Brett Cannon in :issue:`26131`.)
 
-* The use of ``importlib.abc.Loader.load_module`` by the import
+* The use of :meth:`~importlib.abc.Loader.load_module` by the import
   system now triggers an :exc:`ImportWarning` as
   :meth:`~importlib.abc.Loader.exec_module` is preferred.
   (Contributed by Brett Cannon in :issue:`26131`.)
@@ -1711,8 +1711,8 @@ Deprecated
   (Contributed by Brett Cannon in :issue:`42137`.)
 
 * :meth:`!importlib.abc.Loader.module_repr`,
-  :meth:`!importlib.machinery.FrozenImporter.module_repr`, and
-  :meth:`!importlib.machinery.BuiltinImporter.module_repr` are deprecated and
+  :meth:`!importlib.machinery.FrozenLoader.module_repr`, and
+  :meth:`!importlib.machinery.BuiltinLoader.module_repr` are deprecated and
   slated for removal in Python 3.12.
   (Contributed by Brett Cannon in :issue:`42136`.)
 
@@ -1742,7 +1742,7 @@ Deprecated
 
   * ``threading.Thread.setName`` => :attr:`threading.Thread.name`
 
-  * ``threading.Thread.getName`` => :attr:`threading.Thread.name`
+  * ``threading.thread.getName`` => :attr:`threading.Thread.name`
 
   * ``threading.Thread.isDaemon`` => :attr:`threading.Thread.daemon`
 
@@ -1964,7 +1964,7 @@ Changes in the C API
     :c:func:`PyBytes_AsString` and :c:func:`Py_CompileString`,
     as sketched below. (Declarations and error handling are omitted.) ::
 
-       io_module = PyImport_ImportModule("io");
+       io_module = Import_ImportModule("io");
        fileobject = PyObject_CallMethod(io_module, "open", "ss", filename, "rb");
        source_bytes_object = PyObject_CallMethod(fileobject, "read", "");
        result = PyObject_CallMethod(fileobject, "close", "");
@@ -2177,9 +2177,9 @@ Porting to Python 3.10
   ``unicodedata.ucnhash_CAPI`` has been moved to the internal C API.
   (Contributed by Victor Stinner in :issue:`42157`.)
 
-* :c:func:`!Py_GetPath`, :c:func:`!Py_GetPrefix`, :c:func:`!Py_GetExecPrefix`,
-  :c:func:`!Py_GetProgramFullPath`, :c:func:`!Py_GetPythonHome` and
-  :c:func:`!Py_GetProgramName` functions now return ``NULL`` if called before
+* :c:func:`Py_GetPath`, :c:func:`Py_GetPrefix`, :c:func:`Py_GetExecPrefix`,
+  :c:func:`Py_GetProgramFullPath`, :c:func:`Py_GetPythonHome` and
+  :c:func:`Py_GetProgramName` functions now return ``NULL`` if called before
   :c:func:`Py_Initialize` (before Python is initialized). Use the new
   :ref:`init-config` API to get the :ref:`init-path-config`.
   (Contributed by Victor Stinner in :issue:`42260`.)

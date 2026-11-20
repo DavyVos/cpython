@@ -1,7 +1,7 @@
-from _codecs import _unregister_error as _codecs_unregister_error
 import codecs
 import html.entities
 import itertools
+import re
 import sys
 import unicodedata
 import unittest
@@ -755,18 +755,6 @@ class CodecCallbackTest(unittest.TestCase):
                     (s[:1], 1 + n)
                 )
 
-    def test_surrogatepass_truncated_encoding_name(self):
-        handler = codecs.lookup_error('surrogatepass')
-        for width in (16, 32):
-            encoding = f'utf-{width}-'
-            data = (0xd800).to_bytes(width // 8, 'little')
-            for exc in (UnicodeEncodeError(encoding, '\ud800', 0, 1, 'test'),
-                        UnicodeDecodeError(encoding, data, 0, len(data), 'test')):
-                with self.subTest(encoding=encoding, error=type(exc).__name__):
-                    with self.assertRaises(type(exc)) as cm:
-                        handler(exc)
-                    self.assertIs(cm.exception, exc)
-
     def test_badhandlerresults(self):
         results = ( 42, "foo", (1,2,3), ("foo", 1, 3), ("foo", None), ("foo",), ("foo", 1, 3), ("foo", None), ("foo",) )
         encs = ("ascii", "latin-1", "iso-8859-1", "iso-8859-15")
@@ -1193,20 +1181,20 @@ class CodecCallbackTest(unittest.TestCase):
                 self.assertEqual(decode(input, 'test.mutating2'), (expected, len(input)))
             self.assertIn(msg, str(cm.warning))
 
-        check(br'\x0n\z', '\u0404\n\\z', r'"\z" is an invalid escape sequence')
-        check(br'\x0n\501', '\u0404\n\u0141', r'"\501" is an invalid octal escape sequence')
-        check(br'\x0z', '\u0404\\z', r'"\z" is an invalid escape sequence')
+        check(br'\x0n\z', '\u0404\n\\z', r"invalid escape sequence '\z'")
+        check(br'\x0n\501', '\u0404\n\u0141', r"invalid octal escape sequence '\501'")
+        check(br'\x0z', '\u0404\\z', r"invalid escape sequence '\z'")
 
-        check(br'\x3n\zr', '\u0404\n\\zr', r'"\z" is an invalid escape sequence')
-        check(br'\x3zr', '\u0404\\zr', r'"\z" is an invalid escape sequence')
-        check(br'\x3z5', '\u0404\\z5', r'"\z" is an invalid escape sequence')
-        check(memoryview(br'\x3z5x')[:-1], '\u0404\\z5', r'"\z" is an invalid escape sequence')
-        check(memoryview(br'\x3z5xy')[:-2], '\u0404\\z5', r'"\z" is an invalid escape sequence')
+        check(br'\x3n\zr', '\u0404\n\\zr', r"invalid escape sequence '\z'")
+        check(br'\x3zr', '\u0404\\zr', r"invalid escape sequence '\z'")
+        check(br'\x3z5', '\u0404\\z5', r"invalid escape sequence '\z'")
+        check(memoryview(br'\x3z5x')[:-1], '\u0404\\z5', r"invalid escape sequence '\z'")
+        check(memoryview(br'\x3z5xy')[:-2], '\u0404\\z5', r"invalid escape sequence '\z'")
 
-        check(br'\x5n\z', '\u0404\n\\z', r'"\z" is an invalid escape sequence')
-        check(br'\x5n\501', '\u0404\n\u0141', r'"\501" is an invalid octal escape sequence')
-        check(br'\x5z', '\u0404\\z', r'"\z" is an invalid escape sequence')
-        check(memoryview(br'\x5zy')[:-1], '\u0404\\z', r'"\z" is an invalid escape sequence')
+        check(br'\x5n\z', '\u0404\n\\z', r"invalid escape sequence '\z'")
+        check(br'\x5n\501', '\u0404\n\u0141', r"invalid octal escape sequence '\501'")
+        check(br'\x5z', '\u0404\\z', r"invalid escape sequence '\z'")
+        check(memoryview(br'\x5zy')[:-1], '\u0404\\z', r"invalid escape sequence '\z'")
 
     # issue32583
     def test_crashing_decode_handler(self):
@@ -1259,6 +1247,7 @@ class CodecCallbackTest(unittest.TestCase):
             '\ufffd\x00\x00'
         )
 
+
     def test_fake_error_class(self):
         handlers = [
             codecs.strict_errors,
@@ -1282,31 +1271,6 @@ class CodecCallbackTest(unittest.TestCase):
                 with self.subTest(handler=handler, error_class=cls):
                     with self.assertRaises((TypeError, FakeUnicodeError)):
                         handler(FakeUnicodeError())
-
-    def test_reject_unregister_builtin_error_handler(self):
-        for name in [
-            'strict', 'ignore', 'replace', 'backslashreplace', 'namereplace',
-            'xmlcharrefreplace', 'surrogateescape', 'surrogatepass',
-        ]:
-            with self.subTest(name):
-                self.assertRaises(ValueError, _codecs_unregister_error, name)
-
-    def test_unregister_custom_error_handler(self):
-        def custom_handler(exc):
-            raise exc
-
-        custom_name = 'test.test_unregister_custom_error_handler'
-        self.assertRaises(LookupError, codecs.lookup_error, custom_name)
-        codecs.register_error(custom_name, custom_handler)
-        self.assertIs(codecs.lookup_error(custom_name), custom_handler)
-        self.assertTrue(_codecs_unregister_error(custom_name))
-        self.assertRaises(LookupError, codecs.lookup_error, custom_name)
-
-    def test_unregister_custom_unknown_error_handler(self):
-        unknown_name = 'test.test_unregister_custom_unknown_error_handler'
-        self.assertRaises(LookupError, codecs.lookup_error, unknown_name)
-        self.assertFalse(_codecs_unregister_error(unknown_name))
-        self.assertRaises(LookupError, codecs.lookup_error, unknown_name)
 
 
 if __name__ == "__main__":

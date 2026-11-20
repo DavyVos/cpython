@@ -1,2 +1,0 @@
-Fix the Apple testbed's extension module processing for an XCframework or
-package path with a space, or a build path with brackets or a backslash.

@@ -1,12 +1,9 @@
 #include "Python.h"
-#include "pycore_bytesobject.h"       // _PyBytes_ResizeKeepOnError()
-#include "pycore_critical_section.h"  // Py_BEGIN_CRITICAL_SECTION()
-#include "pycore_list.h"              // _PyList_AppendTakeRef()
 #include "pycore_object.h"
-#include "pycore_pyatomic_ft_wrappers.h"
-#include "pycore_sysmodule.h"         // _PySys_GetSizeOf()
+#include "pycore_sysmodule.h"     // _PySys_GetSizeOf()
+#include "pycore_weakref.h"       // FT_CLEAR_WEAKREFS()
 
-#include <stddef.h>                   // offsetof()
+#include <stddef.h>               // offsetof()
 #include "_iomodule.h"
 
 /*[clinic input]
@@ -20,27 +17,21 @@ typedef struct {
     PyObject *buf;
     Py_ssize_t pos;
     Py_ssize_t string_size;
+    PyObject *dict;
+    PyObject *weakreflist;
     Py_ssize_t exports;
-#ifdef Py_GIL_DISABLED
-    int buf_shared;
-#endif
 } bytesio;
-
-#define bytesio_CAST(op)    ((bytesio *)(op))
 
 typedef struct {
     PyObject_HEAD
     bytesio *source;
 } bytesiobuf;
 
-#define bytesiobuf_CAST(op) ((bytesiobuf *)(op))
-
 /* The bytesio object can be in three states:
-  * Py_REFCNT(buf) == 1, the hash of buf is not cached, exports == 0.
-  * Py_REFCNT(buf) > 1 or the hash of buf is cached.  exports == 0,
+  * Py_REFCNT(buf) == 1, exports == 0.
+  * Py_REFCNT(buf) > 1.  exports == 0,
     first modification or export causes the internal buffer copying.
-  * exports > 0.  Any modifications are forbidden.  Every exported buffer
-    keeps a reference to buf, so it outlives closing of the bytesio object.
+  * exports > 0.  Py_REFCNT(buf) == 1, any modifications are forbidden.
 */
 
 static int
@@ -56,7 +47,7 @@ check_closed(bytesio *self)
 static int
 check_exports(bytesio *self)
 {
-    if (FT_ATOMIC_LOAD_SSIZE_RELAXED(self->exports) > 0) {
+    if (self->exports > 0) {
         PyErr_SetString(PyExc_BufferError,
                         "Existing exports of data: object cannot be re-sized");
         return 1;
@@ -74,64 +65,15 @@ check_exports(bytesio *self)
         return NULL; \
     }
 
-/* If the hash value is cached, the internal bytes object was already used in
-   Python somehow (ex: as a dictionary key).  Modifying it in place would leave
-   the hash of the old contents, even if nothing else references it anymore. */
-#define HASHED_BUF(self) \
-    (_PyBytes_GET_CACHED_HASH((PyBytesObject *)(self)->buf) != -1)
-
-#ifdef Py_GIL_DISABLED
-#define SHARED_BUF(self) \
-    ((self)->buf_shared || !_PyObject_IsUniquelyReferenced((self)->buf) \
-     || HASHED_BUF(self))
-#else
-#define SHARED_BUF(self) \
-    (!_PyObject_IsUniquelyReferenced((self)->buf) || HASHED_BUF(self))
-#endif
-
-static inline void
-set_shared_buf(bytesio *self)
-{
-#ifdef Py_GIL_DISABLED
-    self->buf_shared = 1;
-#endif
-}
-
-static inline void
-clear_shared_buf(bytesio *self)
-{
-#ifdef Py_GIL_DISABLED
-    self->buf_shared = 0;
-#endif
-}
-
-static int
-resize_unshared_buffer_lock_held(bytesio *self, Py_ssize_t size)
-{
-    _Py_CRITICAL_SECTION_ASSERT_OBJECT_LOCKED(self);
-
-#ifdef Py_GIL_DISABLED
-    /* If the internal bytes object escaped via a zero-copy getvalue(), read(),
-       or peek(), resizing it would mutate an object visible to Python code.
-       Callers must detach first. */
-    assert(!self->buf_shared);
-#endif
-    int ret = _PyBytes_ResizeKeepOnError(&self->buf, size);
-    if (ret == 0) {
-        clear_shared_buf(self);
-    }
-    return ret;
-}
+#define SHARED_BUF(self) (Py_REFCNT((self)->buf) > 1)
 
 
 /* Internal routine to get a line from the buffer of a BytesIO
    object. Returns the length between the current position to the
    next newline character. */
 static Py_ssize_t
-scan_eol_lock_held(bytesio *self, Py_ssize_t len)
+scan_eol(bytesio *self, Py_ssize_t len)
 {
-    _Py_CRITICAL_SECTION_ASSERT_OBJECT_LOCKED(self);
-
     const char *start, *n;
     Py_ssize_t maxlen;
 
@@ -164,13 +106,11 @@ scan_eol_lock_held(bytesio *self, Py_ssize_t len)
    The caller should ensure that the 'size' argument is non-negative and
    not lesser than self->string_size.  Returns 0 on success, -1 otherwise. */
 static int
-unshare_buffer_lock_held(bytesio *self, size_t size)
+unshare_buffer(bytesio *self, size_t size)
 {
-    _Py_CRITICAL_SECTION_ASSERT_OBJECT_LOCKED(self);
-
     PyObject *new_buf;
     assert(SHARED_BUF(self));
-    assert(FT_ATOMIC_LOAD_SSIZE_RELAXED(self->exports) == 0);
+    assert(self->exports == 0);
     assert(size >= (size_t)self->string_size);
     new_buf = PyBytes_FromStringAndSize(NULL, size);
     if (new_buf == NULL)
@@ -178,7 +118,6 @@ unshare_buffer_lock_held(bytesio *self, size_t size)
     memcpy(PyBytes_AS_STRING(new_buf), PyBytes_AS_STRING(self->buf),
            self->string_size);
     Py_SETREF(self->buf, new_buf);
-    clear_shared_buf(self);
     return 0;
 }
 
@@ -186,12 +125,10 @@ unshare_buffer_lock_held(bytesio *self, size_t size)
    The caller should ensure that the 'size' argument is non-negative.  Returns
    0 on success, -1 otherwise. */
 static int
-resize_buffer_lock_held(bytesio *self, size_t size)
+resize_buffer(bytesio *self, size_t size)
 {
-    _Py_CRITICAL_SECTION_ASSERT_OBJECT_LOCKED(self);
-
     assert(self->buf != NULL);
-    assert(FT_ATOMIC_LOAD_SSIZE_RELAXED(self->exports) == 0);
+    assert(self->exports == 0);
 
     /* Here, unsigned types are used to avoid dealing with signed integer
        overflow, which is undefined in C. */
@@ -218,16 +155,13 @@ resize_buffer_lock_held(bytesio *self, size_t size)
         /* Major upsize; resize up to exact size */
         alloc = size + 1;
     }
-    if (alloc > PY_SSIZE_T_MAX) {
-        goto overflow;
-    }
 
     if (SHARED_BUF(self)) {
-        if (unshare_buffer_lock_held(self, alloc) < 0)
+        if (unshare_buffer(self, alloc) < 0)
             return -1;
     }
     else {
-        if (resize_unshared_buffer_lock_held(self, alloc) < 0)
+        if (_PyBytes_Resize(&self->buf, alloc) < 0)
             return -1;
     }
 
@@ -244,10 +178,8 @@ resize_buffer_lock_held(bytesio *self, size_t size)
    Inlining is disabled because it's significantly decreases performance
    of writelines() in PGO build. */
 Py_NO_INLINE static Py_ssize_t
-write_bytes_lock_held(bytesio *self, PyObject *b)
+write_bytes(bytesio *self, PyObject *b)
 {
-    _Py_CRITICAL_SECTION_ASSERT_OBJECT_LOCKED(self);
-
     Py_buffer buf;
     Py_ssize_t len;
     if (PyObject_GetBuffer(b, &buf, PyBUF_CONTIG_RO) < 0) {
@@ -267,18 +199,17 @@ write_bytes_lock_held(bytesio *self, PyObject *b)
     assert(self->pos >= 0);
     size_t endpos = (size_t)self->pos + len;
     if (endpos > (size_t)PyBytes_GET_SIZE(self->buf)) {
-        if (resize_buffer_lock_held(self, endpos) < 0) {
+        if (resize_buffer(self, endpos) < 0) {
             len = -1;
             goto done;
         }
     }
     else if (SHARED_BUF(self)) {
-        if (unshare_buffer_lock_held(self, Py_MAX(endpos, (size_t)self->string_size)) < 0) {
+        if (unshare_buffer(self, Py_MAX(endpos, (size_t)self->string_size)) < 0) {
             len = -1;
             goto done;
         }
     }
-    assert(_PyBytes_IsMutable(self->buf));
 
     if (self->pos > self->string_size) {
         /* In case of overseek, pad with null bytes the buffer region between
@@ -308,23 +239,18 @@ write_bytes_lock_held(bytesio *self, PyObject *b)
     return len;
 }
 
-/*[clinic input]
-@critical_section
-@getter
-_io.BytesIO.closed -> bool
-
-True if the file is closed.
-[clinic start generated code]*/
-
-static int
-_io_BytesIO_closed_get_impl(bytesio *self)
-/*[clinic end generated code: output=7cdc647cc7a71683 input=0687f923344225ee]*/
+static PyObject *
+bytesio_get_closed(bytesio *self, void *Py_UNUSED(ignored))
 {
-    return self->buf == NULL;
+    if (self->buf == NULL) {
+        Py_RETURN_TRUE;
+    }
+    else {
+        Py_RETURN_FALSE;
+    }
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.readable
 
 Returns True if the IO object can be read.
@@ -332,14 +258,13 @@ Returns True if the IO object can be read.
 
 static PyObject *
 _io_BytesIO_readable_impl(bytesio *self)
-/*[clinic end generated code: output=4e93822ad5b62263 input=ab7816facef48bfd]*/
+/*[clinic end generated code: output=4e93822ad5b62263 input=96c5d0cccfb29f5c]*/
 {
     CHECK_CLOSED(self);
     Py_RETURN_TRUE;
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.writable
 
 Returns True if the IO object can be written.
@@ -347,14 +272,13 @@ Returns True if the IO object can be written.
 
 static PyObject *
 _io_BytesIO_writable_impl(bytesio *self)
-/*[clinic end generated code: output=64ff6a254b1150b8 input=4f35d49d26dab024]*/
+/*[clinic end generated code: output=64ff6a254b1150b8 input=700eed808277560a]*/
 {
     CHECK_CLOSED(self);
     Py_RETURN_TRUE;
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.seekable
 
 Returns True if the IO object can be seeked.
@@ -362,14 +286,13 @@ Returns True if the IO object can be seeked.
 
 static PyObject *
 _io_BytesIO_seekable_impl(bytesio *self)
-/*[clinic end generated code: output=6b417f46dcc09b56 input=9cc78d15aa1deaa3]*/
+/*[clinic end generated code: output=6b417f46dcc09b56 input=9421f65627a344dd]*/
 {
     CHECK_CLOSED(self);
     Py_RETURN_TRUE;
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.flush
 
 Does nothing.
@@ -377,14 +300,13 @@ Does nothing.
 
 static PyObject *
 _io_BytesIO_flush_impl(bytesio *self)
-/*[clinic end generated code: output=187e3d781ca134a0 input=c60842743910b381]*/
+/*[clinic end generated code: output=187e3d781ca134a0 input=561ea490be4581a7]*/
 {
     CHECK_CLOSED(self);
     Py_RETURN_NONE;
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.getbuffer
 
     cls: defining_class
@@ -395,7 +317,7 @@ Get a read-write view over the contents of the BytesIO object.
 
 static PyObject *
 _io_BytesIO_getbuffer_impl(bytesio *self, PyTypeObject *cls)
-/*[clinic end generated code: output=045091d7ce87fe4e input=8295764061be77fd]*/
+/*[clinic end generated code: output=045091d7ce87fe4e input=0668fbb48f95dffa]*/
 {
     _PyIO_State *state = get_io_state_by_cls(cls);
     PyTypeObject *type = state->PyBytesIOBuffer_Type;
@@ -414,7 +336,6 @@ _io_BytesIO_getbuffer_impl(bytesio *self, PyTypeObject *cls)
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.getvalue
 
 Retrieve the entire contents of the BytesIO object.
@@ -422,29 +343,27 @@ Retrieve the entire contents of the BytesIO object.
 
 static PyObject *
 _io_BytesIO_getvalue_impl(bytesio *self)
-/*[clinic end generated code: output=b3f6a3233c8fd628 input=c91bff398df0c352]*/
+/*[clinic end generated code: output=b3f6a3233c8fd628 input=4b403ac0af3973ed]*/
 {
     CHECK_CLOSED(self);
-    if (self->string_size <= 1 || FT_ATOMIC_LOAD_SSIZE_RELAXED(self->exports) > 0)
+    if (self->string_size <= 1 || self->exports > 0)
         return PyBytes_FromStringAndSize(PyBytes_AS_STRING(self->buf),
                                          self->string_size);
 
     if (self->string_size != PyBytes_GET_SIZE(self->buf)) {
         if (SHARED_BUF(self)) {
-            if (unshare_buffer_lock_held(self, self->string_size) < 0)
+            if (unshare_buffer(self, self->string_size) < 0)
                 return NULL;
         }
         else {
-            if (resize_unshared_buffer_lock_held(self, self->string_size) < 0)
+            if (_PyBytes_Resize(&self->buf, self->string_size) < 0)
                 return NULL;
         }
     }
-    set_shared_buf(self);
     return Py_NewRef(self->buf);
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.isatty
 
 Always returns False.
@@ -454,14 +373,13 @@ BytesIO objects are not connected to a TTY-like device.
 
 static PyObject *
 _io_BytesIO_isatty_impl(bytesio *self)
-/*[clinic end generated code: output=df67712e669f6c8f input=50487b74dc5ae8a9]*/
+/*[clinic end generated code: output=df67712e669f6c8f input=6f97f0985d13f827]*/
 {
     CHECK_CLOSED(self);
     Py_RETURN_FALSE;
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.tell
 
 Current file position, an integer.
@@ -469,26 +387,23 @@ Current file position, an integer.
 
 static PyObject *
 _io_BytesIO_tell_impl(bytesio *self)
-/*[clinic end generated code: output=b54b0f93cd0e5e1d input=2c7b0e8f82e05c4d]*/
+/*[clinic end generated code: output=b54b0f93cd0e5e1d input=b106adf099cb3657]*/
 {
     CHECK_CLOSED(self);
     return PyLong_FromSsize_t(self->pos);
 }
 
-/* Read without advancing position. */
 static PyObject *
-peek_bytes_lock_held(bytesio *self, Py_ssize_t size)
+read_bytes(bytesio *self, Py_ssize_t size)
 {
-    _Py_CRITICAL_SECTION_ASSERT_OBJECT_LOCKED(self);
-
     const char *output;
 
     assert(self->buf != NULL);
     assert(size <= self->string_size);
     if (size > 1 &&
         self->pos == 0 && size == PyBytes_GET_SIZE(self->buf) &&
-        FT_ATOMIC_LOAD_SSIZE_RELAXED(self->exports) == 0) {
-        set_shared_buf(self);
+        self->exports == 0) {
+        self->pos += size;
         return Py_NewRef(self->buf);
     }
 
@@ -496,26 +411,15 @@ peek_bytes_lock_held(bytesio *self, Py_ssize_t size)
        is beyond the size of self->buf. Assert above validates size is always in
        bounds. When self->pos is out of bounds calling code sets size to 0. */
     if (size == 0) {
-        return Py_GetConstant(Py_CONSTANT_EMPTY_BYTES);
+        return PyBytes_FromStringAndSize(NULL, 0);
     }
 
     output = PyBytes_AS_STRING(self->buf) + self->pos;
+    self->pos += size;
     return PyBytes_FromStringAndSize(output, size);
 }
 
-static PyObject *
-read_bytes_lock_held(bytesio *self, Py_ssize_t size)
-{
-    PyObject *bytes = peek_bytes_lock_held(self, size);
-    if (bytes != NULL) {
-        assert(PyBytes_GET_SIZE(bytes) == size);
-        self->pos += size;
-    }
-    return bytes;
-}
-
 /*[clinic input]
-@critical_section
 _io.BytesIO.read
     size: Py_ssize_t(accept={int, NoneType}) = -1
     /
@@ -528,7 +432,7 @@ Return an empty bytes object at EOF.
 
 static PyObject *
 _io_BytesIO_read_impl(bytesio *self, Py_ssize_t size)
-/*[clinic end generated code: output=9cc025f21c75bdd2 input=9e2f7ff3075fdd39]*/
+/*[clinic end generated code: output=9cc025f21c75bdd2 input=74344a39f431c3d7]*/
 {
     Py_ssize_t n;
 
@@ -542,12 +446,11 @@ _io_BytesIO_read_impl(bytesio *self, Py_ssize_t size)
             size = 0;
     }
 
-    return read_bytes_lock_held(self, size);
+    return read_bytes(self, size);
 }
 
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.read1
     size: Py_ssize_t(accept={int, NoneType}) = -1
     /
@@ -560,48 +463,12 @@ reached.  Return an empty bytes object at EOF.
 
 static PyObject *
 _io_BytesIO_read1_impl(bytesio *self, Py_ssize_t size)
-/*[clinic end generated code: output=d0f843285aa95f1c input=796ff4e0efccc4d9]*/
+/*[clinic end generated code: output=d0f843285aa95f1c input=418f5968cb4f2a01]*/
 {
     return _io_BytesIO_read_impl(self, size);
 }
 
-
 /*[clinic input]
-@critical_section
-_io.BytesIO.peek
-    size: Py_ssize_t = 0
-    /
-
-Return bytes from the stream without advancing the position.
-
-Return an empty bytes object at EOF.
-[clinic start generated code]*/
-
-static PyObject *
-_io_BytesIO_peek_impl(bytesio *self, Py_ssize_t size)
-/*[clinic end generated code: output=fa4d8ce28b35db9b input=2ce74234b10aec3e]*/
-{
-    CHECK_CLOSED(self);
-
-    if (size < 1) {
-        size = DEFAULT_BUFFER_SIZE;
-    }
-
-    /* adjust invalid sizes */
-    Py_ssize_t n = self->string_size - self->pos;
-    if (size > n) {
-        size = n;
-        /* n can be negative after truncate() or seek() */
-        if (size < 0) {
-            size = 0;
-        }
-    }
-    return peek_bytes_lock_held(self, size);
-}
-
-
-/*[clinic input]
-@critical_section
 _io.BytesIO.readline
     size: Py_ssize_t(accept={int, NoneType}) = -1
     /
@@ -615,19 +482,18 @@ Return an empty bytes object at EOF.
 
 static PyObject *
 _io_BytesIO_readline_impl(bytesio *self, Py_ssize_t size)
-/*[clinic end generated code: output=4bff3c251df8ffcd input=db09d47e23cf2c9e]*/
+/*[clinic end generated code: output=4bff3c251df8ffcd input=e7c3fbd1744e2783]*/
 {
     Py_ssize_t n;
 
     CHECK_CLOSED(self);
 
-    n = scan_eol_lock_held(self, size);
+    n = scan_eol(self, size);
 
-    return read_bytes_lock_held(self, n);
+    return read_bytes(self, n);
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.readlines
     size as arg: object = None
     /
@@ -641,7 +507,7 @@ total number of bytes in the lines returned.
 
 static PyObject *
 _io_BytesIO_readlines_impl(bytesio *self, PyObject *arg)
-/*[clinic end generated code: output=09b8e34c880808ff input=5c57d7d78e409985]*/
+/*[clinic end generated code: output=09b8e34c880808ff input=691aa1314f2c2a87]*/
 {
     Py_ssize_t maxsize, size, n;
     PyObject *result, *line;
@@ -670,14 +536,16 @@ _io_BytesIO_readlines_impl(bytesio *self, PyObject *arg)
         return NULL;
 
     output = PyBytes_AS_STRING(self->buf) + self->pos;
-    while ((n = scan_eol_lock_held(self, -1)) != 0) {
+    while ((n = scan_eol(self, -1)) != 0) {
         self->pos += n;
         line = PyBytes_FromStringAndSize(output, n);
         if (!line)
             goto on_error;
-        if (_PyList_AppendTakeRef((PyListObject *)result, line) < 0) {
+        if (PyList_Append(result, line) == -1) {
+            Py_DECREF(line);
             goto on_error;
         }
+        Py_DECREF(line);
         size += n;
         if (maxsize > 0 && size >= maxsize)
             break;
@@ -691,7 +559,6 @@ _io_BytesIO_readlines_impl(bytesio *self, PyObject *arg)
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.readinto
     buffer: Py_buffer(accept={rwbuffer})
     /
@@ -704,7 +571,7 @@ is set not to block and has no data to read.
 
 static PyObject *
 _io_BytesIO_readinto_impl(bytesio *self, Py_buffer *buffer)
-/*[clinic end generated code: output=a5d407217dcf0639 input=093a8d330de3fcd1]*/
+/*[clinic end generated code: output=a5d407217dcf0639 input=1424d0fdce857919]*/
 {
     Py_ssize_t len, n;
 
@@ -724,16 +591,15 @@ _io_BytesIO_readinto_impl(bytesio *self, Py_buffer *buffer)
 
     assert(self->pos + len <= PY_SSIZE_T_MAX);
     assert(len >= 0);
-    memmove(buffer->buf, PyBytes_AS_STRING(self->buf) + self->pos, len);
+    memcpy(buffer->buf, PyBytes_AS_STRING(self->buf) + self->pos, len);
     self->pos += len;
 
     return PyLong_FromSsize_t(len);
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.truncate
-    size: object = None
+    size: Py_ssize_t(accept={int, NoneType}, c_default="self->pos") = None
     /
 
 Truncate the file to at most size bytes.
@@ -743,68 +609,43 @@ The current file position is unchanged.  Returns the new size.
 [clinic start generated code]*/
 
 static PyObject *
-_io_BytesIO_truncate_impl(bytesio *self, PyObject *size)
-/*[clinic end generated code: output=ab42491b4824f384 input=b4acb5f80481c053]*/
+_io_BytesIO_truncate_impl(bytesio *self, Py_ssize_t size)
+/*[clinic end generated code: output=9ad17650c15fa09b input=423759dd42d2f7c1]*/
 {
     CHECK_CLOSED(self);
     CHECK_EXPORTS(self);
 
-    Py_ssize_t new_size;
-
-    if (size == Py_None) {
-        new_size = self->pos;
-    }
-    else {
-        new_size = PyNumber_AsSsize_t(size, PyExc_OverflowError);
-        if (new_size == -1 && PyErr_Occurred()) {
-            return NULL;
-        }
-        if (new_size < 0) {
-            PyErr_Format(PyExc_ValueError,
-                         "negative size value %zd", new_size);
-            return NULL;
-        }
-        CHECK_CLOSED(self);
-        CHECK_EXPORTS(self);
+    if (size < 0) {
+        PyErr_Format(PyExc_ValueError,
+                     "negative size value %zd", size);
+        return NULL;
     }
 
-    if (new_size < self->string_size) {
-        Py_ssize_t old_string_size = self->string_size;
-        self->string_size = new_size;
-        if (resize_buffer_lock_held(self, new_size) < 0) {
-            self->string_size = old_string_size;
+    if (size < self->string_size) {
+        self->string_size = size;
+        if (resize_buffer(self, size) < 0)
             return NULL;
-        }
     }
 
-    return PyLong_FromSsize_t(new_size);
+    return PyLong_FromSsize_t(size);
 }
 
-/*[clinic input]
-@critical_section
-_io.BytesIO.__next__ as bytesio_iternext
-[clinic start generated code]*/
-
 static PyObject *
-bytesio_iternext_impl(bytesio *self)
-/*[clinic end generated code: output=f530bdee3a720d48 input=7fb3a763efe11a21]*/
+bytesio_iternext(bytesio *self)
 {
-    _Py_CRITICAL_SECTION_ASSERT_OBJECT_LOCKED(self);
-
     Py_ssize_t n;
 
     CHECK_CLOSED(self);
 
-    n = scan_eol_lock_held(self, -1);
+    n = scan_eol(self, -1);
 
     if (n == 0)
         return NULL;
 
-    return read_bytes_lock_held(self, n);
+    return read_bytes(self, n);
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.seek
     pos: Py_ssize_t
     whence: int = 0
@@ -821,7 +662,7 @@ Returns the new absolute position.
 
 static PyObject *
 _io_BytesIO_seek_impl(bytesio *self, Py_ssize_t pos, int whence)
-/*[clinic end generated code: output=c26204a68e9190e4 input=20f05ddf659255df]*/
+/*[clinic end generated code: output=c26204a68e9190e4 input=1e875e6ebc652948]*/
 {
     CHECK_CLOSED(self);
 
@@ -864,7 +705,6 @@ _io_BytesIO_seek_impl(bytesio *self, Py_ssize_t pos, int whence)
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.write
     b: object
     /
@@ -875,15 +715,14 @@ Return the number of bytes written.
 [clinic start generated code]*/
 
 static PyObject *
-_io_BytesIO_write_impl(bytesio *self, PyObject *b)
-/*[clinic end generated code: output=d3e46bcec8d9e21c input=46c0c17eac7474a4]*/
+_io_BytesIO_write(bytesio *self, PyObject *b)
+/*[clinic end generated code: output=53316d99800a0b95 input=f5ec7c8c64ed720a]*/
 {
-    Py_ssize_t n = write_bytes_lock_held(self, b);
+    Py_ssize_t n = write_bytes(self, b);
     return n >= 0 ? PyLong_FromSsize_t(n) : NULL;
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.writelines
     lines: object
     /
@@ -896,8 +735,8 @@ for each element.
 [clinic start generated code]*/
 
 static PyObject *
-_io_BytesIO_writelines_impl(bytesio *self, PyObject *lines)
-/*[clinic end generated code: output=03a43a75773bc397 input=d265f76533b058e7]*/
+_io_BytesIO_writelines(bytesio *self, PyObject *lines)
+/*[clinic end generated code: output=7f33aa3271c91752 input=f4e24a931ef1d528]*/
 {
     PyObject *it, *item;
 
@@ -908,7 +747,7 @@ _io_BytesIO_writelines_impl(bytesio *self, PyObject *lines)
         return NULL;
 
     while ((item = PyIter_Next(it)) != NULL) {
-        Py_ssize_t ret = write_bytes_lock_held(self, item);
+        Py_ssize_t ret = write_bytes(self, item);
         Py_DECREF(item);
         if (ret < 0) {
             Py_DECREF(it);
@@ -925,7 +764,6 @@ _io_BytesIO_writelines_impl(bytesio *self, PyObject *lines)
 }
 
 /*[clinic input]
-@critical_section
 _io.BytesIO.close
 
 Disable all I/O operations.
@@ -933,9 +771,9 @@ Disable all I/O operations.
 
 static PyObject *
 _io_BytesIO_close_impl(bytesio *self)
-/*[clinic end generated code: output=1471bb9411af84a0 input=34ce76d8bd17a23b]*/
+/*[clinic end generated code: output=1471bb9411af84a0 input=37e1f55556e61f60]*/
 {
-    /* The exported buffers keep the internal buffer alive. */
+    CHECK_EXPORTS(self);
     Py_CLEAR(self->buf);
     Py_RETURN_NONE;
 }
@@ -955,15 +793,8 @@ _io_BytesIO_close_impl(bytesio *self)
    function to use the efficient instance representation of PEP 307.
  */
 
-
-/*[clinic input]
-@critical_section
-_io.BytesIO.__getstate__
-[clinic start generated code]*/
-
 static PyObject *
-_io_BytesIO___getstate___impl(bytesio *self)
-/*[clinic end generated code: output=4a776270c8443b85 input=f41e5bc9731475c4]*/
+bytesio_getstate(bytesio *self, PyObject *Py_UNUSED(ignored))
 {
     PyObject *initvalue = _io_BytesIO_getvalue_impl(self);
     PyObject *dict;
@@ -971,16 +802,11 @@ _io_BytesIO___getstate___impl(bytesio *self)
 
     if (initvalue == NULL)
         return NULL;
-    if (_PyObject_IsInstanceDictEmpty((PyObject *)self)) {
+    if (self->dict == NULL) {
         dict = Py_NewRef(Py_None);
     }
     else {
-        dict = PyObject_GenericGetDict((PyObject *)self, NULL);
-        if (dict == NULL) {
-            Py_DECREF(initvalue);
-            return NULL;
-        }
-        Py_SETREF(dict, PyDict_Copy(dict));
+        dict = PyDict_Copy(self->dict);
         if (dict == NULL) {
             Py_DECREF(initvalue);
             return NULL;
@@ -992,18 +818,8 @@ _io_BytesIO___getstate___impl(bytesio *self)
     return state;
 }
 
-
-/*[clinic input]
-@critical_section
-_io.BytesIO.__setstate__
-
-    state: object
-    /
-[clinic start generated code]*/
-
 static PyObject *
-_io_BytesIO___setstate___impl(bytesio *self, PyObject *state)
-/*[clinic end generated code: output=3605abdec171bb98 input=82a189599ba75083]*/
+bytesio_setstate(bytesio *self, PyObject *state)
 {
     PyObject *result;
     PyObject *position_obj;
@@ -1029,7 +845,7 @@ _io_BytesIO___setstate___impl(bytesio *self, PyObject *state)
 
     /* Set the value of the internal buffer. If state[0] does not support the
        buffer protocol, bytesio_write will raise the appropriate TypeError. */
-    result = _io_BytesIO_write_impl(self, PyTuple_GET_ITEM(state, 0));
+    result = _io_BytesIO_write(self, PyTuple_GET_ITEM(state, 0));
     if (result == NULL)
         return NULL;
     Py_DECREF(result);
@@ -1063,16 +879,14 @@ _io_BytesIO___setstate___impl(bytesio *self, PyObject *state)
                          Py_TYPE(dict)->tp_name);
             return NULL;
         }
-        /* Alternatively, we could replace the internal dictionary
-           completely. However, it seems more practical to just update it. */
-        PyObject *self_dict = PyObject_GenericGetDict((PyObject *)self, NULL);
-        if (self_dict == NULL) {
-            return NULL;
+        if (self->dict) {
+            /* Alternatively, we could replace the internal dictionary
+               completely. However, it seems more practical to just update it. */
+            if (PyDict_Update(self->dict, dict) < 0)
+                return NULL;
         }
-        int rc = PyDict_Update(self_dict, dict);
-        Py_DECREF(self_dict);
-        if (rc < 0) {
-            return NULL;
+        else {
+            self->dict = Py_NewRef(dict);
         }
     }
 
@@ -1080,19 +894,18 @@ _io_BytesIO___setstate___impl(bytesio *self, PyObject *state)
 }
 
 static void
-bytesio_dealloc(PyObject *op)
+bytesio_dealloc(bytesio *self)
 {
-    bytesio *self = bytesio_CAST(op);
     PyTypeObject *tp = Py_TYPE(self);
     _PyObject_GC_UNTRACK(self);
-    if (FT_ATOMIC_LOAD_SSIZE_RELAXED(self->exports) > 0) {
+    if (self->exports > 0) {
         PyErr_SetString(PyExc_SystemError,
                         "deallocated BytesIO object has exported buffers");
         PyErr_Print();
     }
     Py_CLEAR(self->buf);
-    PyObject_ClearManagedDict(op);
-    PyObject_ClearWeakRefs(op);
+    Py_CLEAR(self->dict);
+    FT_CLEAR_WEAKREFS((PyObject *) self, self->weakreflist);
     tp->tp_free(self);
     Py_DECREF(tp);
 }
@@ -1110,7 +923,7 @@ bytesio_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     /* tp_alloc initializes all the fields to zero. So we don't have to
        initialize them here. */
 
-    self->buf = Py_GetConstant(Py_CONSTANT_EMPTY_BYTES);
+    self->buf = PyBytes_FromStringAndSize(NULL, 0);
     if (self->buf == NULL) {
         Py_DECREF(self);
         return PyErr_NoMemory();
@@ -1120,8 +933,6 @@ bytesio_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 }
 
 /*[clinic input]
-@vectorcall
-@critical_section
 _io.BytesIO.__init__
     initial_bytes as initvalue: object(c_default="NULL") = b''
 
@@ -1130,9 +941,9 @@ Buffered I/O implementation using an in-memory bytes buffer.
 
 static int
 _io_BytesIO___init___impl(bytesio *self, PyObject *initvalue)
-/*[clinic end generated code: output=65c0c51e24c5b621 input=a6dc38082204df28]*/
+/*[clinic end generated code: output=65c0c51e24c5b621 input=aac7f31b67bf0fb6]*/
 {
-    if (FT_ATOMIC_LOAD_SSIZE_RELAXED(self->exports) > 0) {
+    if (self->exports > 0) {
         PyErr_SetString(PyExc_BufferError,
                         "Existing exports of data: object cannot be re-sized");
         return -1;
@@ -1145,12 +956,11 @@ _io_BytesIO___init___impl(bytesio *self, PyObject *initvalue)
     if (initvalue && initvalue != Py_None) {
         if (PyBytes_CheckExact(initvalue)) {
             Py_XSETREF(self->buf, Py_NewRef(initvalue));
-            clear_shared_buf(self);
             self->string_size = PyBytes_GET_SIZE(initvalue);
         }
         else {
             PyObject *res;
-            res = _io_BytesIO_write_impl(self, initvalue);
+            res = _io_BytesIO_write(self, initvalue);
             if (res == NULL)
                 return -1;
             Py_DECREF(res);
@@ -1161,17 +971,8 @@ _io_BytesIO___init___impl(bytesio *self, PyObject *initvalue)
     return 0;
 }
 
-
-/*[clinic input]
-@critical_section
-_io.BytesIO.__sizeof__
-
-Size of object in memory, in bytes.
-[clinic start generated code]*/
-
 static PyObject *
-_io_BytesIO___sizeof___impl(bytesio *self)
-/*[clinic end generated code: output=f61b601bd055c4de input=6f01c36e6ff64c17]*/
+bytesio_sizeof(bytesio *self, void *unused)
 {
     size_t res = _PyObject_SIZE(Py_TYPE(self));
     if (self->buf && !SHARED_BUF(self)) {
@@ -1185,20 +986,19 @@ _io_BytesIO___sizeof___impl(bytesio *self)
 }
 
 static int
-bytesio_traverse(PyObject *op, visitproc visit, void *arg)
+bytesio_traverse(bytesio *self, visitproc visit, void *arg)
 {
-    bytesio *self = bytesio_CAST(op);
     Py_VISIT(Py_TYPE(self));
+    Py_VISIT(self->dict);
     Py_VISIT(self->buf);
-    return PyObject_VisitManagedDict(op, visit, arg);
+    return 0;
 }
 
 static int
-bytesio_clear(PyObject *op)
+bytesio_clear(bytesio *self)
 {
-    bytesio *self = bytesio_CAST(op);
-    PyObject_ClearManagedDict(op);
-    if (FT_ATOMIC_LOAD_SSIZE_RELAXED(self->exports) == 0) {
+    Py_CLEAR(self->dict);
+    if (self->exports == 0) {
         Py_CLEAR(self->buf);
     }
     return 0;
@@ -1210,7 +1010,8 @@ bytesio_clear(PyObject *op)
 #undef clinic_state
 
 static PyGetSetDef bytesio_getsetlist[] = {
-    _IO_BYTESIO_CLOSED_GETSETDEF
+    {"closed",  (getter)bytesio_get_closed, NULL,
+     "True if the file is closed."},
     {NULL},            /* sentinel */
 };
 
@@ -1229,15 +1030,20 @@ static struct PyMethodDef bytesio_methods[] = {
     _IO_BYTESIO_READLINE_METHODDEF
     _IO_BYTESIO_READLINES_METHODDEF
     _IO_BYTESIO_READ_METHODDEF
-    _IO_BYTESIO_PEEK_METHODDEF
     _IO_BYTESIO_GETBUFFER_METHODDEF
     _IO_BYTESIO_GETVALUE_METHODDEF
     _IO_BYTESIO_SEEK_METHODDEF
     _IO_BYTESIO_TRUNCATE_METHODDEF
-    _IO_BYTESIO___GETSTATE___METHODDEF
-    _IO_BYTESIO___SETSTATE___METHODDEF
-    _IO_BYTESIO___SIZEOF___METHODDEF
+    {"__getstate__",  (PyCFunction)bytesio_getstate,  METH_NOARGS, NULL},
+    {"__setstate__",  (PyCFunction)bytesio_setstate,  METH_O, NULL},
+    {"__sizeof__", (PyCFunction)bytesio_sizeof,     METH_NOARGS, NULL},
     {NULL, NULL}        /* sentinel */
+};
+
+static PyMemberDef bytesio_members[] = {
+    {"__weaklistoffset__", Py_T_PYSSIZET, offsetof(bytesio, weakreflist), Py_READONLY},
+    {"__dictoffset__", Py_T_PYSSIZET, offsetof(bytesio, dict), Py_READONLY},
+    {NULL}
 };
 
 static PyType_Slot bytesio_slots[] = {
@@ -1248,14 +1054,14 @@ static PyType_Slot bytesio_slots[] = {
     {Py_tp_iter, PyObject_SelfIter},
     {Py_tp_iternext, bytesio_iternext},
     {Py_tp_methods, bytesio_methods},
+    {Py_tp_members, bytesio_members},
     {Py_tp_getset, bytesio_getsetlist},
     {Py_tp_init, _io_BytesIO___init__},
     {Py_tp_new, bytesio_new},
-    {Py_tp_vectorcall, _io_BytesIO_vectorcall},
     {0, NULL},
 };
 
-PyType_Spec _Py_bytesio_spec = {
+PyType_Spec bytesio_spec = {
     .name = "_io.BytesIO",
     .basicsize = sizeof(bytesio),
     .flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC |
@@ -1270,73 +1076,49 @@ PyType_Spec _Py_bytesio_spec = {
  */
 
 static int
-bytesiobuf_getbuffer_lock_held(PyObject *op, Py_buffer *view, int flags)
+bytesiobuf_getbuffer(bytesiobuf *obj, Py_buffer *view, int flags)
 {
-    bytesiobuf *obj = bytesiobuf_CAST(op);
-    bytesio *b = bytesio_CAST(obj->source);
+    bytesio *b = (bytesio *) obj->source;
 
-    _Py_CRITICAL_SECTION_ASSERT_OBJECT_LOCKED(b);
-
-    if (check_closed(b)) {
-        return -1;
-    }
-    if (FT_ATOMIC_LOAD_SSIZE_RELAXED(b->exports) == 0 && SHARED_BUF(b)) {
-        if (unshare_buffer_lock_held(b, b->string_size) < 0)
-            return -1;
-    }
-
-    /* cannot fail if view != NULL and readonly == 0 */
-    (void)PyBuffer_FillInfo(view, op,
-                            PyBytes_AS_STRING(b->buf), b->string_size,
-                            0, flags);
-    /* Keep the internal buffer alive: the bytesio object can be closed
-       while the buffer is exported. */
-    view->internal = Py_NewRef(b->buf);
-    FT_ATOMIC_ADD_SSIZE(b->exports, 1);
-    return 0;
-}
-
-static int
-bytesiobuf_getbuffer(PyObject *op, Py_buffer *view, int flags)
-{
     if (view == NULL) {
         PyErr_SetString(PyExc_BufferError,
             "bytesiobuf_getbuffer: view==NULL argument is obsolete");
         return -1;
     }
+    if (b->exports == 0 && SHARED_BUF(b)) {
+        if (unshare_buffer(b, b->string_size) < 0)
+            return -1;
+    }
 
-    int ret;
-    Py_BEGIN_CRITICAL_SECTION(bytesiobuf_CAST(op)->source);
-    ret = bytesiobuf_getbuffer_lock_held(op, view, flags);
-    Py_END_CRITICAL_SECTION();
-    return ret;
+    /* cannot fail if view != NULL and readonly == 0 */
+    (void)PyBuffer_FillInfo(view, (PyObject*)obj,
+                            PyBytes_AS_STRING(b->buf), b->string_size,
+                            0, flags);
+    b->exports++;
+    return 0;
 }
 
 static void
-bytesiobuf_releasebuffer(PyObject *op, Py_buffer *view)
+bytesiobuf_releasebuffer(bytesiobuf *obj, Py_buffer *view)
 {
-    bytesiobuf *obj = bytesiobuf_CAST(op);
-    bytesio *b = bytesio_CAST(obj->source);
-    FT_ATOMIC_ADD_SSIZE(b->exports, -1);
-    Py_CLEAR(view->internal);
+    bytesio *b = (bytesio *) obj->source;
+    b->exports--;
 }
 
 static int
-bytesiobuf_traverse(PyObject *op, visitproc visit, void *arg)
+bytesiobuf_traverse(bytesiobuf *self, visitproc visit, void *arg)
 {
-    bytesiobuf *self = bytesiobuf_CAST(op);
     Py_VISIT(Py_TYPE(self));
     Py_VISIT(self->source);
     return 0;
 }
 
 static void
-bytesiobuf_dealloc(PyObject *op)
+bytesiobuf_dealloc(bytesiobuf *self)
 {
-    bytesiobuf *self = bytesiobuf_CAST(op);
     PyTypeObject *tp = Py_TYPE(self);
     /* bpo-31095: UnTrack is needed before calling any callbacks */
-    PyObject_GC_UnTrack(op);
+    PyObject_GC_UnTrack(self);
     Py_CLEAR(self->source);
     tp->tp_free(self);
     Py_DECREF(tp);
@@ -1352,7 +1134,7 @@ static PyType_Slot bytesiobuf_slots[] = {
     {0, NULL},
 };
 
-PyType_Spec _Py_bytesiobuf_spec = {
+PyType_Spec bytesiobuf_spec = {
     .name = "_io._BytesIOBuffer",
     .basicsize = sizeof(bytesiobuf),
     .flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC |

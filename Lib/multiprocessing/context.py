@@ -1,4 +1,3 @@
-import functools
 import os
 import sys
 import threading
@@ -174,7 +173,7 @@ class BaseContext(object):
         '''
         # This is undocumented.  In previous versions of multiprocessing
         # its only effect was to make socket objects inheritable on Windows.
-        from . import connection  # noqa: F401
+        from . import connection
 
     def set_executable(self, executable):
         '''Sets the path to a python.exe or pythonw.exe binary used to run
@@ -184,15 +183,12 @@ class BaseContext(object):
         from .spawn import set_executable
         set_executable(executable)
 
-    def set_forkserver_preload(self, module_names, *, on_error='ignore'):
+    def set_forkserver_preload(self, module_names):
         '''Set list of module names to try to load in forkserver process.
-
-        The on_error parameter controls how import failures are handled:
-        "ignore" (default) silently ignores failures, "warn" emits warnings,
-        and "fail" raises exceptions breaking the forkserver context.
+        This is really just a hint.
         '''
         from .forkserver import set_forkserver_preload
-        set_forkserver_preload(module_names, on_error=on_error)
+        set_forkserver_preload(module_names)
 
     def get_context(self, method=None):
         if method is None:
@@ -240,18 +236,9 @@ class Process(process.BaseProcess):
 class DefaultContext(BaseContext):
     Process = Process
 
-    def __init__(self, context=None):
-        if context is not None:
-            self._default_context = context
+    def __init__(self, context):
+        self._default_context = context
         self._actual_context = None
-
-    # The platform default is only determined when first needed, as doing
-    # so can be costly; importing multiprocessing must stay cheap.
-    # A cached_property rather than a property so that the attribute can
-    # still be assigned, deleted and patched like a plain one.
-    @functools.cached_property
-    def _default_context(self):
-        return _get_platform_default_context()
 
     def get_context(self, method=None):
         if method is None:
@@ -278,12 +265,13 @@ class DefaultContext(BaseContext):
 
     def get_all_start_methods(self):
         """Returns a list of the supported start methods, default first."""
-        default = self._default_context.get_start_method()
-        start_method_names = [default]
-        start_method_names.extend(
-            name for name in _concrete_contexts if name != default
-        )
-        return start_method_names
+        if sys.platform == 'win32':
+            return ['spawn']
+        else:
+            methods = ['spawn', 'fork'] if sys.platform == 'darwin' else ['fork', 'spawn']
+            if reduction.HAVE_SEND_HANDLE:
+                methods.append('forkserver')
+            return methods
 
 
 #
@@ -336,27 +324,16 @@ if sys.platform != 'win32':
     _concrete_contexts = {
         'fork': ForkContext(),
         'spawn': SpawnContext(),
+        'forkserver': ForkServerContext(),
     }
-    if reduction.HAVE_SEND_HANDLE:
-        _concrete_contexts['forkserver'] = ForkServerContext()
-
-    def _get_platform_default_context():
+    if sys.platform == 'darwin':
         # bpo-33725: running arbitrary code after fork() is no longer reliable
         # on macOS since macOS 10.14 (Mojave). Use spawn by default instead.
-        # gh-84559: We changed everyones default to a thread safeish one in 3.14.
-        if reduction.HAVE_SEND_HANDLE and sys.platform != 'darwin':
-            # gh-155717: forkserver requires to write temporary files.
-            #
-            # Imported here rather than at the top level as util is costly
-            # to import and is not otherwise needed to import this module.
-            from . import util
-            if util._has_writeable_tempdir():
-                return _concrete_contexts['forkserver']
-        return _concrete_contexts['spawn']
+        _default_context = DefaultContext(_concrete_contexts['spawn'])
+    else:
+        _default_context = DefaultContext(_concrete_contexts['fork'])
 
-    _default_context = DefaultContext()
-
-else:  # Windows
+else:
 
     class SpawnProcess(process.BaseProcess):
         _start_method = 'spawn'
@@ -377,10 +354,7 @@ else:  # Windows
     _concrete_contexts = {
         'spawn': SpawnContext(),
     }
-    def _get_platform_default_context():
-        return _concrete_contexts['spawn']
-
-    _default_context = DefaultContext()
+    _default_context = DefaultContext(_concrete_contexts['spawn'])
 
 #
 # Force the start method

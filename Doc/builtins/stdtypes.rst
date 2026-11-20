@@ -46,10 +46,8 @@ Any object can be tested for truth value, for use in an :keyword:`if` or
 By default, an object is considered true unless its class defines either a
 :meth:`~object.__bool__` method that returns ``False`` or a
 :meth:`~object.__len__` method that
-returns zero, when called with the object. [1]_ If one of the methods raises an
-exception when called, the exception is propagated and the object does
-not have a truth value (for example, :data:`NotImplemented`).
-Here are most of the built-in objects considered false:
+returns zero, when called with the object. [1]_  Here are most of the built-in
+objects considered false:
 
 .. index::
    single: None (Built-in object)
@@ -245,9 +243,6 @@ numeric literal yields an imaginary number (a complex number with a zero real
 part) which you can add to an integer or float to get a complex number with real
 and imaginary parts.
 
-The constructors :func:`int`, :func:`float`, and
-:func:`complex` can be used to produce numbers of a specific type.
-
 .. index::
    single: arithmetic
    pair: built-in function; int
@@ -265,25 +260,14 @@ The constructors :func:`int`, :func:`float`, and
    pair: operator; % (percent)
    pair: operator; **
 
-.. _stdtypes-mixed-arithmetic:
-
 Python fully supports mixed arithmetic: when a binary arithmetic operator has
-operands of different built-in numeric types, the operand with the "narrower"
-type is widened to that of the other:
+operands of different numeric types, the operand with the "narrower" type is
+widened to that of the other, where integer is narrower than floating point,
+which is narrower than complex. A comparison between numbers of different types
+behaves as though the exact values of those numbers were being compared. [2]_
 
-* If both arguments are complex numbers, no conversion is performed;
-* if either argument is a complex or a floating-point number, the other is
-  converted to a floating-point number;
-* otherwise, both must be integers and no conversion is necessary.
-
-Arithmetic with complex and real operands is defined by the usual mathematical
-formula, for example::
-
-    x + complex(u, v) = complex(x + u, v)
-    x * complex(u, v) = complex(x * u, x * v)
-
-A comparison between numbers of different types behaves as though the exact
-values of those numbers were being compared. [2]_
+The constructors :func:`int`, :func:`float`, and
+:func:`complex` can be used to produce numbers of a specific type.
 
 All numeric types (except complex) support the following operations (for priorities of
 the operations, see :ref:`operator-summary`):
@@ -641,23 +625,6 @@ Additional Methods on Float
 The float type implements the :class:`numbers.Real` :term:`abstract base
 class`. float also has the following additional methods.
 
-.. classmethod:: float.from_number(x)
-
-   Class method to return a floating-point number constructed from a number *x*.
-
-   If the argument is an integer or a floating-point number, a
-   floating-point number with the same value (within Python's floating-point
-   precision) is returned.  If the argument is outside the range of a Python
-   float, an :exc:`OverflowError` will be raised.
-
-   For a general Python object ``x``, ``float.from_number(x)`` delegates to
-   ``x.__float__()``.
-   If :meth:`~object.__float__` is not defined then it falls back
-   to :meth:`~object.__index__`.
-
-   .. versionadded:: 3.14
-
-
 .. method:: float.as_integer_ratio()
 
    Return a pair of integers whose ratio is exactly equal to the
@@ -734,25 +701,6 @@ hexadecimal string representing the same number::
 
    >>> float.hex(3740.0)
    '0x1.d380000000000p+11'
-
-
-Additional Methods on Complex
------------------------------
-
-The :class:`!complex` type implements the :class:`numbers.Complex`
-:term:`abstract base class`.
-:class:`!complex` also has the following additional methods.
-
-.. classmethod:: complex.from_number(x)
-
-   Class method to convert a number to a complex number.
-
-   For a general Python object ``x``, ``complex.from_number(x)`` delegates to
-   ``x.__complex__()``.  If :meth:`~object.__complex__` is not defined then it falls back
-   to :meth:`~object.__float__`.  If :meth:`!__float__` is not defined then it falls back
-   to :meth:`~object.__index__`.
-
-   .. versionadded:: 3.14
 
 
 .. _numeric-hash:
@@ -891,12 +839,10 @@ many numeric contexts, ``False`` and ``True`` behave like the integers 0 and 1, 
 However, relying on this is discouraged; explicitly convert using :func:`int`
 instead.
 
-.. _iterator-types:
-
 .. _typeiter:
 
-Iteration-related types
-=======================
+Iterator Types
+==============
 
 .. index::
    single: iterator protocol
@@ -908,9 +854,6 @@ Python supports a concept of iteration over containers.  This is implemented
 using two distinct methods; these are used to allow user-defined classes to
 support iteration.  Sequences, described below in more detail, always support
 the iteration methods.
-
-Iterables
----------
 
 One method needs to be defined for container objects to provide :term:`iterable`
 support:
@@ -928,13 +871,9 @@ support:
    :c:member:`~PyTypeObject.tp_iter` slot of the type structure for Python
    objects in the Python/C API.
 
-.. _stdtypes-iterators:
-
-Iterators
----------
-
 The iterator objects themselves are required to support the following two
 methods, which together form the :dfn:`iterator protocol`:
+
 
 .. method:: iterator.__iter__()
 
@@ -964,278 +903,16 @@ Implementations that do not obey this property are deemed broken.
 
 .. _generator-types:
 
-Generator types
+Generator Types
 ---------------
 
-Python's :term:`generators <generator>` -- or more precisely,
-:term:`generator functions <generator function>` and
-:term:`generator iterators <generator iterator>` -- provide a convenient way
-to implement the iterator protocol.
-
-A function that contains one or more :ref:`yield expressions <yieldexpr>`
-is a :term:`generator function`.
-For example::
-
-   >>> def count_to_three():
-   ...     yield 0
-   ...     yield 1
-   ...     yield 2
-   ...     yield 3
-
-Generator functions behave as regular
-:ref:`user-defined functions <user-defined-funcs>`
-(for example, they have the same attributes), except that calling a generator
-function returns a :ref:`generator iterator <generator-methods>`::
-
-   >>> count_to_three()
-   <generator object count_to_three at 0x7f33a2305000>
-
-Iterating a generator iterator executes code of the underlying
-generator function, producing each :keyword:`yield`\ed value in turn::
-
-   >>> for number in count_to_three():
-   ...     print(number)
-   0
-   1
-   2
-   3
-
-   >>> list(count_to_three())
-   [0, 1, 2, 3]
-
-One common use for generator functions is implementing the
-:meth:`~object.__iter__` method of custom iterable objects.
-For example::
-
-   >>> class CardDeck:
-   ...     def __iter__(self):
-   ...         yield 'three of clubs'
-   ...         yield 'ace of hearts'
-
-   >>> list(CardDeck())
-   ['three of clubs', 'ace of hearts']
-
-
-.. index:: pair: object; generator
-.. _generator-methods:
-
-Generator iterators
-^^^^^^^^^^^^^^^^^^^
-
-Generator iterators implement the
-:ref:`iterator protocol <stdtypes-iterators>`.
-Iterating them drives execution of the underlying generator function.
-
-.. index:: pair: exception; StopIteration
-
-.. method:: generator.__next__()
-
-   Starts the execution of a generator function or resumes it at the
-   :ref:`yield expression <yieldexpr>` where the function is currently suspended.
-   When a generator function is resumed with a :meth:`~generator.__next__`
-   method, the current yield expression always evaluates to :const:`None`.
-   The execution then continues to the next yield expression, where the
-   generator is suspended again, and the value of the expression after the
-   :keyword:`yield` keyword is returned to :meth:`~generator.__next__`'s
-   caller.
-   If the generator exits without yielding another value,
-   :meth:`~generator.__next__` raises a :exc:`StopIteration` exception,
-   signalling that iteration has completed.
-
-   This method is normally called implicitly, for example by a :keyword:`for`
-   loop, or by the built-in :func:`next` function.
-
-Generator iterators have a few more methods than generic iterators, which
-can be used to control the execution of the underlying generator function:
-
-.. method:: generator.send(value)
-
-   "Sends" a value into the generator function: the *value* argument becomes
-   the result of the current yield expression.
-
-   Otherwise, this method behaves like :meth:`~generator.__next__`: it resumes
-   the underlying function and either returns the next yielded value or raises
-   :exc:`StopIteration`.
-
-   When :meth:`send` is called to start the generator, it must be called
-   with :const:`None` as the argument, because there is no current yield
-   expression that could receive the value.
-
-
-.. method:: generator.throw(value)
-            generator.throw(type[, value[, traceback]])
-
-   Raises an exception at the point where the generator is currently suspended.
-
-   Otherwise, this method behaves like :meth:`~generator.__next__`: it resumes
-   the underlying function and either returns the next yielded value or raises
-   :exc:`StopIteration`.
-   If the generator function does not catch the passed-in exception, or
-   raises a different exception, then that exception propagates to the caller.
-
-   When :meth:`throw` is called to start the generator, the generator
-   immediately exits (that is, subsequent calls to :meth:`~generator.__next__`
-   will raise :exc:`StopIteration`) and the thrown exception is propagated to
-   :meth:`throw`'s caller.
-
-   In typical use, this is called with a single argument, an exception instance,
-   similar to the way the :keyword:`raise` keyword is used.
-
-   For backwards compatibility, however, the second signature is
-   supported, following a convention from older versions of Python.
-   The *type* argument should be an exception class, and *value*
-   should be an exception instance. If the *value* is not provided, the
-   *type* constructor is called to get an instance. If *traceback*
-   is provided, it is set on the exception, otherwise any existing
-   :attr:`~BaseException.__traceback__` attribute stored in *value* may
-   be cleared.
-
-   .. versionchanged:: 3.12
-
-      The second signature \(type\[, value\[, traceback\]\]\) is deprecated and
-      may be removed in a future version of Python.
-
-.. index:: pair: exception; GeneratorExit
-
-.. method:: generator.close()
-
-   Raises a :exc:`GeneratorExit` exception at the point where the generator
-   function is currently suspended (equivalent to calling ``throw(GeneratorExit)``).
-
-   If the generator function has already exited (due to an exception or
-   normal return), or raises :exc:`GeneratorExit` (by not catching the
-   exception), :meth:`close` returns :const:`None`.
-   If the generator yields a value, a :exc:`RuntimeError` is raised.
-   If the generator raises any other exception, it is propagated to the caller.
-   If a generator returns a value upon being closed, that value is returned
-   by :meth:`close`.
-
-   When a generator iterator is garbage collected before it has exited,
-   :meth:`~generator.close` is called automatically.
-
-   .. versionchanged:: 3.13
-
-      If a generator returns a value upon being closed, the value is returned
-      by :meth:`close`.
-      Previously, it returned ``None``.
-
-
-Calling any of the generator methods (:meth:`~generator.__next__`,
-:meth:`~generator.send`, :meth:`~generator.throw`, :meth:`~generator.close`)
-while one of these methods is already executing
-raises a :exc:`ValueError` exception.
-
-
-.. index:: pair: object; asynchronous-generator
-.. _asynchronous-generator-methods:
-
-Asynchronous generator iterators
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-This subsection describes the methods of an asynchronous generator iterator,
-which are used to control the execution of an asynchronous generator function.
-
-
-.. index:: pair: exception; StopAsyncIteration
-
-.. method:: agen.__anext__()
-   :async:
-
-   Returns an :term:`awaitable` which when run starts to execute the
-   asynchronous generator function or resumes it at the
-   :ref:`yield expression <yieldexpr>` where the function is currently suspended.
-   When an asynchronous generator function is resumed with an
-   :meth:`~agen.__anext__` method, the current yield expression always
-   evaluates to :const:`None` in the returned awaitable, which when run will
-   continue to the next yield expression.
-   The value of the expression after the :keyword:`yield` keyword is the value
-   of the :exc:`StopIteration` exception raised by the completing coroutine.
-   If the asynchronous generator exits without yielding another value, the
-   awaitable instead raises a :exc:`StopAsyncIteration` exception,
-   signalling that the asynchronous iteration has completed.
-
-   This method is normally called implicitly by an :keyword:`async for` loop,
-   or by the built-in :func:`anext` function.
-
-
-Asynchronous generator-iterators have a few more methods than generic
-asynchronous iterators, which can be used to control the execution of
-the underlying generator function:
-
-.. method:: agen.asend(value)
-   :async:
-
-   Returns an awaitable which, when run, "sends" a value into the underlying
-   asynchronous generator function: the *value* argument becomes
-   the result of the current yield expression.
-
-   Otherwise, this method behaves like :meth:`~agen.__anext__`: when the
-   returned awaitable runs, it resumes the underlying function and either
-   returns the next yielded value as the value of the raised
-   :exc:`StopIteration`, or raises :exc:`StopAsyncIteration`.
-
-   When :meth:`asend` is called to start the asynchronous
-   generator, it must be called with :const:`None` as the argument,
-   because there is no yield expression that could receive the value.
-
-
-.. method:: agen.athrow(value)
-            agen.athrow(type[, value[, traceback]])
-   :async:
-
-   Returns an awaitable that, when run, raises an exception at the point where
-   the underlying asynchronous generator function is currently suspended.
-
-   Otherwise, this method behaves like :meth:`~agen.__anext__`: when the
-   returned awaitable runs, it resumes the underlying function (with an
-   exception raised) and either returns the next yielded value as the value of
-   the raised :exc:`StopIteration`, or raises :exc:`StopAsyncIteration`.
-   If the underlying function does not catch the passed-in exception, or
-   raises a different exception, then when the awaitable is run, that
-   exception propagates to the caller of the awaitable.
-
-   When :meth:`~agen.athrow` is called to start the generator, the generator
-   exits when the awaitable runs (that is, subsequent results from
-   :meth:`~agen.__anext__` will raise :exc:`StopAsyncIteration` when run)
-   and the thrown exception is propagated to the awaitable's caller.
-
-   In typical use, this is called with a single argument, an exception instance,
-   similar to the way the :keyword:`raise` keyword is used.
-
-   For backwards compatibility, however, the second signature is
-   supported.
-   An exception instance is created from three arguments in the same way as in
-   :meth:`generator.throw`.
-
-   .. versionchanged:: 3.12
-
-      The second signature \(type\[, value\[, traceback\]\]\) is deprecated and
-      may be removed in a future version of Python.
-
-
-.. index:: pair: exception; GeneratorExit
-
-.. method:: agen.aclose()
-   :async:
-
-   Returns an awaitable that when run will throw a :exc:`GeneratorExit` into
-   the underlying asynchronous generator function at the point where it is
-   currently suspended (equivalent to calling ``athrow(GeneratorExit)``).
-
-   If the asynchronous generator function then exits gracefully, is already
-   closed, or raises :exc:`GeneratorExit` (by not catching the exception),
-   then the returned awaitable will raise a :exc:`StopIteration` exception.
-   Awaitables returned by subsequent calls to :meth:`~agen.__anext__`
-   or :meth:`~agen.asend` will raise a :exc:`StopAsyncIteration` exception.
-
-   If the asynchronous generator yields a value, a :exc:`RuntimeError` is
-   raised by the awaitable.
-   If the asynchronous generator raises any other exception, that exception
-   is propagated to the caller of the awaitable.
-
-   If the asynchronous generator has already exited due to an exception or
-   normal exit, then further calls to :meth:`aclose` will return an awaitable
-   that does nothing.
+Python's :term:`generator`\s provide a convenient way to implement the iterator
+protocol.  If a container object's :meth:`~object.__iter__` method is implemented as a
+generator, it will automatically return an iterator object (technically, a
+generator object) supplying the :meth:`~iterator.__iter__` and :meth:`~generator.__next__`
+methods.
+More information about generators can be found in :ref:`the documentation for
+the yield expression <yieldexpr>`.
 
 
 .. _typesseq:
@@ -1269,9 +946,6 @@ restrictions imposed by *s*.
 The ``in`` and ``not in`` operations have the same priorities as the
 comparison operations. The ``+`` (concatenation) and ``*`` (repetition)
 operations have the same priority as the corresponding numeric operations. [3]_
-
-See :ref:`time-complexity` for the costs of the various sequence
-operations.
 
 .. index::
    triple: operations on; sequence; types
@@ -1394,8 +1068,6 @@ Notes:
    they are greater.  If *i* or *j* are omitted or ``None``, they become
    "end" values (which end depends on the sign of *k*).  Note, *k* cannot be zero.
    If *k* is ``None``, it is treated like ``1``.
-
-.. _typesseq-repeated-concatenation:
 
 (6)
    Concatenating immutable sequences always results in a new object.  This
@@ -1727,11 +1399,6 @@ application).
          list appear empty for the duration, and raises :exc:`ValueError` if it can
          detect that the list has been mutated during a sort.
 
-.. seealso::
-
-   For detailed information on thread-safety guarantees for :class:`list`
-   objects, see :ref:`thread-safety-list`.
-
 
 .. _typesseq-tuple:
 
@@ -1912,104 +1579,6 @@ objects that compare equal might have different :attr:`~range.start`,
    single: str (built-in class); (see also string)
    pair: object; string
 
-.. _text-methods-summary:
-
-Text and Binary Sequence Type Methods Summary
-=============================================
-The following table summarizes the text and binary sequence types methods by
-category.
-
-
-+--------------------------+-------------------------------------------+---------------------------------------------------+
-| Category                 |  :class:`str` methods                     |   :class:`bytes` and :class:`bytearray` methods   |
-+==========================+===========================================+===================================================+
-| Formatting               |  :meth:`str.format`                       |                                                   |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.format_map`                   |                                                   |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :ref:`f-strings`                         |                                                   |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :ref:`old-string-formatting`             |  :ref:`bytes-formatting`                          |
-+--------------------------+------------------+------------------------+--------------------+------------------------------+
-| Searching and Replacing  | :meth:`str.find` | :meth:`str.rfind`      | :meth:`bytes.find` | :meth:`bytes.rfind`          |
-|                          +------------------+------------------------+--------------------+------------------------------+
-|                          | :meth:`str.index`| :meth:`str.rindex`     | :meth:`bytes.index`| :meth:`bytes.rindex`         |
-|                          +------------------+------------------------+--------------------+------------------------------+
-|                          |  :meth:`str.startswith`                   |  :meth:`bytes.startswith`                         |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.endswith`                     |  :meth:`bytes.endswith`                           |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.count`                        |  :meth:`bytes.count`                              |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.replace`                      |  :meth:`bytes.replace`                            |
-+--------------------------+-------------------+-----------------------+---------------------+-----------------------------+
-| Splitting and Joining    | :meth:`str.split` | :meth:`str.rsplit`    | :meth:`bytes.split` | :meth:`bytes.rsplit`        |
-|                          +-------------------+-----------------------+---------------------+-----------------------------+
-|                          |  :meth:`str.splitlines`                   |  :meth:`bytes.splitlines`                         |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.partition`                    |  :meth:`bytes.partition`                          |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.rpartition`                   |  :meth:`bytes.rpartition`                         |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.join`                         |  :meth:`bytes.join`                               |
-+--------------------------+-------------------------------------------+---------------------------------------------------+
-| String Classification    |  :meth:`str.isalpha`                      |  :meth:`bytes.isalpha`                            |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.isdecimal`                    |                                                   |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.isdigit`                      |  :meth:`bytes.isdigit`                            |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.isnumeric`                    |                                                   |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.isalnum`                      |  :meth:`bytes.isalnum`                            |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.isidentifier`                 |                                                   |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.islower`                      |  :meth:`bytes.islower`                            |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.isupper`                      |  :meth:`bytes.isupper`                            |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.istitle`                      |  :meth:`bytes.istitle`                            |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.isspace`                      |  :meth:`bytes.isspace`                            |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.isprintable`                  |                                                   |
-+--------------------------+-------------------------------------------+---------------------------------------------------+
-| Case Manipulation        |  :meth:`str.lower`                        |  :meth:`bytes.lower`                              |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.upper`                        |  :meth:`bytes.upper`                              |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.casefold`                     |                                                   |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.capitalize`                   |  :meth:`bytes.capitalize`                         |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.title`                        |  :meth:`bytes.title`                              |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.swapcase`                     |  :meth:`bytes.swapcase`                           |
-+--------------------------+-------------------+-----------------------+---------------------+-----------------------------+
-| Padding and Stripping    | :meth:`str.ljust` | :meth:`str.rjust`     | :meth:`bytes.ljust` | :meth:`bytes.rjust`         |
-|                          +-------------------+-----------------------+---------------------+-----------------------------+
-|                          |  :meth:`str.center`                       |  :meth:`bytes.center`                             |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.expandtabs`                   |  :meth:`bytes.expandtabs`                         |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.strip`                        |  :meth:`bytes.strip`                              |
-|                          +--------------------+----------------------+----------------------+----------------------------+
-|                          | :meth:`str.lstrip` | :meth:`str.rstrip`   | :meth:`bytes.lstrip` | :meth:`bytes.rstrip`       |
-|                          +--------------------+----------------------+----------------------+----------------------------+
-|                          |  :meth:`str.removeprefix`                 |  :meth:`bytes.removeprefix`                       |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.removesuffix`                 |  :meth:`bytes.removesuffix`                       |
-+--------------------------+-------------------------------------------+---------------------------------------------------+
-| Translation and Encoding |  :meth:`str.translate`                    |  :meth:`bytes.translate`                          |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.maketrans`                    |  :meth:`bytes.maketrans`                          |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |  :meth:`str.encode`                       |                                                   |
-|                          +-------------------------------------------+---------------------------------------------------+
-|                          |                                           |  :meth:`bytes.decode`                             |
-+--------------------------+-------------------------------------------+---------------------------------------------------+
-
 .. _textseq:
 
 Text Sequence Type --- :class:`str`
@@ -2129,22 +1698,12 @@ expression support in the :mod:`re` module).
 .. method:: str.capitalize()
 
    Return a copy of the string with its first character capitalized and the
-   rest lowercased. For example:
-
-   .. doctest::
-
-      >>> 'PYTHON IS AMAZING'.capitalize()
-      'Python is amazing'
-      >>> 'ǋemačka starts With a non-ASCII digraph'.capitalize()
-      'ǋemačka starts with a non-ascii digraph'
-
-   See also :meth:`title`.
+   rest lowercased.
 
    .. versionchanged:: 3.8
       The first character is now put into titlecase rather than uppercase.
       This means that characters like digraphs will only have their first
       letter capitalized, instead of the full character.
-
 
 .. method:: str.casefold()
 
@@ -2165,9 +1724,9 @@ expression support in the :mod:`re` module).
       >>> 'straße'.casefold()
       'strasse'
 
-   The casefolding algorithm is `described in section 3.13.3 'Default Case
-   Folding' of the Unicode Standard
-   <https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G53253>`__.
+   The casefolding algorithm is
+   `described in section 3.13 'Default Case Folding' of the Unicode Standard
+   <https://www.unicode.org/versions/Unicode15.1.0/ch03.pdf>`__.
 
    .. versionadded:: 3.3
 
@@ -2313,19 +1872,19 @@ expression support in the :mod:`re` module).
 
    Perform a string formatting operation.  The string on which this method is
    called can contain literal text or replacement fields delimited by braces
-   ``{}``.  Each replacement field refers to a positional argument (numbered
-   explicitly or automatically) or a keyword argument.  Returns a copy of
+   ``{}``.  Each replacement field contains either the numeric index of a
+   positional argument, or the name of a keyword argument.  Returns a copy of
    the string where each replacement field is replaced with the string value of
    the corresponding argument. For example:
 
    .. doctest::
 
-      >>> "The sum of {} + {} is {}".format(1, 2, 1+2)
+      >>> "The sum of 1 + 2 is {0}".format(1+2)
+      'The sum of 1 + 2 is 3'
+      >>> "The sum of {a} + {b} is {answer}".format(answer=1+2, a=1, b=2)
       'The sum of 1 + 2 is 3'
       >>> "{1} expects the {0} Inquisition!".format("Spanish", "Nobody")
       'Nobody expects the Spanish Inquisition!'
-      >>> "The sum of {a} + {b} is {answer}".format(answer=1+2, a=1, b=2)
-      'The sum of 1 + 2 is 3'
 
    See :ref:`formatstrings` for a description of the various formatting options
    that can be specified in format strings.
@@ -2408,7 +1967,7 @@ expression support in the :mod:`re` module).
    property being one of "Lm", "Lt", "Lu", "Ll", or "Lo".  Note that this is different
    from the `Alphabetic property defined in section 4.10 'Letters, Alphabetic, and
    Ideographic' of the Unicode Standard
-   <https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-4/#G91002>`__.
+   <https://www.unicode.org/versions/Unicode15.1.0/ch04.pdf>`_.
    For example:
 
    .. doctest::
@@ -2672,17 +2231,16 @@ expression support in the :mod:`re` module).
       >>> 'Lower Method Example'.lower()
       'lower method example'
 
-   The lowercasing algorithm used is `described in section 3.13.2 'Default Case
-   Conversion' of the Unicode Standard
-   <https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G34078>`__.
+   The lowercasing algorithm used is
+   `described in section 3.13 'Default Case Folding' of the Unicode Standard
+   <https://www.unicode.org/versions/Unicode15.1.0/ch03.pdf>`__.
 
 
 .. method:: str.lstrip(chars=None, /)
 
    Return a copy of the string with leading characters removed.  The *chars*
    argument is a string specifying the set of characters to be removed.  If omitted
-   or ``None``, the *chars* argument defaults to removing whitespace, that is
-   characters for which :meth:`str.isspace` is true.  The *chars*
+   or ``None``, the *chars* argument defaults to removing whitespace.  The *chars*
    argument is not a prefix; rather, all combinations of its values are stripped::
 
       >>> '   spacious   '.lstrip()
@@ -2713,10 +2271,6 @@ expression support in the :mod:`re` module).
    resulting dictionary, each character in *from* will be mapped to the character at
    the same position in *to*.  If there is a third argument, it must be a string,
    whose characters will be mapped to ``None`` in the result.
-
-   .. versionchanged:: 3.15
-
-      *dict* can now be a :class:`frozendict`.
 
 
 .. method:: str.partition(sep, /)
@@ -2886,8 +2440,7 @@ expression support in the :mod:`re` module).
 
    Return a copy of the string with trailing characters removed.  The *chars*
    argument is a string specifying the set of characters to be removed.  If omitted
-   or ``None``, the *chars* argument defaults to removing whitespace, that is
-   characters for which :meth:`str.isspace` is true.  The *chars*
+   or ``None``, the *chars* argument defaults to removing whitespace.  The *chars*
    argument is not a suffix; rather, all combinations of its values are stripped.
    For example:
 
@@ -3064,9 +2617,11 @@ expression support in the :mod:`re` module).
 
    Return a copy of the string with the leading and trailing characters removed.
    The *chars* argument is a string specifying the set of characters to be removed.
-   If omitted or ``None``, the *chars* argument defaults to removing whitespace,
-   that is characters for which :meth:`str.isspace` is true.  The *chars* argument
-   is not a prefix or suffix; rather, all combinations of its values are stripped.
+   If omitted or ``None``, the *chars* argument defaults to removing whitespace.
+   The *chars* argument is not a prefix or suffix; rather, all combinations of its
+   values are stripped.
+
+   Whitespace characters are defined by :meth:`str.isspace`.
 
    For example:
 
@@ -3147,7 +2702,7 @@ expression support in the :mod:`re` module).
         >>> titlecase("they're bill's friends.")
         "They're Bill's Friends."
 
-   See also :meth:`istitle` and :meth:`capitalize`.
+   See also :meth:`istitle`.
 
 
 .. method:: str.translate(table, /)
@@ -3164,14 +2719,6 @@ expression support in the :mod:`re` module).
    You can use :meth:`str.maketrans` to create a translation map from
    character-to-character mappings in different formats.
 
-   The following example uses a mapping to replace ``'a'`` with ``'X'``,
-   ``'b'`` with ``'Y'``, and delete ``'c'``:
-
-   .. doctest::
-
-      >>> 'abc123'.translate({ord('a'): 'X', ord('b'): 'Y', ord('c'): None})
-      'XY123'
-
    See also the :mod:`codecs` module for a more flexible approach to custom
    character mappings.
 
@@ -3180,13 +2727,13 @@ expression support in the :mod:`re` module).
 
    Return a copy of the string with all the cased characters [4]_ converted to
    uppercase.  Note that ``s.upper().isupper()`` might be ``False`` if ``s``
-   contains no cased characters or if the Unicode category of the resulting
+   contains uncased characters or if the Unicode category of the resulting
    character(s) is not "Lu" (Letter, uppercase), but e.g. "Lt" (Letter,
    titlecase).
 
-   The uppercasing algorithm used is `described in section 3.13.2 'Default Case
-   Conversion' of the Unicode Standard
-   <https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G34078>`__.
+   The uppercasing algorithm used is
+   `described in section 3.13 'Default Case Folding' of the Unicode Standard
+   <https://www.unicode.org/versions/Unicode15.1.0/ch03.pdf>`__.
 
 
 .. method:: str.zfill(width, /)
@@ -3223,8 +2770,6 @@ expression support in the :mod:`re` module).
    single: : (colon); in formatted string literal
    single: = (equals); for help in debugging using string literals
 
-.. _stdtypes-fstrings:
-
 Formatted String Literals (f-strings)
 -------------------------------------
 
@@ -3233,147 +2778,123 @@ Formatted String Literals (f-strings)
    The :keyword:`await` and :keyword:`async for` can be used in expressions
    within f-strings.
 .. versionchanged:: 3.8
-   Added the debug specifier (``=``)
+   Added the debugging operator (``=``)
 .. versionchanged:: 3.12
    Many restrictions on expressions within f-strings have been removed.
    Notably, nested strings, comments, and backslashes are now permitted.
 
 An :dfn:`f-string` (formally a :dfn:`formatted string literal`) is
 a string literal that is prefixed with ``f`` or ``F``.
-This type of string literal allows embedding the results of arbitrary Python
-expressions within *replacement fields*, which are delimited by curly
-brackets (``{}``).
-Each replacement field must contain an expression, optionally followed by:
+This type of string literal allows embedding arbitrary Python expressions
+within *replacement fields*, which are delimited by curly brackets (``{}``).
+These expressions are evaluated at runtime, similarly to :meth:`str.format`,
+and are converted into regular :class:`str` objects.
+For example:
 
-* a *debug specifier* -- an equal sign (``=``);
-* a *conversion specifier* -- ``!s``, ``!r`` or ``!a``; and/or
-* a *format specifier* prefixed with a colon (``:``).
+.. doctest::
 
-See the :ref:`Lexical Analysis section on f-strings <f-strings>` for details
-on the syntax of these fields.
+   >>> who = 'nobody'
+   >>> nationality = 'Spanish'
+   >>> f'{who.title()} expects the {nationality} Inquisition!'
+   'Nobody expects the Spanish Inquisition!'
 
-Debug specifier
-^^^^^^^^^^^^^^^
+It is also possible to use a multi line f-string:
 
-.. versionadded:: 3.8
+.. doctest::
 
-If a debug specifier -- an equal sign (``=``) -- appears after the replacement
-field expression, the resulting f-string will contain the expression's source,
-the equal sign, and the value of the expression.
-This is often useful for debugging::
+   >>> f'''This is a string
+   ... on two lines'''
+   'This is a string\non two lines'
 
-   >>> number = 14.3
-   >>> f'{number=}'
-   'number=14.3'
+A single opening curly bracket, ``'{'``, marks a *replacement field* that
+can contain any Python expression:
 
-Whitespace before, inside and after the expression, as well as whitespace
-after the equal sign, is significant --- it is retained in the result::
+.. doctest::
 
-   >>> f'{ number  -  4  = }'
-   ' number  -  4  = 10.3'
+   >>> nationality = 'Spanish'
+   >>> f'The {nationality} Inquisition!'
+   'The Spanish Inquisition!'
 
+To include a literal ``{`` or ``}``, use a double bracket:
 
-Conversion specifier
-^^^^^^^^^^^^^^^^^^^^
+.. doctest::
 
-By default, the value of a replacement field expression is converted to
-a string using :func:`str`::
+   >>> x = 42
+   >>> f'{{x}} is {x}'
+   '{x} is 42'
+
+Functions can also be used, and :ref:`format specifiers <formatstrings>`:
+
+.. doctest::
+
+   >>> from math import sqrt
+   >>> f'√2 \N{ALMOST EQUAL TO} {sqrt(2):.5f}'
+   '√2 ≈ 1.41421'
+
+Any non-string expression is converted using :func:`str`, by default:
+
+.. doctest::
 
    >>> from fractions import Fraction
-   >>> one_third = Fraction(1, 3)
-   >>> f'{one_third}'
+   >>> f'{Fraction(1, 3)}'
    '1/3'
 
-When a debug specifier but no format specifier is used, the default conversion
-instead uses :func:`repr`::
+To use an explicit conversion, use the ``!`` (exclamation mark) operator,
+followed by any of the valid formats, which are:
 
-   >>> f'{one_third = }'
-   'one_third = Fraction(1, 3)'
+========== ==============
+Conversion  Meaning
+========== ==============
+``!a``      :func:`ascii`
+``!r``      :func:`repr`
+``!s``      :func:`str`
+========== ==============
 
-The conversion can be specified explicitly using one of these specifiers:
+For example:
 
-* ``!s`` for :func:`str`
-* ``!r`` for :func:`repr`
-* ``!a`` for :func:`ascii`
+.. doctest::
 
-For example::
-
-   >>> str(one_third)
+   >>> from fractions import Fraction
+   >>> f'{Fraction(1, 3)!s}'
    '1/3'
-   >>> repr(one_third)
+   >>> f'{Fraction(1, 3)!r}'
    'Fraction(1, 3)'
+   >>> question = '¿Dónde está el Presidente?'
+   >>> print(f'{question!a}')
+   '\xbfD\xf3nde est\xe1 el Presidente?'
 
-   >>> f'{one_third!s} is {one_third!r}'
-   '1/3 is Fraction(1, 3)'
+While debugging it may be helpful to see both the expression and its value,
+by using the equals sign (``=``) after the expression.
+This preserves spaces within the brackets, and can be used with a converter.
+By default, the debugging operator uses the :func:`repr` (``!r``) conversion.
+For example:
 
-   >>> string = "¡kočka 😸!"
-   >>> ascii(string)
-   "'\\xa1ko\\u010dka \\U0001f638!'"
-
-   >>> f'{string = !a}'
-   "string = '\\xa1ko\\u010dka \\U0001f638!'"
-
-
-Format specifier
-^^^^^^^^^^^^^^^^
-
-After the expression has been evaluated, and possibly converted using an
-explicit conversion specifier, it is formatted using the :func:`format` function.
-If the replacement field includes a *format specifier* introduced by a colon
-(``:``), the specifier is passed to :func:`!format` as the second argument.
-The result of :func:`!format` is then used as the final value for the
-replacement field. For example::
+.. doctest::
 
    >>> from fractions import Fraction
-   >>> one_third = Fraction(1, 3)
-   >>> f'{one_third:.6f}'
-   '0.333333'
-   >>> f'{one_third:_^+10}'
-   '___+1/3___'
-   >>> f'{one_third!r:_^20}'
-   '___Fraction(1, 3)___'
-   >>> f'{one_third = :~>10}~'
-   'one_third = ~~~~~~~1/3~'
+   >>> calculation = Fraction(1, 3)
+   >>> f'{calculation=}'
+   'calculation=Fraction(1, 3)'
+   >>> f'{calculation = }'
+   'calculation = Fraction(1, 3)'
+   >>> f'{calculation = !s}'
+   'calculation = 1/3'
 
-.. _stdtypes-tstrings:
+Once the output has been evaluated, it can be formatted using a
+:ref:`format specifier <formatstrings>` following a colon (``':'``).
+After the expression has been evaluated, and possibly converted to a string,
+the :meth:`!__format__` method of the result is called with the format specifier,
+or the empty string if no format specifier is given.
+The formatted result is then used as the final value for the replacement field.
+For example:
 
-Template String Literals (t-strings)
-------------------------------------
+.. doctest::
 
-A :dfn:`t-string` (formally a :dfn:`template string literal`) is
-a string literal that is prefixed with ``t`` or ``T``.
-
-These strings follow the same syntax and evaluation rules as
-:ref:`formatted string literals <stdtypes-fstrings>`,
-with the following differences:
-
-* Rather than evaluating to a ``str`` object, template string literals evaluate
-  to a :class:`string.templatelib.Template` object.
-
-* The :func:`format` protocol is not used.
-  Instead, the format specifier and conversions (if any) are passed to
-  a new :class:`~string.templatelib.Interpolation` object that is created
-  for each evaluated expression.
-  It is up to code that processes the resulting :class:`~string.templatelib.Template`
-  object to decide how to handle format specifiers and conversions.
-
-* Format specifiers containing nested replacement fields are evaluated eagerly,
-  prior to being passed to the :class:`~string.templatelib.Interpolation` object.
-  For instance, an interpolation of the form ``{amount:.{precision}f}`` will
-  evaluate the inner expression ``{precision}`` to determine the value of the
-  ``format_spec`` attribute.
-  If ``precision`` were to be ``2``, the resulting format specifier
-  would be ``'.2f'``.
-
-* When the equals sign ``'='`` is provided in an interpolation expression,
-  the text of the expression is appended to the literal string that precedes
-  the relevant interpolation.
-  This includes the equals sign and any surrounding whitespace.
-  The :class:`!Interpolation` instance for the expression will be created as
-  normal, except that :attr:`~string.templatelib.Interpolation.conversion` will
-  be set to '``r``' (:func:`repr`) by default.
-  If an explicit conversion or format specifier is provided,
-  this will override the default behaviour.
+   >>> from fractions import Fraction
+   >>> f'{Fraction(1, 7):.6f}'
+   '0.142857'
+   >>> f'{Fraction(1, 7):_^+10}'
+   '___+1/7___'
 
 
 .. _old-string-formatting:
@@ -3394,12 +2915,11 @@ with the following differences:
 
    The formatting operations described here exhibit a variety of quirks that
    lead to a number of common errors (such as failing to display tuples and
-   dictionaries correctly).
-
-   Using :ref:`formatted string literals <f-strings>`, the :meth:`str.format`
-   interface, or :class:`string.Template` may help avoid these errors.
-   Each of these alternatives provides their own trade-offs and benefits of
-   simplicity, flexibility, and/or extensibility.
+   dictionaries correctly).  Using the newer :ref:`formatted string literals
+   <f-strings>`, the :meth:`str.format` interface, or :ref:`template strings
+   <template-strings>` may help avoid these errors.  Each of these
+   alternatives provides their own trade-offs and benefits of simplicity,
+   flexibility, and/or extensibility.
 
 String objects have one unique built-in operation: the ``%`` operator (modulo).
 This is also known as the string *formatting* or *interpolation* operator.
@@ -3537,8 +3057,9 @@ The conversion types are:
 |            | character in the result.                            |       |
 +------------+-----------------------------------------------------+-------+
 
-For floating-point formats, the result should be correctly rounded to the
-specified precision.  The rounding mode matches that of the :func:`round` builtin.
+For floating-point formats, the result should be correctly rounded to a given
+precision ``p`` of digits after the decimal point.  The rounding mode matches
+that of the :func:`round` builtin.
 
 Notes:
 
@@ -3668,10 +3189,6 @@ data and are closely related to string objects in a variety of other ways.
          :meth:`bytes.fromhex` now skips all ASCII whitespace in the string,
          not just spaces.
 
-      .. versionchanged:: 3.14
-         :meth:`bytes.fromhex` now accepts ASCII :class:`bytes` and
-         :term:`bytes-like objects <bytes-like object>` as input.
-
    A reverse conversion function exists to transform a bytes object into its
    hexadecimal representation.
 
@@ -3759,10 +3276,6 @@ objects.
          :meth:`bytearray.fromhex` now skips all ASCII whitespace in the string,
          not just spaces.
 
-      .. versionchanged:: 3.14
-         :meth:`bytearray.fromhex` now accepts ASCII :class:`bytes` and
-         :term:`bytes-like objects <bytes-like object>` as input.
-
    A reverse conversion function exists to transform a bytearray object into its
    hexadecimal representation.
 
@@ -3782,62 +3295,6 @@ objects.
          optional *sep* and *bytes_per_sep* parameters to insert separators
          between bytes in the hex output.
 
-   .. method:: resize(size, /)
-
-      Resize the :class:`bytearray` to contain *size* bytes. *size* must be
-      greater than or equal to 0.
-
-      If the :class:`bytearray` needs to shrink, bytes beyond *size* are truncated.
-
-      If the :class:`bytearray` needs to grow, all new bytes will be set to null
-      bytes.
-
-
-      This is equivalent to:
-
-      >>> def resize(ba, size):
-      ...     if len(ba) > size:
-      ...         del ba[size:]
-      ...     else:
-      ...         ba += b'\0' * (size - len(ba))
-
-      Examples:
-
-      >>> shrink = bytearray(b'abc')
-      >>> shrink.resize(1)
-      >>> (shrink, len(shrink))
-      (bytearray(b'a'), 1)
-      >>> grow = bytearray(b'abc')
-      >>> grow.resize(5)
-      >>> (grow, len(grow))
-      (bytearray(b'abc\x00\x00'), 5)
-
-      .. versionadded:: 3.14
-
-   .. method:: take_bytes(n=None, /)
-
-      Remove the first *n* bytes from the bytearray and return them as an immutable
-      :class:`bytes`.
-      By default (if *n* is ``None``), return all bytes and clear the bytearray.
-
-      If *n* is negative, index from the end and take the first :func:`len`
-      plus *n* bytes. If *n* is out of bounds, raise :exc:`IndexError`.
-
-      Taking less than the full length will leave remaining bytes in the
-      :class:`bytearray`, which requires a copy. If the remaining bytes should be
-      discarded, use :func:`~bytearray.resize` or :keyword:`del` to truncate
-      then :func:`~bytearray.take_bytes` without a size.
-
-      .. impl-detail::
-
-         Taking all bytes is a zero-copy operation.
-
-      .. versionadded:: 3.15
-
-         See the :ref:`What's New <whatsnew315-bytearray-take-bytes>` entry for
-         common code patterns which can be optimized with
-         :meth:`bytearray.take_bytes`.
-
 Since bytearray objects are sequences of integers (akin to a list), for a
 bytearray object *b*, ``b[0]`` will be an integer, while ``b[0:1]`` will be
 a bytearray object of length 1.  (This contrasts with text strings, where
@@ -3847,11 +3304,6 @@ The representation of bytearray objects uses the bytes literal format
 (``bytearray(b'...')``) since it is often more useful than e.g.
 ``bytearray([46, 46, 46])``.  You can always convert a bytearray object into
 a list of integers using ``list(b)``.
-
-.. seealso::
-
-   For detailed information on thread-safety guarantees for :class:`bytearray`
-   objects, see :ref:`thread-safety-bytearray`.
 
 
 .. _bytes-methods:
@@ -4069,13 +3521,12 @@ arbitrary binary data.
    The separator to search for may be any :term:`bytes-like object`.
 
 
-.. method:: bytes.replace(old, new, /, count=-1)
-            bytearray.replace(old, new, /, count=-1)
+.. method:: bytes.replace(old, new, count=-1, /)
+            bytearray.replace(old, new, count=-1, /)
 
    Return a copy of the sequence with all occurrences of subsequence *old*
-   replaced by *new*.  If *count* is given, only the first *count* occurrences
-   are replaced.  If *count* is not specified or ``-1``, then all occurrences
-   are replaced.
+   replaced by *new*.  If the optional argument *count* is given, only the
+   first *count* occurrences are replaced.
 
    The subsequence to search for and its replacement may be any
    :term:`bytes-like object`.
@@ -4084,9 +3535,6 @@ arbitrary binary data.
 
       The bytearray version of this method does *not* operate in place - it
       always produces a new object, even if no changes were made.
-
-   .. versionchanged:: 3.15
-      *count* is now supported as a keyword argument.
 
 
 .. method:: bytes.rfind(sub[, start[, end]])
@@ -4909,10 +4357,7 @@ copying.
    types such as :class:`bytes` and :class:`bytearray`, an element is a single
    byte, but other types such as :class:`array.array` may have bigger elements.
 
-   :class:`!memoryview`\s are :ref:`generic <generics>` over the type of their
-   underlying data.
-
-   ``len(view)`` is equal to the length of :meth:`~memoryview.tolist`, which
+   ``len(view)`` is equal to the length of :class:`~memoryview.tolist`, which
    is the nested list representation of the view. If ``view.ndim == 1``,
    this is equal to the number of elements in the view.
 
@@ -4999,9 +4444,6 @@ copying.
 
    .. versionchanged:: 3.5
       memoryviews can now be indexed with a tuple of integers.
-
-   .. versionchanged:: 3.14
-      memoryview is now a :term:`generic type`.
 
    :class:`memoryview` has several methods:
 
@@ -5163,20 +4605,13 @@ copying.
       .. versionadded:: 3.2
 
    .. method:: cast(format, /)
-               cast(format, shape, /, *, order='C')
+               cast(format, shape, /)
 
       Cast a memoryview to a new format or shape. *shape* defaults to
       ``[byte_length//new_itemsize]``, which means that the result view
       will be one-dimensional. The return value is a new memoryview, but
-      the buffer itself is not copied. Supported casts are
-      1D -> C-:term:`contiguous`, C-contiguous -> 1D, and
-      F-contiguous -> 1D.
-
-      With a multidimensional *shape*, *order* selects the memory layout of
-      the result: ``'C'`` for C-contiguous (row-major, the default) or ``'F'``
-      for Fortran-contiguous (column-major).  The buffer is still not copied,
-      so ``order='F'`` gives a zero-copy view over a buffer holding
-      column-major data.
+      the buffer itself is not copied. Supported casts are 1D -> C-:term:`contiguous`
+      and C-contiguous -> 1D.
 
       The destination format is restricted to a single element native format in
       :mod:`struct` syntax. One of the formats must be a byte format
@@ -5263,25 +4698,6 @@ copying.
       .. versionchanged:: 3.5
          The source format is no longer restricted when casting to a byte view.
 
-      .. versionchanged:: 3.16
-         Casting a multi-dimensional F-contiguous view to a one-dimensional
-         view is now supported.
-
-   .. method:: count(value, /)
-
-      Count the number of occurrences of *value*.
-
-      .. versionadded:: 3.14
-
-   .. method:: index(value, start=0, stop=sys.maxsize, /)
-
-      Return the index of the first occurrence of *value* (at or after
-      index *start* and before index *stop*).
-
-      Raises a :exc:`ValueError` if *value* cannot be found.
-
-      .. versionadded:: 3.14
-
    There are also several readonly attributes available:
 
    .. attribute:: obj
@@ -5329,19 +4745,7 @@ copying.
          >>> y.nbytes
          96
 
-      Interpret a flat buffer as a Fortran-contiguous (column-major) array::
-
-         >>> buf = bytes(range(6))
-         >>> y = memoryview(buf).cast('B', shape=[3, 2], order='F')
-         >>> y.f_contiguous
-         True
-         >>> y.tolist()
-         [[0, 3], [1, 4], [2, 5]]
-
       .. versionadded:: 3.3
-
-      .. versionchanged:: 3.16
-         Added the *order* parameter.
 
    .. attribute:: readonly
 
@@ -5414,9 +4818,6 @@ copying.
 
       .. versionadded:: 3.3
 
-For information on the thread safety of :class:`memoryview` objects in
-the :term:`free-threaded build`, see :ref:`thread-safety-memoryview`.
-
 
 .. _types-set:
 
@@ -5431,7 +4832,6 @@ computing mathematical operations such as intersection, union, difference, and
 symmetric difference.
 (For other containers see the built-in :class:`dict`, :class:`list`,
 and :class:`tuple` classes, and the :mod:`collections` module.)
-See :ref:`time-complexity` for the costs of the various set operations.
 
 Like other collections, sets support ``x in set``, ``len(set)``, and ``for x in
 set``.  Being an unordered collection, sets do not record element position or
@@ -5440,12 +4840,11 @@ other sequence-like behavior.
 
 There are currently two built-in set types, :class:`set` and :class:`frozenset`.
 The :class:`set` type is mutable --- the contents can be changed using methods
-like :meth:`~set.add` and :meth:`~set.remove`.
-Since it is mutable, it has no hash value and cannot be used as
-either a dictionary key or as an element of another set.
-The :class:`frozenset` type is immutable and :term:`hashable` ---
-its contents cannot be altered after it is created;
-it can therefore be used as a dictionary key or as an element of another set.
+like :meth:`~set.add` and :meth:`~set.remove`.  Since it is mutable, it has no
+hash value and cannot be used as either a dictionary key or as an element of
+another set.  The :class:`frozenset` type is immutable and :term:`hashable` ---
+its contents cannot be altered after it is created; it can therefore be used as
+a dictionary key or as an element of another set.
 
 Non-empty sets (not frozensets) can be created by placing a comma-separated list
 of elements within braces, for example: ``{'jack', 'sjoerd'}``, in addition to the
@@ -5625,21 +5024,16 @@ Note, the non-operator versions of the :meth:`~set.update`,
 argument.
 
 Note, the *elem* argument to the :meth:`~object.__contains__`,
-:meth:`~set.remove`, and :meth:`~set.discard` methods may be a set.  In this case,
-an equivalent frozenset is searched for.
+:meth:`~set.remove`, and
+:meth:`~set.discard` methods may be a set.  To support searching for an equivalent
+frozenset, a temporary one is created from *elem*.
 
 Sets and frozensets are :ref:`generic <generics>` over the type of their elements.
 
-.. seealso::
-
-   For detailed information on thread-safety guarantees for :class:`set`
-   objects, see :ref:`thread-safety-set`.
-
-
 .. _typesmapping:
 
-Mapping types --- :class:`!dict`, :class:`!frozendict`
-======================================================
+Mapping Types --- :class:`dict`
+===============================
 
 .. index::
    pair: object; mapping
@@ -5650,13 +5044,10 @@ Mapping types --- :class:`!dict`, :class:`!frozendict`
    pair: built-in function; len
 
 A :term:`mapping` object maps :term:`hashable` values to arbitrary objects.
-There are currently two standard mapping types, the :dfn:`dictionary` and
-:class:`frozendict`.
-(For other containers see the built-in
+Mappings are mutable objects.  There is currently only one standard mapping
+type, the :dfn:`dictionary`.  (For other containers see the built-in
 :class:`list`, :class:`set`, and :class:`tuple` classes, and the
 :mod:`collections` module.)
-See :ref:`time-complexity` for the costs of the various dictionary
-operations.
 
 A dictionary's keys are *almost* arbitrary values.  Values that are not
 :term:`hashable`, that is, values containing lists, dictionaries or other
@@ -5676,7 +5067,7 @@ can be used interchangeably to index the same dictionary entry.
 
    * Use a comma-separated list of ``key: value`` pairs within braces:
      ``{'jack': 4098, 'sjoerd': 4127}`` or ``{4098: 'jack', 4127: 'sjoerd'}``
-   * Use a dict comprehension: ``{x: x ** 2 for x in range(10)}``
+   * Use a dict comprehension: ``{}``, ``{x: x ** 2 for x in range(10)}``
    * Use the type constructor: ``dict()``,
      ``dict([('foo', 100), ('bar', 200)])``, ``dict(foo=100, bar=200)``
 
@@ -5887,8 +5278,9 @@ can be used interchangeably to index the same dictionary entry.
       Return a new view of the dictionary's values.  See the
       :ref:`documentation of view objects <dict-views>`.
 
-      An equality comparison between two distinct ``dict.values()`` views
-      will always return ``False``, even for views of the same dictionary::
+      An equality comparison between one ``dict.values()`` view and another
+      will always return ``False``. This also applies when comparing
+      ``dict.values()`` to itself::
 
          >>> d = {'a': 1}
          >>> d.values() == d.values()
@@ -5926,15 +5318,9 @@ can be used interchangeably to index the same dictionary entry.
       Dictionaries are now reversible.
 
 
-   .. seealso::
-      :class:`types.MappingProxyType` can be used to create a read-only view
-      of a :class:`dict`.  :class:`frozendict` is an immutable version of
-      :class:`dict`.
-
 .. seealso::
-
-   For detailed information on thread-safety guarantees for :class:`dict`
-   objects, see :ref:`thread-safety-dict`.
+   :class:`types.MappingProxyType` can be used to create a read-only view
+   of a :class:`dict`.
 
 
 .. _dict-views:
@@ -6041,50 +5427,6 @@ An example of dictionary view usage::
    mappingproxy({'bacon': 1, 'spam': 500})
    >>> values.mapping['spam']
    500
-
-
-Frozen dictionaries
--------------------
-
-.. class:: frozendict(**kwargs)
-           frozendict(mapping, /, **kwargs)
-           frozendict(iterable, /, **kwargs)
-
-   Return a new frozen dictionary initialized from an optional positional
-   argument and a possibly empty set of keyword arguments.
-
-   A :class:`!frozendict` has a similar API to the :class:`dict` API, with the
-   following differences:
-
-   * :class:`!dict` has more methods than :class:`!frozendict`:
-
-      * :meth:`!__delitem__`
-      * :meth:`!__setitem__`
-      * :meth:`~dict.clear`
-      * :meth:`~dict.pop`
-      * :meth:`~dict.popitem`
-      * :meth:`~dict.setdefault`
-      * :meth:`~dict.update`
-
-   * A :class:`!frozendict` can be hashed with ``hash(frozendict)`` if all keys and
-     values can be hashed.
-
-   * ``frozendict |= other`` does not modify the :class:`!frozendict` in-place but
-     creates a new frozen dictionary.
-
-   :class:`!frozendict` is not a :class:`!dict` subclass but inherits directly
-   from ``object``.
-
-   Like dictionaries, frozendicts are :ref:`generic <generics>` over two types,
-   signifying (respectively) the types of the frozendict's keys and values.
-
-   .. classmethod:: fromkeys(iterable, value=None, /)
-
-      Similar to :meth:`dict.fromkeys`, but call again the type constructor
-      with an initialized :class:`frozendict` if the type is a
-      :class:`frozendict` subclass.
-
-   .. versionadded:: 3.15
 
 
 .. _typecontextmanager:
@@ -6320,7 +5662,6 @@ list is non-exhaustive.
 * :class:`list`
 * :class:`dict`
 * :class:`set`
-* :class:`frozendict`
 * :class:`frozenset`
 * :class:`type`
 * :class:`asyncio.Future`
@@ -6454,7 +5795,7 @@ Union Type
 A union object holds the value of the ``|`` (bitwise or) operation on
 multiple :ref:`type objects <bltin-type-objects>`.  These types are intended
 primarily for :term:`type annotations <annotation>`. The union type expression
-enables cleaner type hinting syntax compared to subscripting :class:`typing.Union`.
+enables cleaner type hinting syntax compared to :data:`typing.Union`.
 
 .. describe:: X | Y | ...
 
@@ -6490,10 +5831,9 @@ enables cleaner type hinting syntax compared to subscripting :class:`typing.Unio
 
       int | str == str | int
 
-   * It creates instances of :class:`typing.Union`::
+   * It is compatible with :data:`typing.Union`::
 
       int | str == typing.Union[int, str]
-      type(int | str) is typing.Union
 
    * Optional types can be spelled as a union with ``None``::
 
@@ -6519,20 +5859,21 @@ enables cleaner type hinting syntax compared to subscripting :class:`typing.Unio
       TypeError: isinstance() argument 2 cannot be a parameterized generic
 
 The user-exposed type for the union object can be accessed from
-:class:`typing.Union` and used for :func:`isinstance` checks::
+:data:`types.UnionType` and used for :func:`isinstance` checks.  An object cannot be
+instantiated from the type::
 
-   >>> import typing
-   >>> isinstance(int | str, typing.Union)
+   >>> import types
+   >>> isinstance(int | str, types.UnionType)
    True
-   >>> typing.Union()
+   >>> types.UnionType()
    Traceback (most recent call last):
      File "<stdin>", line 1, in <module>
-   TypeError: cannot create 'typing.Union' instances
+   TypeError: cannot create 'types.UnionType' instances
 
 .. note::
    The :meth:`!__or__` method for type objects was added to support the syntax
-   ``X | Y``.  If a metaclass implements :meth:`!__or__`, it may override
-   the default behavior of creating a union:
+   ``X | Y``.  If a metaclass implements :meth:`!__or__`, the Union may
+   override it:
 
    .. doctest::
 
@@ -6553,11 +5894,6 @@ The user-exposed type for the union object can be accessed from
    :pep:`604` -- PEP proposing the ``X | Y`` syntax and the Union type.
 
 .. versionadded:: 3.10
-
-.. versionchanged:: 3.14
-
-   Union objects are now instances of :class:`typing.Union`. Previously, they were instances
-   of :class:`types.UnionType`, which remains an alias for :class:`typing.Union`.
 
 
 .. _typesother:

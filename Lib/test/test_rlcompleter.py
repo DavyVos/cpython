@@ -89,7 +89,7 @@ class TestRlcompleter(unittest.TestCase):
                          ['CompleteMe._ham'])
         matches = self.completer.attr_matches('CompleteMe.__')
         for x in matches:
-            self.assertStartsWith(x, 'CompleteMe.__')
+            self.assertTrue(x.startswith('CompleteMe.__'), x)
         self.assertIn('CompleteMe.__name__', matches)
         self.assertIn('CompleteMe.__new__(', matches)
 
@@ -107,35 +107,19 @@ class TestRlcompleter(unittest.TestCase):
         # we use __dir__ and __getattr__ in class Foo to create a "magic"
         # class attribute 'bar'. This forces `getattr` to call __getattr__
         # (which is doesn't necessarily do).
-        # Test 1: Attribute returns None
-        class FooReturnsNone:
+        class Foo:
             calls = 0
-            bar = None
+            bar = ''
             def __getattribute__(self, name):
                 if name == 'bar':
                     self.calls += 1
                     return None
                 return super().__getattribute__(name)
 
-        f1 = FooReturnsNone()
-        completer1 = rlcompleter.Completer(dict(f=f1))
-        self.assertEqual(completer1.complete('f.b', 0), 'f.bar')
-        self.assertEqual(f1.calls, 1)
-
-        # Test 2: Attribute returns non-None value
-        class FooReturnsValue:
-            calls = 0
-            bar = ''
-            def __getattribute__(self, name):
-                if name == 'bar':
-                    self.calls += 1
-                    return ''
-                return super().__getattribute__(name)
-
-        f2 = FooReturnsValue()
-        completer2 = rlcompleter.Completer(dict(f=f2))
-        self.assertEqual(completer2.complete('f.b', 0), 'f.bar')
-        self.assertEqual(f2.calls, 1)
+        f = Foo()
+        completer = rlcompleter.Completer(dict(f=f))
+        self.assertEqual(completer.complete('f.b', 0), 'f.bar')
+        self.assertEqual(f.calls, 1)
 
     def test_property_method_not_called(self):
         class Foo:
@@ -211,7 +195,6 @@ class TestRlcompleter(unittest.TestCase):
             __slots__ = ("bar",)
         completer = rlcompleter.Completer(dict(f=Foo()))
         self.assertEqual(completer.complete('f.', 0), 'f.bar')
-
 
     @unittest.mock.patch('rlcompleter._readline_available', False)
     def test_complete(self):

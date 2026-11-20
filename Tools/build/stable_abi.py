@@ -25,8 +25,6 @@ from functools import partial
 from pathlib import Path
 
 SCRIPT_NAME = 'Tools/build/stable_abi.py'
-DEFAULT_MANIFEST_PATH = (
-    Path(__file__).parent / '../../Misc/stable_abi.toml').resolve()
 MISSING = object()
 
 EXCLUDED_HEADERS = {
@@ -116,6 +114,7 @@ def itemclass(kind):
     return decorator
 
 @itemclass('function')
+@itemclass('macro')
 @itemclass('data')
 @itemclass('const')
 @itemclass('typedef')
@@ -142,11 +141,6 @@ class FeatureMacro(ABIItem):
 class Struct(ABIItem):
     struct_abi_kind: str
     members: list = None
-
-@itemclass('macro')
-@dataclasses.dataclass
-class Macro(ABIItem):
-    is_static_inline_function: bool = False
 
 
 def parse_manifest(file):
@@ -231,13 +225,13 @@ def gen_python3dll(manifest, args, outfile):
             key=sort_key):
         write(f'EXPORT_DATA({item.name})')
 
-DOC_KINDS = {
-    'function',
-    'data',
-    'struct',
-    'macro',
-    'const',
-    'typedef',
+ITEM_KIND_TO_DOC_ROLE = {
+    'function': 'func',
+    'data': 'data',
+    'struct': 'type',
+    'macro': 'macro',
+    'const': 'macro',
+    'typedef': 'type',
 }
 
 @generator("doc_list", 'Doc/data/stable_abi.dat')
@@ -249,16 +243,17 @@ def gen_doc_annotations(manifest, args, outfile):
     """
     writer = csv.DictWriter(
         outfile,
-        ['kind', 'name', 'added', 'ifdef_note', 'struct_abi_kind'],
+        ['role', 'name', 'added', 'ifdef_note', 'struct_abi_kind'],
         lineterminator='\n')
     writer.writeheader()
-    for item in manifest.select(DOC_KINDS, include_abi_only=False):
+    kinds = set(ITEM_KIND_TO_DOC_ROLE)
+    for item in manifest.select(kinds, include_abi_only=False):
         if item.ifdef:
             ifdef_note = manifest.contents[item.ifdef].doc
         else:
             ifdef_note = None
         row = {
-            'kind': item.kind,
+            'role': ITEM_KIND_TO_DOC_ROLE[item.kind],
             'name': item.name,
             'added': item.added,
             'ifdef_note': ifdef_note,
@@ -268,7 +263,7 @@ def gen_doc_annotations(manifest, args, outfile):
             row['struct_abi_kind'] = item.struct_abi_kind
             for member_name in item.members or ():
                 rows.append({
-                    'kind': 'member',
+                    'role': 'member',
                     'name': f'{item.name}.{member_name}',
                     'added': item.added,
                 })
@@ -411,10 +406,7 @@ def do_unixy_check(manifest, args):
     feature_macros &= present_macros
 
     # Check that we have all needed macros
-    expected_macros = {
-        item.name for item in manifest.select({'macro'})
-        if not item.is_static_inline_function
-    }
+    expected_macros = {item.name for item in manifest.select({'macro'})}
     missing_macros = expected_macros - present_macros
     okay &= _report_unexpected_items(
         missing_macros,
@@ -481,7 +473,7 @@ def binutils_get_exported_symbols(library, dynamic=False):
     if dynamic:
         args.append("--dynamic")
     args.append(library)
-    proc = subprocess.run(args, stdout=subprocess.PIPE, encoding='utf-8')
+    proc = subprocess.run(args, stdout=subprocess.PIPE, text=True)
     if proc.returncode:
         sys.stdout.write(proc.stdout)
         sys.exit(proc.returncode)
@@ -551,7 +543,7 @@ def gcc_get_limited_api_macros(headers):
             "-E",
         ]
         + [str(file) for file in headers],
-        encoding='utf-8',
+        text=True,
     )
 
     return set(re.findall(r"#define (\w+)", preprocessor_output_with_macros))
@@ -589,7 +581,7 @@ def gcc_get_limited_api_definitions(headers):
             "-E",
         ]
         + [str(file) for file in headers],
-        encoding='utf-8',
+        text=True,
         stderr=subprocess.DEVNULL,
     )
     stable_functions = set(
@@ -642,9 +634,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "file", type=Path, metavar='FILE', nargs='?',
-        default=DEFAULT_MANIFEST_PATH,
-        help=f"file with the stable abi manifest (default: {DEFAULT_MANIFEST_PATH})",
+        "file", type=Path, metavar='FILE',
+        help="file with the stable abi manifest",
     )
     parser.add_argument(
         "--generate", action='store_true',
@@ -686,7 +677,7 @@ def main():
 
     if args.list:
         for gen in generators:
-            print(f'{gen.arg_name}: {(base_path / gen.default_path).resolve()}')
+            print(f'{gen.arg_name}: {base_path / gen.default_path}')
         sys.exit(0)
 
     run_all_generators = args.generate_all
@@ -737,10 +728,8 @@ def main():
 
     if not results:
         if args.generate:
-            parser.error('No file specified. Use --generate-all to regenerate '
-                         'all files, or --help for usage.')
-        parser.error('No check specified. Use --all to check all files, '
-                     'or --help for usage.')
+            parser.error('No file specified. Use --help for usage.')
+        parser.error('No check specified. Use --help for usage.')
 
     failed_results = [name for name, result in results.items() if not result]
 

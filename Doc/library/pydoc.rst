@@ -4,6 +4,9 @@
 .. module:: pydoc
    :synopsis: Documentation generator and online help system.
 
+.. moduleauthor:: Ka-Ping Yee <ping@lfw.org>
+.. sectionauthor:: Ka-Ping Yee <ping@lfw.org>
+
 **Source code:** :source:`Lib/pydoc.py`
 
 .. index::

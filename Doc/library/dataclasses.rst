@@ -4,6 +4,9 @@
 .. module:: dataclasses
     :synopsis: Generate special methods on user-defined classes.
 
+.. moduleauthor:: Eric V. Smith <eric@trueblade.com>
+.. sectionauthor:: Eric V. Smith <eric@trueblade.com>
+
 **Source code:** :source:`Lib/dataclasses.py`
 
 --------------
@@ -204,6 +207,13 @@ Module contents
      is raised.
 
     .. warning::
+        Calling no-arg :func:`super` in dataclasses using ``slots=True``
+        will result in the following exception being raised:
+        ``TypeError: super(type, obj): obj must be an instance or subtype of type``.
+        The two-arg :func:`super` is a valid workaround.
+        See :gh:`90562` for full details.
+
+    .. warning::
        Passing parameters to a base class :meth:`~object.__init_subclass__`
        when using ``slots=True`` will result in a :exc:`TypeError`.
        Either use ``__init_subclass__`` with no parameters
@@ -247,7 +257,7 @@ Module contents
    follows a field with a default value.  This is true whether this
    occurs in a single class, or as a result of class inheritance.
 
-.. function:: field(*, default=MISSING, default_factory=MISSING, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=MISSING, doc=None)
+.. function:: field(*, default=MISSING, default_factory=MISSING, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=MISSING)
 
    For common and simple use cases, no other functionality is
    required.  There are, however, some dataclass features that
@@ -262,8 +272,8 @@ Module contents
      c = C()
      c.mylist += [1, 2, 3]
 
-   As shown above, the :const:`MISSING` value is a :class:`sentinel` object
-   used to detect if some parameters are provided by the user. This sentinel is
+   As shown above, the :const:`MISSING` value is a sentinel object used to
+   detect if some parameters are provided by the user. This sentinel is
    used because ``None`` is a valid value for some parameters with
    a distinct meaning.  No code should directly use the :const:`MISSING` value.
 
@@ -319,10 +329,6 @@ Module contents
 
     .. versionadded:: 3.10
 
-   - *doc*: optional docstring for this field.
-
-    .. versionadded:: 3.14
-
    If the default value of a field is specified by a call to
    :func:`!field`, then the class attribute for this field will be
    replaced by the specified *default* value.  If *default* is not
@@ -342,10 +348,6 @@ Module contents
    The class attribute :attr:`!C.z` will be ``10``, the class attribute
    :attr:`!C.t` will be ``20``, and the class attributes :attr:`!C.x` and
    :attr:`!C.y` will not be set.
-
-   .. versionchanged:: 3.15
-      If *metadata* is ``None``, use an empty :class:`frozendict`, instead
-      of a :func:`~types.MappingProxyType` of an empty :class:`dict`.
 
 .. class:: Field
 
@@ -384,8 +386,8 @@ Module contents
    Converts the dataclass *obj* to a dict (by using the
    factory function *dict_factory*).  Each dataclass is converted
    to a dict of its fields, as ``name: value`` pairs.  dataclasses, dicts,
-   frozendicts, lists, and tuples are recursed into.  Other objects are copied
-   with :func:`copy.deepcopy`.
+   lists, and tuples are recursed into.  Other objects are copied with
+   :func:`copy.deepcopy`.
 
    Example of using :func:`!asdict` on nested dataclasses::
 
@@ -415,8 +417,8 @@ Module contents
 
    Converts the dataclass *obj* to a tuple (by using the
    factory function *tuple_factory*).  Each dataclass is converted
-   to a tuple of its field values.  dataclasses, dicts, frozendicts, lists,
-   and tuples are recursed into. Other objects are copied with
+   to a tuple of its field values.  dataclasses, dicts, lists, and
+   tuples are recursed into. Other objects are copied with
    :func:`copy.deepcopy`.
 
    Continuing from the previous example::
@@ -431,7 +433,7 @@ Module contents
    :func:`!astuple` raises :exc:`TypeError` if *obj* is not a dataclass
    instance.
 
-.. function:: make_dataclass(cls_name, fields, *, bases=(), namespace=None, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False, module=None, qualname=None, decorator=dataclass)
+.. function:: make_dataclass(cls_name, fields, *, bases=(), namespace=None, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False, module=None)
 
    Creates a new dataclass with name *cls_name*, fields as defined
    in *fields*, base classes as given in *bases*, and initialized
@@ -447,16 +449,8 @@ Module contents
    of the dataclass is set to that value.
    By default, it is set to the module name of the caller.
 
-   If *qualname* is defined, the :attr:`~type.__qualname__` attribute of the dataclass
-   is set to that value. By default, it is set to the value passed to *cls_name*.
-
-   The *decorator* parameter is a callable that will be used to create the dataclass.
-   It should take the class object as a first argument and the same keyword arguments
-   as :deco:`dataclass`. By default, the :deco:`dataclass`
-   function is used.
-
    This function is not strictly required, because any Python
-   mechanism for creating a new class with :attr:`~object.__annotations__` can
+   mechanism for creating a new class with :attr:`!__annotations__` can
    then apply the :deco:`dataclass` function to convert that class to
    a dataclass.  This function is provided as a convenience.  For
    example::
@@ -477,11 +471,6 @@ Module contents
 
          def add_one(self):
              return self.x + 1
-
-   .. versionadded:: 3.14
-      Added the *decorator* parameter.
-   .. versionadded:: 3.16
-      Added the *qualname* parameter.
 
 .. function:: replace(obj, /, **changes)
 
@@ -528,14 +517,11 @@ Module contents
 
 .. data:: MISSING
 
-   A :class:`sentinel` object signifying a missing default or *default_factory*.
-
-   .. versionchanged:: 3.15
-      :const:`!MISSING` is now a :class:`sentinel` object.
+   A sentinel value signifying a missing default or default_factory.
 
 .. data:: KW_ONLY
 
-   A :class:`sentinel` object used as a type annotation.  Any fields after a
+   A sentinel value used as a type annotation.  Any fields after a
    pseudo-field with the type of :const:`!KW_ONLY` are marked as
    keyword-only fields.  Note that a pseudo-field of type
    :const:`!KW_ONLY` is otherwise completely ignored.  This includes the
@@ -559,9 +545,6 @@ Module contents
    field whose type is :const:`!KW_ONLY`.
 
    .. versionadded:: 3.10
-
-   .. versionchanged:: 3.15
-      :const:`!KW_ONLY` is now a :class:`sentinel` object.
 
 .. exception:: FrozenInstanceError
 

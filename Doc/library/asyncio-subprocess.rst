@@ -240,33 +240,9 @@ their completion.
       Note, that the data read is buffered in memory, so do not use
       this method if the data size is large or unlimited.
 
-      If this coroutine is cancelled (for example, when a timeout is
-      set with :func:`~asyncio.wait_for`), the output that was already
-      read is not lost: call :meth:`!communicate` again to read the
-      remaining output and get the complete data::
-
-         try:
-             stdout, stderr = await asyncio.wait_for(
-                 proc.communicate(), timeout=5.0)
-         except TimeoutError:
-             proc.kill()
-             stdout, stderr = await proc.communicate()
-
-      Passing *input* after a previous :meth:`!communicate` call was
-      cancelled raises :exc:`ValueError`; pass ``input=None`` to
-      continue the communication, the original *input* is used.
-
       .. versionchanged:: 3.12
 
          *stdin* gets closed when ``input=None`` too.
-
-      .. versionchanged:: 3.16
-
-         If :meth:`!communicate` is cancelled, the output that was
-         already read is now preserved and returned by a subsequent
-         :meth:`!communicate` call.  Passing *input* to a
-         :meth:`!communicate` call following a cancelled one now raises
-         :exc:`ValueError`.
 
    .. method:: send_signal(signal)
 
@@ -357,6 +333,18 @@ default.
 
 On Windows subprocesses are provided by :class:`ProactorEventLoop` only (default),
 :class:`SelectorEventLoop` has no subprocess support.
+
+On UNIX *child watchers* are used for subprocess finish waiting, see
+:ref:`asyncio-watchers` for more info.
+
+
+.. versionchanged:: 3.8
+
+   UNIX switched to use :class:`ThreadedChildWatcher` for spawning subprocesses from
+   different threads without any limitation.
+
+   Spawning a subprocess with *inactive* current child watcher raises
+   :exc:`RuntimeError`.
 
 Note that alternative event loop implementations might have own limitations;
 please refer to their documentation.

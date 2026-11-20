@@ -15,40 +15,26 @@ msgstr ""
 "Generated-By: pygettext.py 1.5\n"
 
 
-#: docstrings.py:1
-#, docstring
-msgid "Module docstring"
-msgstr ""
-
-#: docstrings.py:9
+#: docstrings.py:7
 #, docstring
 msgid ""
 msgstr ""
 
-#: docstrings.py:15
-#, docstring
-msgid "docstring"
-msgstr ""
-
-#: docstrings.py:20
+#: docstrings.py:18
 #, docstring
 msgid ""
 "multiline\n"
-"docstring"
+"    docstring\n"
+"    "
 msgstr ""
 
-#: docstrings.py:27
+#: docstrings.py:25
 #, docstring
 msgid "docstring1"
 msgstr ""
 
-#: docstrings.py:38
+#: docstrings.py:30
 #, docstring
-msgid "nested docstring"
-msgstr ""
-
-#: docstrings.py:43
-#, docstring
-msgid "nested class docstring"
+msgid "Hello, {}!"
 msgstr ""
 

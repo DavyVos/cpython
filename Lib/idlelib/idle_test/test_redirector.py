@@ -3,11 +3,12 @@
 from idlelib.redirector import WidgetRedirector
 import unittest
 from test.support import requires
+from test.support.testcase import ExtraAssertions
 from tkinter import Tk, Text, TclError
 from idlelib.idle_test.mock_idle import Func
 
 
-class InitCloseTest(unittest.TestCase):
+class InitCloseTest(unittest.TestCase, ExtraAssertions):
 
     @classmethod
     def setUpClass(cls):
@@ -64,10 +65,8 @@ class WidgetRedirectorTest(unittest.TestCase):
         self.redir.close()
 
     def test_repr(self):  # partly for 100% coverage
-        self.assertEqual(repr(self.redir),
-                         f"WidgetRedirector(Text<{self.text._w}>)")
-        self.assertEqual(repr(self.orig_insert),
-                         f"OriginalCommand({self.redir!r}, 'insert')")
+        self.assertIn('Redirector', repr(self.redir))
+        self.assertIn('Original', repr(self.orig_insert))
 
     def test_register(self):
         self.assertEqual(self.text.get('1.0', 'end'), '\n')

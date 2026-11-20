@@ -54,9 +54,6 @@ class Popen(object):
                 if self.wait(timeout=0.1) is None:
                     raise
 
-    def interrupt(self):
-        self._send_signal(signal.SIGINT)
-
     def terminate(self):
         self._send_signal(signal.SIGTERM)
 

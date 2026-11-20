@@ -10,10 +10,10 @@
 
 #include "Python.h"
 #include "pycore_call.h"          // _PyObject_CallMethod()
-#include "pycore_fileutils.h"           // _PyFile_Flush
 #include "pycore_long.h"          // _PyLong_GetOne()
 #include "pycore_object.h"        // _PyType_HasFeature()
 #include "pycore_pyerrors.h"      // _PyErr_ChainExceptions1()
+#include "pycore_weakref.h"       // FT_CLEAR_WEAKREFS()
 
 #include <stddef.h>               // offsetof()
 #include "_iomodule.h"
@@ -32,9 +32,9 @@ class _io._RawIOBase "PyObject *" "clinic_state()->PyRawIOBase_Type"
 typedef struct {
     PyObject_HEAD
 
+    PyObject *dict;
+    PyObject *weakreflist;
 } iobase;
-
-#define iobase_CAST(op) ((iobase *)(op))
 
 PyDoc_STRVAR(iobase_doc,
     "The abstract base class for all I/O classes.\n"
@@ -181,18 +181,14 @@ _io__IOBase_flush_impl(PyObject *self)
     return NULL;
 }
 
-/*[clinic input]
-@getter
-_io._IOBase.closed -> bool
-
-True if the file is closed.
-[clinic start generated code]*/
-
-static int
-_io__IOBase_closed_get_impl(PyObject *self)
-/*[clinic end generated code: output=561af4ea236d16d9 input=e730fe4ccc4c096c]*/
+static PyObject *
+iobase_closed_get(PyObject *self, void *context)
 {
-    return iobase_is_closed(self);
+    int closed = iobase_is_closed(self);
+    if (closed < 0) {
+        return NULL;
+    }
+    return PyBool_FromLong(closed);
 }
 
 static int
@@ -226,51 +222,25 @@ _PyIOBase_check_closed(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-/*[clinic input]
-_io._IOBase._checkClosed
-[clinic start generated code]*/
-
 static PyObject *
-_io__IOBase__checkClosed_impl(PyObject *self)
-/*[clinic end generated code: output=8fb8412185623f1a input=8d18d2e67b2270bb]*/
-{
-    return _PyIOBase_check_closed(self, NULL);
-}
-
-/*[clinic input]
-_io._IOBase._checkSeekable
-[clinic start generated code]*/
-
-static PyObject *
-_io__IOBase__checkSeekable_impl(PyObject *self)
-/*[clinic end generated code: output=10f09b515a9f4c4f input=479853eded776b0e]*/
+iobase_check_seekable(PyObject *self, PyObject *args)
 {
     _PyIO_State *state = find_io_state_by_def(Py_TYPE(self));
-    return _PyIOBase_check_seekable(state, self, NULL);
+    return _PyIOBase_check_seekable(state, self, args);
 }
 
-/*[clinic input]
-_io._IOBase._checkReadable
-[clinic start generated code]*/
-
 static PyObject *
-_io__IOBase__checkReadable_impl(PyObject *self)
-/*[clinic end generated code: output=33ccab8a7c4550fb input=63fbf50b36772323]*/
+iobase_check_readable(PyObject *self, PyObject *args)
 {
     _PyIO_State *state = find_io_state_by_def(Py_TYPE(self));
-    return _PyIOBase_check_readable(state, self, NULL);
+    return _PyIOBase_check_readable(state, self, args);
 }
 
-/*[clinic input]
-_io._IOBase._checkWritable
-[clinic start generated code]*/
-
 static PyObject *
-_io__IOBase__checkWritable_impl(PyObject *self)
-/*[clinic end generated code: output=8cfc6b4b2469d2a3 input=2758c7291cf5911e]*/
+iobase_check_writable(PyObject *self, PyObject *args)
 {
     _PyIO_State *state = find_io_state_by_def(Py_TYPE(self));
-    return _PyIOBase_check_writable(state, self, NULL);
+    return _PyIOBase_check_writable(state, self, args);
 }
 
 PyObject *
@@ -347,8 +317,7 @@ iobase_finalize(PyObject *self)
             PyErr_Clear();
         res = PyObject_CallMethodNoArgs((PyObject *)self, &_Py_ID(close));
         if (res == NULL) {
-            PyErr_FormatUnraisable("Exception ignored "
-                                   "while finalizing file %R", self);
+            PyErr_WriteUnraisable(self);
         }
         else {
             Py_DECREF(res);
@@ -376,32 +345,31 @@ _PyIOBase_finalize(PyObject *self)
 }
 
 static int
-iobase_traverse(PyObject *op, visitproc visit, void *arg)
+iobase_traverse(iobase *self, visitproc visit, void *arg)
 {
-    iobase *self = iobase_CAST(op);
     Py_VISIT(Py_TYPE(self));
-    return PyObject_VisitManagedDict(op, visit, arg);
+    Py_VISIT(self->dict);
+    return 0;
 }
 
 static int
-iobase_clear(PyObject *op)
+iobase_clear(iobase *self)
 {
-    PyObject_ClearManagedDict(op);
+    Py_CLEAR(self->dict);
     return 0;
 }
 
 /* Destructor */
 
 static void
-iobase_dealloc(PyObject *op)
+iobase_dealloc(iobase *self)
 {
-    /* NOTE: since the managed dict is only cleared below, Python-defined
-       attributes are still available here for close() to use.
+    /* NOTE: since IOBaseObject has its own dict, Python-defined attributes
+       are still available here for close() to use.
        However, if the derived class declares a __slots__, those slots are
        already gone.
     */
-    iobase *self = iobase_CAST(op);
-    if (_PyIOBase_finalize(op) < 0) {
+    if (_PyIOBase_finalize((PyObject *) self) < 0) {
         /* When called from a heap type's dealloc, the type will be
            decref'ed on return (see e.g. subtype_dealloc in typeobject.c). */
         if (_PyType_HasFeature(Py_TYPE(self), Py_TPFLAGS_HEAPTYPE)) {
@@ -411,9 +379,9 @@ iobase_dealloc(PyObject *op)
     }
     PyTypeObject *tp = Py_TYPE(self);
     _PyObject_GC_UNTRACK(self);
-    PyObject_ClearWeakRefs(op);
-    PyObject_ClearManagedDict(op);
-    tp->tp_free(self);
+    FT_CLEAR_WEAKREFS((PyObject *) self, self->weakreflist);
+    Py_CLEAR(self->dict);
+    tp->tp_free((PyObject *)self);
     Py_DECREF(tp);
 }
 
@@ -520,15 +488,8 @@ _PyIOBase_check_writable(_PyIO_State *state, PyObject *self, PyObject *args)
 
 /* Context manager */
 
-/*[clinic input]
-_io._IOBase.__enter__
-
-Context management protocol.  Returns the stream itself.
-[clinic start generated code]*/
-
 static PyObject *
-_io__IOBase___enter___impl(PyObject *self)
-/*[clinic end generated code: output=d1e8e5b58bde3680 input=92e2d5e34ee714e5]*/
+iobase_enter(PyObject *self, PyObject *args)
 {
     if (iobase_check_closed(self))
         return NULL;
@@ -536,16 +497,8 @@ _io__IOBase___enter___impl(PyObject *self)
     return Py_NewRef(self);
 }
 
-/*[clinic input]
-_io._IOBase.__exit__
-    *args: tuple
-
-Context management protocol.  Calls close().
-[clinic start generated code]*/
-
 static PyObject *
-_io__IOBase___exit___impl(PyObject *self, PyObject *args)
-/*[clinic end generated code: output=452f3e33a34e2c5c input=fd3f46a32773a170]*/
+iobase_exit(PyObject *self, PyObject *args)
 {
     return PyObject_CallMethodNoArgs(self, &_Py_ID(close));
 }
@@ -611,19 +564,20 @@ _io__IOBase_readline_impl(PyObject *self, Py_ssize_t limit)
 {
     /* For backwards compatibility, a (slowish) readline(). */
 
-    PyObject *peek;
+    PyObject *peek, *buffer, *result;
+    Py_ssize_t old_size = -1;
 
     if (PyObject_GetOptionalAttr(self, &_Py_ID(peek), &peek) < 0) {
         return NULL;
     }
 
-    PyBytesWriter *writer = PyBytesWriter_Create(0);
-    if (writer == NULL) {
+    buffer = PyByteArray_FromStringAndSize(NULL, 0);
+    if (buffer == NULL) {
         Py_XDECREF(peek);
         return NULL;
     }
 
-    while (limit < 0 || PyBytesWriter_GetSize(writer) < limit) {
+    while (limit < 0 || PyByteArray_GET_SIZE(buffer) < limit) {
         Py_ssize_t nreadahead = 1;
         PyObject *b;
 
@@ -648,9 +602,8 @@ _io__IOBase_readline_impl(PyObject *self, Py_ssize_t limit)
                 Py_ssize_t n = 0;
                 const char *buf = PyBytes_AS_STRING(readahead);
                 if (limit >= 0) {
-                    Py_ssize_t remaining = limit - PyBytesWriter_GetSize(writer);
                     do {
-                        if (n >= PyBytes_GET_SIZE(readahead) || n >= remaining)
+                        if (n >= PyBytes_GET_SIZE(readahead) || n >= limit)
                             break;
                         if (buf[n++] == '\n')
                             break;
@@ -690,25 +643,28 @@ _io__IOBase_readline_impl(PyObject *self, Py_ssize_t limit)
             break;
         }
 
-        if (PyBytesWriter_WriteBytes(writer,
-                                     PyBytes_AS_STRING(b),
-                                     PyBytes_GET_SIZE(b)) < 0) {
+        old_size = PyByteArray_GET_SIZE(buffer);
+        if (PyByteArray_Resize(buffer, old_size + PyBytes_GET_SIZE(b)) < 0) {
             Py_DECREF(b);
             goto fail;
         }
+        memcpy(PyByteArray_AS_STRING(buffer) + old_size,
+               PyBytes_AS_STRING(b), PyBytes_GET_SIZE(b));
 
         Py_DECREF(b);
 
-        char *data = PyBytesWriter_GetData(writer);
-        if (data[PyBytesWriter_GetSize(writer) - 1] == '\n')
+        if (PyByteArray_AS_STRING(buffer)[PyByteArray_GET_SIZE(buffer) - 1] == '\n')
             break;
     }
 
+    result = PyBytes_FromStringAndSize(PyByteArray_AS_STRING(buffer),
+                                       PyByteArray_GET_SIZE(buffer));
     Py_XDECREF(peek);
-    return PyBytesWriter_Finish(writer);
+    Py_DECREF(buffer);
+    return result;
   fail:
     Py_XDECREF(peek);
-    PyBytesWriter_Discard(writer);
+    Py_DECREF(buffer);
     return NULL;
 }
 
@@ -878,16 +834,16 @@ static PyMethodDef iobase_methods[] = {
     _IO__IOBASE_READABLE_METHODDEF
     _IO__IOBASE_WRITABLE_METHODDEF
 
-    _IO__IOBASE__CHECKCLOSED_METHODDEF
-    _IO__IOBASE__CHECKSEEKABLE_METHODDEF
-    _IO__IOBASE__CHECKREADABLE_METHODDEF
-    _IO__IOBASE__CHECKWRITABLE_METHODDEF
+    {"_checkClosed",   _PyIOBase_check_closed, METH_NOARGS},
+    {"_checkSeekable", iobase_check_seekable, METH_NOARGS},
+    {"_checkReadable", iobase_check_readable, METH_NOARGS},
+    {"_checkWritable", iobase_check_writable, METH_NOARGS},
 
     _IO__IOBASE_FILENO_METHODDEF
     _IO__IOBASE_ISATTY_METHODDEF
 
-    _IO__IOBASE___ENTER___METHODDEF
-    _IO__IOBASE___EXIT___METHODDEF
+    {"__enter__", iobase_enter, METH_NOARGS},
+    {"__exit__", iobase_exit, METH_VARARGS},
 
     _IO__IOBASE_READLINE_METHODDEF
     _IO__IOBASE_READLINES_METHODDEF
@@ -898,8 +854,14 @@ static PyMethodDef iobase_methods[] = {
 
 static PyGetSetDef iobase_getset[] = {
     {"__dict__", PyObject_GenericGetDict, NULL, NULL},
-    _IO__IOBASE_CLOSED_GETSETDEF
+    {"closed", (getter)iobase_closed_get, NULL, NULL},
     {NULL}
+};
+
+static struct PyMemberDef iobase_members[] = {
+    {"__weaklistoffset__", Py_T_PYSSIZET, offsetof(iobase, weakreflist), Py_READONLY},
+    {"__dictoffset__", Py_T_PYSSIZET, offsetof(iobase, dict), Py_READONLY},
+    {NULL},
 };
 
 
@@ -911,17 +873,17 @@ static PyType_Slot iobase_slots[] = {
     {Py_tp_iter, iobase_iter},
     {Py_tp_iternext, iobase_iternext},
     {Py_tp_methods, iobase_methods},
+    {Py_tp_members, iobase_members},
     {Py_tp_getset, iobase_getset},
     {Py_tp_finalize, iobase_finalize},
     {0, NULL},
 };
 
-PyType_Spec _Py_iobase_spec = {
+PyType_Spec iobase_spec = {
     .name = "_io._IOBase",
     .basicsize = sizeof(iobase),
     .flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC |
-              Py_TPFLAGS_IMMUTABLETYPE | Py_TPFLAGS_MANAGED_DICT |
-              Py_TPFLAGS_MANAGED_WEAKREF),
+              Py_TPFLAGS_IMMUTABLETYPE),
     .slots = iobase_slots,
 };
 
@@ -959,33 +921,33 @@ _io__RawIOBase_read_impl(PyObject *self, Py_ssize_t n)
         return PyObject_CallMethodNoArgs(self, &_Py_ID(readall));
     }
 
+    /* TODO: allocate a bytes object directly instead and manually construct
+       a writable memoryview pointing to it. */
     b = PyByteArray_FromStringAndSize(NULL, n);
-    if (b == NULL) {
+    if (b == NULL)
         return NULL;
-    }
 
     res = PyObject_CallMethodObjArgs(self, &_Py_ID(readinto), b, NULL);
     if (res == NULL || res == Py_None) {
-        goto cleanup;
+        Py_DECREF(b);
+        return res;
     }
 
     Py_ssize_t bytes_filled = PyNumber_AsSsize_t(res, PyExc_ValueError);
-    Py_CLEAR(res);
+    Py_DECREF(res);
     if (bytes_filled == -1 && PyErr_Occurred()) {
-        goto cleanup;
+        Py_DECREF(b);
+        return NULL;
     }
     if (bytes_filled < 0 || bytes_filled > n) {
+        Py_DECREF(b);
         PyErr_Format(PyExc_ValueError,
                      "readinto returned %zd outside buffer size %zd",
                      bytes_filled, n);
-        goto cleanup;
+        return NULL;
     }
-    if (PyByteArray_Resize(b, bytes_filled) < 0) {
-        goto cleanup;
-    }
-    res = PyObject_CallMethodNoArgs(b, &_Py_ID(take_bytes));
 
-cleanup:
+    res = PyBytes_FromStringAndSize(PyByteArray_AsString(b), bytes_filled);
     Py_DECREF(b);
     return res;
 }
@@ -1001,10 +963,12 @@ static PyObject *
 _io__RawIOBase_readall_impl(PyObject *self)
 /*[clinic end generated code: output=1987b9ce929425a0 input=688874141213622a]*/
 {
-    PyBytesWriter *writer = PyBytesWriter_Create(0);
-    if (writer == NULL) {
+    int r;
+    PyObject *chunks = PyList_New(0);
+    PyObject *result;
+
+    if (chunks == NULL)
         return NULL;
-    }
 
     while (1) {
         PyObject *data = _PyObject_CallMethod(self, &_Py_ID(read),
@@ -1015,21 +979,21 @@ _io__RawIOBase_readall_impl(PyObject *self)
             if (_PyIO_trap_eintr()) {
                 continue;
             }
-            PyBytesWriter_Discard(writer);
+            Py_DECREF(chunks);
             return NULL;
         }
         if (data == Py_None) {
-            if (PyBytesWriter_GetSize(writer) == 0) {
-                PyBytesWriter_Discard(writer);
+            if (PyList_GET_SIZE(chunks) == 0) {
+                Py_DECREF(chunks);
                 return data;
             }
             Py_DECREF(data);
             break;
         }
         if (!PyBytes_Check(data)) {
+            Py_DECREF(chunks);
             Py_DECREF(data);
             PyErr_SetString(PyExc_TypeError, "read() should return bytes");
-            PyBytesWriter_Discard(writer);
             return NULL;
         }
         if (PyBytes_GET_SIZE(data) == 0) {
@@ -1037,41 +1001,27 @@ _io__RawIOBase_readall_impl(PyObject *self)
             Py_DECREF(data);
             break;
         }
-        if (PyBytesWriter_WriteBytes(writer,
-                                     PyBytes_AS_STRING(data),
-                                     PyBytes_GET_SIZE(data)) < 0) {
-            Py_DECREF(data);
-            PyBytesWriter_Discard(writer);
+        r = PyList_Append(chunks, data);
+        Py_DECREF(data);
+        if (r < 0) {
+            Py_DECREF(chunks);
             return NULL;
         }
-        Py_DECREF(data);
     }
-    return PyBytesWriter_Finish(writer);
+    result = _PyBytes_Join((PyObject *)&_Py_SINGLETON(bytes_empty), chunks);
+    Py_DECREF(chunks);
+    return result;
 }
 
-/*[clinic input]
-_io._RawIOBase.readinto
-    buffer: object
-    /
-[clinic start generated code]*/
-
 static PyObject *
-_io__RawIOBase_readinto(PyObject *self, PyObject *buffer)
-/*[clinic end generated code: output=081b8cdfaf3a40ff input=99d4bea2acd659c8]*/
+rawiobase_readinto(PyObject *self, PyObject *args)
 {
     PyErr_SetNone(PyExc_NotImplementedError);
     return NULL;
 }
 
-/*[clinic input]
-_io._RawIOBase.write
-    buffer: object
-    /
-[clinic start generated code]*/
-
 static PyObject *
-_io__RawIOBase_write(PyObject *self, PyObject *buffer)
-/*[clinic end generated code: output=7add3f2c8715c3a8 input=e6a1534adb876fe2]*/
+rawiobase_write(PyObject *self, PyObject *args)
 {
     PyErr_SetNone(PyExc_NotImplementedError);
     return NULL;
@@ -1080,8 +1030,8 @@ _io__RawIOBase_write(PyObject *self, PyObject *buffer)
 static PyMethodDef rawiobase_methods[] = {
     _IO__RAWIOBASE_READ_METHODDEF
     _IO__RAWIOBASE_READALL_METHODDEF
-    _IO__RAWIOBASE_READINTO_METHODDEF
-    _IO__RAWIOBASE_WRITE_METHODDEF
+    {"readinto", rawiobase_readinto, METH_VARARGS},
+    {"write", rawiobase_write, METH_VARARGS},
     {NULL, NULL}
 };
 
@@ -1092,7 +1042,7 @@ static PyType_Slot rawiobase_slots[] = {
 };
 
 /* Do not set Py_TPFLAGS_HAVE_GC so that tp_traverse and tp_clear are inherited */
-PyType_Spec _Py_rawiobase_spec = {
+PyType_Spec rawiobase_spec = {
     .name = "_io._RawIOBase",
     .flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE |
               Py_TPFLAGS_IMMUTABLETYPE),

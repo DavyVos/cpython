@@ -11,8 +11,6 @@ typedef struct {
     Py_ssize_t references;
 } testBufObject;
 
-#define testBufObject_CAST(op)  ((testBufObject *)(op))
-
 static PyObject *
 testbuf_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
@@ -31,34 +29,30 @@ testbuf_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 }
 
 static int
-testbuf_traverse(PyObject *op, visitproc visit, void *arg)
+testbuf_traverse(testBufObject *self, visitproc visit, void *arg)
 {
-    testBufObject *self = testBufObject_CAST(op);
     Py_VISIT(self->obj);
     return 0;
 }
 
 static int
-testbuf_clear(PyObject *op)
+testbuf_clear(testBufObject *self)
 {
-    testBufObject *self = testBufObject_CAST(op);
     Py_CLEAR(self->obj);
     return 0;
 }
 
 static void
-testbuf_dealloc(PyObject *op)
+testbuf_dealloc(testBufObject *self)
 {
-    testBufObject *self = testBufObject_CAST(op);
     PyObject_GC_UnTrack(self);
     Py_XDECREF(self->obj);
-    Py_TYPE(self)->tp_free(self);
+    Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
 static int
-testbuf_getbuf(PyObject *op, Py_buffer *view, int flags)
+testbuf_getbuf(testBufObject *self, Py_buffer *view, int flags)
 {
-    testBufObject *self = testBufObject_CAST(op);
     int buf = PyObject_GetBuffer(self->obj, view, flags);
     if (buf == 0) {
         Py_SETREF(view->obj, Py_NewRef(self));
@@ -68,16 +62,15 @@ testbuf_getbuf(PyObject *op, Py_buffer *view, int flags)
 }
 
 static void
-testbuf_releasebuf(PyObject *op, Py_buffer *Py_UNUSED(view))
+testbuf_releasebuf(testBufObject *self, Py_buffer *view)
 {
-    testBufObject *self = testBufObject_CAST(op);
     self->references--;
     assert(self->references >= 0);
 }
 
 static PyBufferProcs testbuf_as_buffer = {
-    .bf_getbuffer = testbuf_getbuf,
-    .bf_releasebuffer = testbuf_releasebuf,
+    .bf_getbuffer = (getbufferproc) testbuf_getbuf,
+    .bf_releasebuffer = (releasebufferproc) testbuf_releasebuf,
 };
 
 static struct PyMemberDef testbuf_members[] = {
@@ -91,46 +84,11 @@ static PyTypeObject testBufType = {
     .tp_basicsize = sizeof(testBufObject),
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
     .tp_new = testbuf_new,
-    .tp_dealloc = testbuf_dealloc,
-    .tp_traverse = testbuf_traverse,
-    .tp_clear = testbuf_clear,
+    .tp_dealloc = (destructor) testbuf_dealloc,
+    .tp_traverse = (traverseproc) testbuf_traverse,
+    .tp_clear = (inquiry) testbuf_clear,
     .tp_as_buffer = &testbuf_as_buffer,
     .tp_members = testbuf_members
-};
-
-/* Get the pointer from a buffer-supporting object as a PyLong.
- *
- * Used to test alignment properties. */
-static PyObject *
-buffer_pointer_as_int(PyObject *Py_UNUSED(module), PyObject *obj)
-{
-    PyObject *out;
-    Py_buffer view;
-    if (PyObject_GetBuffer(obj, &view, PyBUF_SIMPLE) != 0) {
-        return NULL;
-    }
-    out = PyLong_FromVoidPtr(view.buf);
-    PyBuffer_Release(&view);
-    return out;
-}
-
-static PyObject *
-clear_memoryview(PyObject *Py_UNUSED(module), PyObject *obj)
-{
-    if (!PyMemoryView_Check(obj)) {
-        PyErr_SetString(PyExc_TypeError, "memoryview expected");
-        return NULL;
-    }
-    if (Py_TYPE(obj)->tp_clear(obj) < 0) {
-        return NULL;
-    }
-    Py_RETURN_NONE;
-}
-
-static PyMethodDef test_methods[] = {
-    {"buffer_pointer_as_int", buffer_pointer_as_int, METH_O},
-    {"clear_memoryview", clear_memoryview, METH_O},
-    {NULL},
 };
 
 int
@@ -139,9 +97,6 @@ _PyTestCapi_Init_Buffer(PyObject *m) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "testBuf", (PyObject *)&testBufType)) {
-        return -1;
-    }
-    if (PyModule_AddFunctions(m, test_methods) < 0) {
         return -1;
     }
 

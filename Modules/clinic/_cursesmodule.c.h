@@ -6,192 +6,10 @@ preserve
 #  include "pycore_gc.h"          // PyGC_Head
 #  include "pycore_runtime.h"     // _Py_ID()
 #endif
-#include "pycore_long.h"          // _PyLong_UnsignedInt_Converter()
-#include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
-#include "pycore_unicodeobject.h" // _PyUnicode_AsUTF8NoNUL()
-
-PyDoc_STRVAR(complexchar_new__doc__,
-"complexchar(text, /, attr=0, pair=0)\n"
-"--\n"
-"\n"
-"A styled wide-character cell.\n"
-"\n"
-"  text\n"
-"    A spacing character optionally followed by combining characters.\n"
-"  attr\n"
-"    The attributes of the character cell.\n"
-"  pair\n"
-"    The color pair number of the character cell.\n"
-"\n"
-"text is a spacing character optionally followed by combining\n"
-"characters.  attr is a set of attributes (the WA_* constants) and pair\n"
-"is a color pair number.  The object is immutable; str(cc) returns its\n"
-"text, and the attr and pair attributes return its rendition.");
-
-static PyObject *
-complexchar_new_impl(PyTypeObject *type, PyObject *text, attr_t attr,
-                     int pair);
-
-static PyObject *
-complexchar_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
-{
-    PyObject *return_value = NULL;
-    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-
-    #define NUM_KEYWORDS 2
-    static struct {
-        PyGC_Head _this_is_not_used;
-        PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
-        PyObject *ob_item[NUM_KEYWORDS];
-    } _kwtuple = {
-        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
-        .ob_item = { &_Py_ID(attr), &_Py_ID(pair), },
-    };
-    #undef NUM_KEYWORDS
-    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
-
-    #else  // !Py_BUILD_CORE
-    #  define KWTUPLE NULL
-    #endif  // !Py_BUILD_CORE
-
-    static const char * const _keywords[] = {"", "attr", "pair", NULL};
-    static _PyArg_Parser _parser = {
-        .keywords = _keywords,
-        .fname = "complexchar",
-        .kwtuple = KWTUPLE,
-    };
-    #undef KWTUPLE
-    PyObject *argsbuf[3];
-    PyObject * const *fastargs;
-    Py_ssize_t nargs = PyTuple_GET_SIZE(args);
-    Py_ssize_t noptargs = nargs + (kwargs ? PyDict_GET_SIZE(kwargs) : 0) - 1;
-    PyObject *text;
-    attr_t attr = 0;
-    int pair = 0;
-
-    fastargs = _PyArg_UnpackKeywords(_PyTuple_CAST(args)->ob_item, nargs, kwargs, NULL, &_parser,
-            /*minpos*/ 1, /*maxpos*/ 3, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
-    if (!fastargs) {
-        goto exit;
-    }
-    if (!PyUnicode_Check(fastargs[0])) {
-        _PyArg_BadArgument("complexchar", "argument 1", "str", fastargs[0]);
-        goto exit;
-    }
-    text = fastargs[0];
-    if (!noptargs) {
-        goto skip_optional_pos;
-    }
-    if (fastargs[1]) {
-        if (!attr_converter(fastargs[1], &attr)) {
-            goto exit;
-        }
-        if (!--noptargs) {
-            goto skip_optional_pos;
-        }
-    }
-    pair = PyLong_AsInt(fastargs[2]);
-    if (pair == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-skip_optional_pos:
-    return_value = complexchar_new_impl(type, text, attr, pair);
-
-exit:
-    return return_value;
-}
-
-PyDoc_STRVAR(complexstr_new__doc__,
-"complexstr(cells, /, attr=<unrepresentable>, pair=<unrepresentable>)\n"
-"--\n"
-"\n"
-"An immutable string of styled wide-character cells.\n"
-"\n"
-"  cells\n"
-"    An iterable of cells, each a complexchar or a str.\n"
-"  attr\n"
-"    Attributes applied to every cell (only with a string).\n"
-"  pair\n"
-"    Color pair applied to every cell (only with a string).\n"
-"\n"
-"It is the counterpart of complexchar for a run of cells, and the type\n"
-"returned by window.in_wchstr().  Each cell is a complexchar or a str (a\n"
-"spacing character optionally followed by combining characters).\n"
-"\n"
-"When cells is a string it is split into character cells, and attr and\n"
-"pair (if given) style every cell.  Otherwise each item carries its own\n"
-"rendition, and attr and pair must be omitted.");
-
-static PyObject *
-complexstr_new_impl(PyTypeObject *type, PyObject *cells, PyObject *attr,
-                    PyObject *pair);
-
-static PyObject *
-complexstr_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
-{
-    PyObject *return_value = NULL;
-    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-
-    #define NUM_KEYWORDS 2
-    static struct {
-        PyGC_Head _this_is_not_used;
-        PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
-        PyObject *ob_item[NUM_KEYWORDS];
-    } _kwtuple = {
-        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
-        .ob_item = { &_Py_ID(attr), &_Py_ID(pair), },
-    };
-    #undef NUM_KEYWORDS
-    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
-
-    #else  // !Py_BUILD_CORE
-    #  define KWTUPLE NULL
-    #endif  // !Py_BUILD_CORE
-
-    static const char * const _keywords[] = {"", "attr", "pair", NULL};
-    static _PyArg_Parser _parser = {
-        .keywords = _keywords,
-        .fname = "complexstr",
-        .kwtuple = KWTUPLE,
-    };
-    #undef KWTUPLE
-    PyObject *argsbuf[3];
-    PyObject * const *fastargs;
-    Py_ssize_t nargs = PyTuple_GET_SIZE(args);
-    Py_ssize_t noptargs = nargs + (kwargs ? PyDict_GET_SIZE(kwargs) : 0) - 1;
-    PyObject *cells;
-    PyObject *attr = NULL;
-    PyObject *pair = NULL;
-
-    fastargs = _PyArg_UnpackKeywords(_PyTuple_CAST(args)->ob_item, nargs, kwargs, NULL, &_parser,
-            /*minpos*/ 1, /*maxpos*/ 3, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
-    if (!fastargs) {
-        goto exit;
-    }
-    cells = fastargs[0];
-    if (!noptargs) {
-        goto skip_optional_pos;
-    }
-    if (fastargs[1]) {
-        attr = fastargs[1];
-        if (!--noptargs) {
-            goto skip_optional_pos;
-        }
-    }
-    pair = fastargs[2];
-skip_optional_pos:
-    return_value = complexstr_new_impl(type, cells, attr, pair);
-
-exit:
-    return return_value;
-}
+#include "pycore_modsupport.h"    // _PyArg_CheckPositional()
 
 PyDoc_STRVAR(_curses_window_addch__doc__,
-"addch([y, x,] ch, [attr])\n"
+"addch([y, x,] ch, [attr=_curses.A_NORMAL])\n"
 "Paint the character.\n"
 "\n"
 "  y\n"
@@ -209,15 +27,15 @@ PyDoc_STRVAR(_curses_window_addch__doc__,
 "current settings for the window object.");
 
 #define _CURSES_WINDOW_ADDCH_METHODDEF    \
-    {"addch", _PyCFunction_CAST(_curses_window_addch), METH_FASTCALL, _curses_window_addch__doc__},
+    {"addch", (PyCFunction)_curses_window_addch, METH_VARARGS, _curses_window_addch__doc__},
 
 static PyObject *
 _curses_window_addch_impl(PyCursesWindowObject *self, int group_left_1,
                           int y, int x, PyObject *ch, int group_right_1,
-                          attr_t attr);
+                          long attr);
 
 static PyObject *
-_curses_window_addch(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_addch(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_left_1 = 0;
@@ -225,33 +43,38 @@ _curses_window_addch(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     int x = 0;
     PyObject *ch;
     int group_right_1 = 0;
-    attr_t attr = 0;
+    long attr = A_NORMAL;
 
-    Py_ssize_t offset = 0;
-    if (nargs < 1 || nargs > 4) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.addch requires 1 to 4 arguments");
-        goto exit;
-    }
-    if (nargs >= 3) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
+    switch (PyTuple_GET_SIZE(args)) {
+        case 1:
+            if (!PyArg_ParseTuple(args, "O:addch", &ch)) {
+                goto exit;
+            }
+            break;
+        case 2:
+            if (!PyArg_ParseTuple(args, "Ol:addch", &ch, &attr)) {
+                goto exit;
+            }
+            group_right_1 = 1;
+            break;
+        case 3:
+            if (!PyArg_ParseTuple(args, "iiO:addch", &y, &x, &ch)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            break;
+        case 4:
+            if (!PyArg_ParseTuple(args, "iiOl:addch", &y, &x, &ch, &attr)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            group_right_1 = 1;
+            break;
+        default:
+            PyErr_SetString(PyExc_TypeError, "_curses.window.addch requires 1 to 4 arguments");
             goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        offset += 2;
-        group_left_1 = 1;
     }
-    ch = args[offset];
-    if (nargs == 2 || nargs == 4) {
-        if (!attr_converter(args[nargs - 1], &attr)) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_addch_impl((PyCursesWindowObject *)self, group_left_1, y, x, ch, group_right_1, attr);
+    return_value = _curses_window_addch_impl(self, group_left_1, y, x, ch, group_right_1, attr);
 
 exit:
     return return_value;
@@ -276,15 +99,15 @@ PyDoc_STRVAR(_curses_window_addstr__doc__,
 "current settings for the window object.");
 
 #define _CURSES_WINDOW_ADDSTR_METHODDEF    \
-    {"addstr", _PyCFunction_CAST(_curses_window_addstr), METH_FASTCALL, _curses_window_addstr__doc__},
+    {"addstr", (PyCFunction)_curses_window_addstr, METH_VARARGS, _curses_window_addstr__doc__},
 
 static PyObject *
 _curses_window_addstr_impl(PyCursesWindowObject *self, int group_left_1,
                            int y, int x, PyObject *str, int group_right_1,
-                           attr_t attr);
+                           long attr);
 
 static PyObject *
-_curses_window_addstr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_addstr(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_left_1 = 0;
@@ -292,33 +115,38 @@ _curses_window_addstr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     int x = 0;
     PyObject *str;
     int group_right_1 = 0;
-    attr_t attr = 0;
+    long attr = 0;
 
-    Py_ssize_t offset = 0;
-    if (nargs < 1 || nargs > 4) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.addstr requires 1 to 4 arguments");
-        goto exit;
-    }
-    if (nargs >= 3) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
+    switch (PyTuple_GET_SIZE(args)) {
+        case 1:
+            if (!PyArg_ParseTuple(args, "O:addstr", &str)) {
+                goto exit;
+            }
+            break;
+        case 2:
+            if (!PyArg_ParseTuple(args, "Ol:addstr", &str, &attr)) {
+                goto exit;
+            }
+            group_right_1 = 1;
+            break;
+        case 3:
+            if (!PyArg_ParseTuple(args, "iiO:addstr", &y, &x, &str)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            break;
+        case 4:
+            if (!PyArg_ParseTuple(args, "iiOl:addstr", &y, &x, &str, &attr)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            group_right_1 = 1;
+            break;
+        default:
+            PyErr_SetString(PyExc_TypeError, "_curses.window.addstr requires 1 to 4 arguments");
             goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        offset += 2;
-        group_left_1 = 1;
     }
-    str = args[offset];
-    if (nargs == 2 || nargs == 4) {
-        if (!attr_converter(args[nargs - 1], &attr)) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_addstr_impl((PyCursesWindowObject *)self, group_left_1, y, x, str, group_right_1, attr);
+    return_value = _curses_window_addstr_impl(self, group_left_1, y, x, str, group_right_1, attr);
 
 exit:
     return return_value;
@@ -345,15 +173,15 @@ PyDoc_STRVAR(_curses_window_addnstr__doc__,
 "current settings for the window object.");
 
 #define _CURSES_WINDOW_ADDNSTR_METHODDEF    \
-    {"addnstr", _PyCFunction_CAST(_curses_window_addnstr), METH_FASTCALL, _curses_window_addnstr__doc__},
+    {"addnstr", (PyCFunction)_curses_window_addnstr, METH_VARARGS, _curses_window_addnstr__doc__},
 
 static PyObject *
 _curses_window_addnstr_impl(PyCursesWindowObject *self, int group_left_1,
                             int y, int x, PyObject *str, int n,
-                            int group_right_1, attr_t attr);
+                            int group_right_1, long attr);
 
 static PyObject *
-_curses_window_addnstr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_addnstr(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_left_1 = 0;
@@ -362,44 +190,47 @@ _curses_window_addnstr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     PyObject *str;
     int n;
     int group_right_1 = 0;
-    attr_t attr = 0;
+    long attr = 0;
 
-    Py_ssize_t offset = 0;
-    if (nargs < 2 || nargs > 5) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.addnstr requires 2 to 5 arguments");
-        goto exit;
-    }
-    if (nargs >= 4) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
+    switch (PyTuple_GET_SIZE(args)) {
+        case 2:
+            if (!PyArg_ParseTuple(args, "Oi:addnstr", &str, &n)) {
+                goto exit;
+            }
+            break;
+        case 3:
+            if (!PyArg_ParseTuple(args, "Oil:addnstr", &str, &n, &attr)) {
+                goto exit;
+            }
+            group_right_1 = 1;
+            break;
+        case 4:
+            if (!PyArg_ParseTuple(args, "iiOi:addnstr", &y, &x, &str, &n)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            break;
+        case 5:
+            if (!PyArg_ParseTuple(args, "iiOil:addnstr", &y, &x, &str, &n, &attr)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            group_right_1 = 1;
+            break;
+        default:
+            PyErr_SetString(PyExc_TypeError, "_curses.window.addnstr requires 2 to 5 arguments");
             goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        offset += 2;
-        group_left_1 = 1;
     }
-    str = args[offset];
-    n = PyLong_AsInt(args[offset + 1]);
-    if (n == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    if (nargs == 3 || nargs == 5) {
-        if (!attr_converter(args[nargs - 1], &attr)) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_addnstr_impl((PyCursesWindowObject *)self, group_left_1, y, x, str, n, group_right_1, attr);
+    return_value = _curses_window_addnstr_impl(self, group_left_1, y, x, str, n, group_right_1, attr);
 
 exit:
     return return_value;
 }
 
 PyDoc_STRVAR(_curses_window_bkgd__doc__,
-"bkgd(ch, [attr])\n"
+"bkgd($self, ch, attr=_curses.A_NORMAL, /)\n"
+"--\n"
+"\n"
 "Set the background property of the window.\n"
 "\n"
 "  ch\n"
@@ -411,29 +242,28 @@ PyDoc_STRVAR(_curses_window_bkgd__doc__,
     {"bkgd", _PyCFunction_CAST(_curses_window_bkgd), METH_FASTCALL, _curses_window_bkgd__doc__},
 
 static PyObject *
-_curses_window_bkgd_impl(PyCursesWindowObject *self, PyObject *ch,
-                         int group_right_1, attr_t attr);
+_curses_window_bkgd_impl(PyCursesWindowObject *self, PyObject *ch, long attr);
 
 static PyObject *
-_curses_window_bkgd(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_bkgd(PyCursesWindowObject *self, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
     PyObject *ch;
-    int group_right_1 = 0;
-    attr_t attr = 0;
+    long attr = A_NORMAL;
 
-    if (nargs < 1 || nargs > 2) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.bkgd requires 1 to 2 arguments");
+    if (!_PyArg_CheckPositional("bkgd", nargs, 1, 2)) {
         goto exit;
     }
     ch = args[0];
-    if (nargs >= 2) {
-        if (!attr_converter(args[1], &attr)) {
-            goto exit;
-        }
-        group_right_1 = 1;
+    if (nargs < 2) {
+        goto skip_optional;
     }
-    return_value = _curses_window_bkgd_impl((PyCursesWindowObject *)self, ch, group_right_1, attr);
+    attr = PyLong_AsLong(args[1]);
+    if (attr == -1 && PyErr_Occurred()) {
+        goto exit;
+    }
+skip_optional:
+    return_value = _curses_window_bkgd_impl(self, ch, attr);
 
 exit:
     return return_value;
@@ -449,18 +279,19 @@ PyDoc_STRVAR(_curses_window_attroff__doc__,
     {"attroff", (PyCFunction)_curses_window_attroff, METH_O, _curses_window_attroff__doc__},
 
 static PyObject *
-_curses_window_attroff_impl(PyCursesWindowObject *self, attr_t attr);
+_curses_window_attroff_impl(PyCursesWindowObject *self, long attr);
 
 static PyObject *
-_curses_window_attroff(PyObject *self, PyObject *arg)
+_curses_window_attroff(PyCursesWindowObject *self, PyObject *arg)
 {
     PyObject *return_value = NULL;
-    attr_t attr;
+    long attr;
 
-    if (!attr_converter(arg, &attr)) {
+    attr = PyLong_AsLong(arg);
+    if (attr == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    return_value = _curses_window_attroff_impl((PyCursesWindowObject *)self, attr);
+    return_value = _curses_window_attroff_impl(self, attr);
 
 exit:
     return return_value;
@@ -476,18 +307,19 @@ PyDoc_STRVAR(_curses_window_attron__doc__,
     {"attron", (PyCFunction)_curses_window_attron, METH_O, _curses_window_attron__doc__},
 
 static PyObject *
-_curses_window_attron_impl(PyCursesWindowObject *self, attr_t attr);
+_curses_window_attron_impl(PyCursesWindowObject *self, long attr);
 
 static PyObject *
-_curses_window_attron(PyObject *self, PyObject *arg)
+_curses_window_attron(PyCursesWindowObject *self, PyObject *arg)
 {
     PyObject *return_value = NULL;
-    attr_t attr;
+    long attr;
 
-    if (!attr_converter(arg, &attr)) {
+    attr = PyLong_AsLong(arg);
+    if (attr == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    return_value = _curses_window_attron_impl((PyCursesWindowObject *)self, attr);
+    return_value = _curses_window_attron_impl(self, attr);
 
 exit:
     return return_value;
@@ -503,201 +335,28 @@ PyDoc_STRVAR(_curses_window_attrset__doc__,
     {"attrset", (PyCFunction)_curses_window_attrset, METH_O, _curses_window_attrset__doc__},
 
 static PyObject *
-_curses_window_attrset_impl(PyCursesWindowObject *self, attr_t attr);
+_curses_window_attrset_impl(PyCursesWindowObject *self, long attr);
 
 static PyObject *
-_curses_window_attrset(PyObject *self, PyObject *arg)
+_curses_window_attrset(PyCursesWindowObject *self, PyObject *arg)
 {
     PyObject *return_value = NULL;
-    attr_t attr;
+    long attr;
 
-    if (!attr_converter(arg, &attr)) {
+    attr = PyLong_AsLong(arg);
+    if (attr == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    return_value = _curses_window_attrset_impl((PyCursesWindowObject *)self, attr);
+    return_value = _curses_window_attrset_impl(self, attr);
 
 exit:
     return return_value;
-}
-
-#if defined(_Py_HAVE_CURSES_WATTR_GET)
-
-PyDoc_STRVAR(_curses_window_attr_get__doc__,
-"attr_get($self, /)\n"
-"--\n"
-"\n"
-"Return the window\'s attributes and color pair as (attrs, pair).");
-
-#define _CURSES_WINDOW_ATTR_GET_METHODDEF    \
-    {"attr_get", (PyCFunction)_curses_window_attr_get, METH_NOARGS, _curses_window_attr_get__doc__},
-
-static PyObject *
-_curses_window_attr_get_impl(PyCursesWindowObject *self);
-
-static PyObject *
-_curses_window_attr_get(PyObject *self, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_window_attr_get_impl((PyCursesWindowObject *)self);
-}
-
-#endif /* defined(_Py_HAVE_CURSES_WATTR_GET) */
-
-#if defined(_Py_HAVE_CURSES_WATTR_SET)
-
-PyDoc_STRVAR(_curses_window_attr_set__doc__,
-"attr_set($self, attr, pair=0, /)\n"
-"--\n"
-"\n"
-"Set the window\'s attributes and color pair.");
-
-#define _CURSES_WINDOW_ATTR_SET_METHODDEF    \
-    {"attr_set", _PyCFunction_CAST(_curses_window_attr_set), METH_FASTCALL, _curses_window_attr_set__doc__},
-
-static PyObject *
-_curses_window_attr_set_impl(PyCursesWindowObject *self, attr_t attr,
-                             int pair);
-
-static PyObject *
-_curses_window_attr_set(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    attr_t attr;
-    int pair = 0;
-
-    if (!_PyArg_CheckPositional("attr_set", nargs, 1, 2)) {
-        goto exit;
-    }
-    if (!attr_converter(args[0], &attr)) {
-        goto exit;
-    }
-    if (nargs < 2) {
-        goto skip_optional;
-    }
-    if (!pair_converter(args[1], &pair)) {
-        goto exit;
-    }
-skip_optional:
-    return_value = _curses_window_attr_set_impl((PyCursesWindowObject *)self, attr, pair);
-
-exit:
-    return return_value;
-}
-
-#endif /* defined(_Py_HAVE_CURSES_WATTR_SET) */
-
-#if defined(_Py_HAVE_CURSES_WATTR_ON)
-
-PyDoc_STRVAR(_curses_window_attr_on__doc__,
-"attr_on($self, attr, /)\n"
-"--\n"
-"\n"
-"Turn on the given attributes without affecting any others.");
-
-#define _CURSES_WINDOW_ATTR_ON_METHODDEF    \
-    {"attr_on", (PyCFunction)_curses_window_attr_on, METH_O, _curses_window_attr_on__doc__},
-
-static PyObject *
-_curses_window_attr_on_impl(PyCursesWindowObject *self, attr_t attr);
-
-static PyObject *
-_curses_window_attr_on(PyObject *self, PyObject *arg)
-{
-    PyObject *return_value = NULL;
-    attr_t attr;
-
-    if (!attr_converter(arg, &attr)) {
-        goto exit;
-    }
-    return_value = _curses_window_attr_on_impl((PyCursesWindowObject *)self, attr);
-
-exit:
-    return return_value;
-}
-
-#endif /* defined(_Py_HAVE_CURSES_WATTR_ON) */
-
-#if defined(_Py_HAVE_CURSES_WATTR_OFF)
-
-PyDoc_STRVAR(_curses_window_attr_off__doc__,
-"attr_off($self, attr, /)\n"
-"--\n"
-"\n"
-"Turn off the given attributes without affecting any others.");
-
-#define _CURSES_WINDOW_ATTR_OFF_METHODDEF    \
-    {"attr_off", (PyCFunction)_curses_window_attr_off, METH_O, _curses_window_attr_off__doc__},
-
-static PyObject *
-_curses_window_attr_off_impl(PyCursesWindowObject *self, attr_t attr);
-
-static PyObject *
-_curses_window_attr_off(PyObject *self, PyObject *arg)
-{
-    PyObject *return_value = NULL;
-    attr_t attr;
-
-    if (!attr_converter(arg, &attr)) {
-        goto exit;
-    }
-    return_value = _curses_window_attr_off_impl((PyCursesWindowObject *)self, attr);
-
-exit:
-    return return_value;
-}
-
-#endif /* defined(_Py_HAVE_CURSES_WATTR_OFF) */
-
-#if defined(_Py_HAVE_CURSES_WCOLOR_SET)
-
-PyDoc_STRVAR(_curses_window_color_set__doc__,
-"color_set($self, pair, /)\n"
-"--\n"
-"\n"
-"Set the window\'s color pair attribute.");
-
-#define _CURSES_WINDOW_COLOR_SET_METHODDEF    \
-    {"color_set", (PyCFunction)_curses_window_color_set, METH_O, _curses_window_color_set__doc__},
-
-static PyObject *
-_curses_window_color_set_impl(PyCursesWindowObject *self, int pair);
-
-static PyObject *
-_curses_window_color_set(PyObject *self, PyObject *arg)
-{
-    PyObject *return_value = NULL;
-    int pair;
-
-    if (!pair_converter(arg, &pair)) {
-        goto exit;
-    }
-    return_value = _curses_window_color_set_impl((PyCursesWindowObject *)self, pair);
-
-exit:
-    return return_value;
-}
-
-#endif /* defined(_Py_HAVE_CURSES_WCOLOR_SET) */
-
-PyDoc_STRVAR(_curses_window_getattrs__doc__,
-"getattrs($self, /)\n"
-"--\n"
-"\n"
-"Return the window\'s current attributes.");
-
-#define _CURSES_WINDOW_GETATTRS_METHODDEF    \
-    {"getattrs", (PyCFunction)_curses_window_getattrs, METH_NOARGS, _curses_window_getattrs__doc__},
-
-static PyObject *
-_curses_window_getattrs_impl(PyCursesWindowObject *self);
-
-static PyObject *
-_curses_window_getattrs(PyObject *self, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_window_getattrs_impl((PyCursesWindowObject *)self);
 }
 
 PyDoc_STRVAR(_curses_window_bkgdset__doc__,
-"bkgdset(ch, [attr])\n"
+"bkgdset($self, ch, attr=_curses.A_NORMAL, /)\n"
+"--\n"
+"\n"
 "Set the window\'s background.\n"
 "\n"
 "  ch\n"
@@ -710,35 +369,38 @@ PyDoc_STRVAR(_curses_window_bkgdset__doc__,
 
 static PyObject *
 _curses_window_bkgdset_impl(PyCursesWindowObject *self, PyObject *ch,
-                            int group_right_1, attr_t attr);
+                            long attr);
 
 static PyObject *
-_curses_window_bkgdset(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_bkgdset(PyCursesWindowObject *self, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
     PyObject *ch;
-    int group_right_1 = 0;
-    attr_t attr = 0;
+    long attr = A_NORMAL;
 
-    if (nargs < 1 || nargs > 2) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.bkgdset requires 1 to 2 arguments");
+    if (!_PyArg_CheckPositional("bkgdset", nargs, 1, 2)) {
         goto exit;
     }
     ch = args[0];
-    if (nargs >= 2) {
-        if (!attr_converter(args[1], &attr)) {
-            goto exit;
-        }
-        group_right_1 = 1;
+    if (nargs < 2) {
+        goto skip_optional;
     }
-    return_value = _curses_window_bkgdset_impl((PyCursesWindowObject *)self, ch, group_right_1, attr);
+    attr = PyLong_AsLong(args[1]);
+    if (attr == -1 && PyErr_Occurred()) {
+        goto exit;
+    }
+skip_optional:
+    return_value = _curses_window_bkgdset_impl(self, ch, attr);
 
 exit:
     return return_value;
 }
 
 PyDoc_STRVAR(_curses_window_border__doc__,
-"border($self, ls=0, rs=0, ts=0, bs=0, tl=0, tr=0, bl=0, br=0, /)\n"
+"border($self, ls=_curses.ACS_VLINE, rs=_curses.ACS_VLINE,\n"
+"       ts=_curses.ACS_HLINE, bs=_curses.ACS_HLINE,\n"
+"       tl=_curses.ACS_ULCORNER, tr=_curses.ACS_URCORNER,\n"
+"       bl=_curses.ACS_LLCORNER, br=_curses.ACS_LRCORNER, /)\n"
 "--\n"
 "\n"
 "Draw a border around the edges of the window.\n"
@@ -775,7 +437,7 @@ _curses_window_border_impl(PyCursesWindowObject *self, PyObject *ls,
                            PyObject *br);
 
 static PyObject *
-_curses_window_border(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_border(PyCursesWindowObject *self, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
     PyObject *ls = NULL;
@@ -823,7 +485,7 @@ _curses_window_border(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     }
     br = args[7];
 skip_optional:
-    return_value = _curses_window_border_impl((PyCursesWindowObject *)self, ls, rs, ts, bs, tl, tr, bl, br);
+    return_value = _curses_window_border_impl(self, ls, rs, ts, bs, tl, tr, bl, br);
 
 exit:
     return return_value;
@@ -843,111 +505,38 @@ PyDoc_STRVAR(_curses_window_box__doc__,
 "function.");
 
 #define _CURSES_WINDOW_BOX_METHODDEF    \
-    {"box", _PyCFunction_CAST(_curses_window_box), METH_FASTCALL, _curses_window_box__doc__},
+    {"box", (PyCFunction)_curses_window_box, METH_VARARGS, _curses_window_box__doc__},
 
 static PyObject *
 _curses_window_box_impl(PyCursesWindowObject *self, int group_right_1,
                         PyObject *verch, PyObject *horch);
 
 static PyObject *
-_curses_window_box(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_box(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_right_1 = 0;
     PyObject *verch = _PyLong_GetZero();
     PyObject *horch = _PyLong_GetZero();
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 0:
+            break;
         case 2:
+            if (!PyArg_ParseTuple(args, "OO:box", &verch, &horch)) {
+                goto exit;
+            }
+            group_right_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.window.box requires 0 to 2 arguments");
             goto exit;
     }
-    if (nargs >= 2) {
-        verch = args[0];
-        horch = args[1];
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_box_impl((PyCursesWindowObject *)self, group_right_1, verch, horch);
+    return_value = _curses_window_box_impl(self, group_right_1, verch, horch);
 
 exit:
     return return_value;
 }
-
-#if defined(HAVE_CURSES_WCHGAT)
-
-PyDoc_STRVAR(_curses_window_chgat__doc__,
-"chgat([y, x,] [n=-1,] attr)\n"
-"Set the attributes of characters.\n"
-"\n"
-"  y\n"
-"    Y-coordinate.\n"
-"  x\n"
-"    X-coordinate.\n"
-"  n\n"
-"    Number of characters.\n"
-"  attr\n"
-"    Attributes for characters.\n"
-"\n"
-"Set the attributes of n characters at the current cursor position,\n"
-"or at position (y, x) if supplied.  If no value of n is given or\n"
-"n = -1, the attribute will be set on all the characters to the end\n"
-"of the line.  This function does not move the cursor.  The changed\n"
-"line will be touched using the touchline() method so that the\n"
-"contents will be redisplayed by the next window refresh.");
-
-#define _CURSES_WINDOW_CHGAT_METHODDEF    \
-    {"chgat", _PyCFunction_CAST(_curses_window_chgat), METH_FASTCALL, _curses_window_chgat__doc__},
-
-static PyObject *
-_curses_window_chgat_impl(PyCursesWindowObject *self, int group_left_1,
-                          int y, int x, int group_left_2, int n, attr_t attr);
-
-static PyObject *
-_curses_window_chgat(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int group_left_1 = 0;
-    int y = 0;
-    int x = 0;
-    int group_left_2 = 0;
-    int n = -1;
-    attr_t attr;
-
-    if (nargs < 1 || nargs > 4) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.chgat requires 1 to 4 arguments");
-        goto exit;
-    }
-    if (nargs >= 3) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_left_1 = 1;
-    }
-    if (nargs == 2 || nargs == 4) {
-        n = PyLong_AsInt(args[nargs - 2]);
-        if (n == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_left_2 = 1;
-    }
-    if (!attr_converter(args[nargs - 1], &attr)) {
-        goto exit;
-    }
-    return_value = _curses_window_chgat_impl((PyCursesWindowObject *)self, group_left_1, y, x, group_left_2, n, attr);
-
-exit:
-    return return_value;
-}
-
-#endif /* defined(HAVE_CURSES_WCHGAT) */
 
 PyDoc_STRVAR(_curses_window_delch__doc__,
 "delch([y, x])\n"
@@ -962,40 +551,34 @@ PyDoc_STRVAR(_curses_window_delch__doc__,
 "position left.");
 
 #define _CURSES_WINDOW_DELCH_METHODDEF    \
-    {"delch", _PyCFunction_CAST(_curses_window_delch), METH_FASTCALL, _curses_window_delch__doc__},
+    {"delch", (PyCFunction)_curses_window_delch, METH_VARARGS, _curses_window_delch__doc__},
 
 static PyObject *
 _curses_window_delch_impl(PyCursesWindowObject *self, int group_right_1,
                           int y, int x);
 
 static PyObject *
-_curses_window_delch(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_delch(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_right_1 = 0;
     int y = 0;
     int x = 0;
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 0:
+            break;
         case 2:
+            if (!PyArg_ParseTuple(args, "ii:delch", &y, &x)) {
+                goto exit;
+            }
+            group_right_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.window.delch requires 0 to 2 arguments");
             goto exit;
     }
-    if (nargs >= 2) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_delch_impl((PyCursesWindowObject *)self, group_right_1, y, x);
+    return_value = _curses_window_delch_impl(self, group_right_1, y, x);
 
 exit:
     return return_value;
@@ -1019,14 +602,14 @@ PyDoc_STRVAR(_curses_window_derwin__doc__,
 "relative to the entire screen.");
 
 #define _CURSES_WINDOW_DERWIN_METHODDEF    \
-    {"derwin", _PyCFunction_CAST(_curses_window_derwin), METH_FASTCALL, _curses_window_derwin__doc__},
+    {"derwin", (PyCFunction)_curses_window_derwin, METH_VARARGS, _curses_window_derwin__doc__},
 
 static PyObject *
 _curses_window_derwin_impl(PyCursesWindowObject *self, int group_left_1,
                            int nlines, int ncols, int begin_y, int begin_x);
 
 static PyObject *
-_curses_window_derwin(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_derwin(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_left_1 = 0;
@@ -1035,63 +618,32 @@ _curses_window_derwin(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     int begin_y;
     int begin_x;
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 2:
+            if (!PyArg_ParseTuple(args, "ii:derwin", &begin_y, &begin_x)) {
+                goto exit;
+            }
+            break;
         case 4:
+            if (!PyArg_ParseTuple(args, "iiii:derwin", &nlines, &ncols, &begin_y, &begin_x)) {
+                goto exit;
+            }
+            group_left_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.window.derwin requires 2 to 4 arguments");
             goto exit;
     }
-    if (nargs >= 4) {
-        nlines = PyLong_AsInt(args[0]);
-        if (nlines == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        ncols = PyLong_AsInt(args[1]);
-        if (ncols == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_left_1 = 1;
-    }
-    begin_y = PyLong_AsInt(args[nargs - 2]);
-    if (begin_y == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    begin_x = PyLong_AsInt(args[nargs - 1]);
-    if (begin_x == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    return_value = _curses_window_derwin_impl((PyCursesWindowObject *)self, group_left_1, nlines, ncols, begin_y, begin_x);
+    return_value = _curses_window_derwin_impl(self, group_left_1, nlines, ncols, begin_y, begin_x);
 
 exit:
     return return_value;
 }
 
-PyDoc_STRVAR(_curses_window_dupwin__doc__,
-"dupwin($self, /)\n"
+PyDoc_STRVAR(_curses_window_echochar__doc__,
+"echochar($self, ch, attr=_curses.A_NORMAL, /)\n"
 "--\n"
 "\n"
-"Create an exact duplicate of the window.\n"
-"\n"
-"The new window is independent of the original: it has the same size,\n"
-"position, contents and attributes, but its own cell buffer, so later\n"
-"changes to one do not affect the other.");
-
-#define _CURSES_WINDOW_DUPWIN_METHODDEF    \
-    {"dupwin", (PyCFunction)_curses_window_dupwin, METH_NOARGS, _curses_window_dupwin__doc__},
-
-static PyObject *
-_curses_window_dupwin_impl(PyCursesWindowObject *self);
-
-static PyObject *
-_curses_window_dupwin(PyObject *self, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_window_dupwin_impl((PyCursesWindowObject *)self);
-}
-
-PyDoc_STRVAR(_curses_window_echochar__doc__,
-"echochar(ch, [attr])\n"
 "Add character ch with attribute attr, and refresh.\n"
 "\n"
 "  ch\n"
@@ -1104,28 +656,28 @@ PyDoc_STRVAR(_curses_window_echochar__doc__,
 
 static PyObject *
 _curses_window_echochar_impl(PyCursesWindowObject *self, PyObject *ch,
-                             int group_right_1, attr_t attr);
+                             long attr);
 
 static PyObject *
-_curses_window_echochar(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_echochar(PyCursesWindowObject *self, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
     PyObject *ch;
-    int group_right_1 = 0;
-    attr_t attr = 0;
+    long attr = A_NORMAL;
 
-    if (nargs < 1 || nargs > 2) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.echochar requires 1 to 2 arguments");
+    if (!_PyArg_CheckPositional("echochar", nargs, 1, 2)) {
         goto exit;
     }
     ch = args[0];
-    if (nargs >= 2) {
-        if (!attr_converter(args[1], &attr)) {
-            goto exit;
-        }
-        group_right_1 = 1;
+    if (nargs < 2) {
+        goto skip_optional;
     }
-    return_value = _curses_window_echochar_impl((PyCursesWindowObject *)self, ch, group_right_1, attr);
+    attr = PyLong_AsLong(args[1]);
+    if (attr == -1 && PyErr_Occurred()) {
+        goto exit;
+    }
+skip_optional:
+    return_value = _curses_window_echochar_impl(self, ch, attr);
 
 exit:
     return return_value;
@@ -1151,7 +703,7 @@ static PyObject *
 _curses_window_enclose_impl(PyCursesWindowObject *self, int y, int x);
 
 static PyObject *
-_curses_window_enclose(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_enclose(PyCursesWindowObject *self, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
     int y;
@@ -1168,64 +720,7 @@ _curses_window_enclose(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     if (x == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    return_value = _curses_window_enclose_impl((PyCursesWindowObject *)self, y, x);
-
-exit:
-    return return_value;
-}
-
-#endif /* (defined(HAVE_CURSES_GETMOUSE) || defined(PDCURSES)) */
-
-#if (defined(HAVE_CURSES_GETMOUSE) || defined(PDCURSES))
-
-PyDoc_STRVAR(_curses_window_mouse_trafo__doc__,
-"mouse_trafo($self, y, x, to_screen, /)\n"
-"--\n"
-"\n"
-"Convert coordinates between window-relative and screen-relative.\n"
-"\n"
-"  y\n"
-"    Y-coordinate.\n"
-"  x\n"
-"    X-coordinate.\n"
-"  to_screen\n"
-"    If True, convert window-relative coordinates to\n"
-"    stdscr-relative ones; otherwise convert the other way.\n"
-"\n"
-"Return the converted (y, x) coordinates, or None if they are\n"
-"outside the window.");
-
-#define _CURSES_WINDOW_MOUSE_TRAFO_METHODDEF    \
-    {"mouse_trafo", _PyCFunction_CAST(_curses_window_mouse_trafo), METH_FASTCALL, _curses_window_mouse_trafo__doc__},
-
-static PyObject *
-_curses_window_mouse_trafo_impl(PyCursesWindowObject *self, int y, int x,
-                                int to_screen);
-
-static PyObject *
-_curses_window_mouse_trafo(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int y;
-    int x;
-    int to_screen;
-
-    if (!_PyArg_CheckPositional("mouse_trafo", nargs, 3, 3)) {
-        goto exit;
-    }
-    y = PyLong_AsInt(args[0]);
-    if (y == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    x = PyLong_AsInt(args[1]);
-    if (x == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    to_screen = PyObject_IsTrue(args[2]);
-    if (to_screen < 0) {
-        goto exit;
-    }
-    return_value = _curses_window_mouse_trafo_impl((PyCursesWindowObject *)self, y, x, to_screen);
+    return_value = _curses_window_enclose_impl(self, y, x);
 
 exit:
     return return_value;
@@ -1242,83 +737,23 @@ PyDoc_STRVAR(_curses_window_getbkgd__doc__,
 #define _CURSES_WINDOW_GETBKGD_METHODDEF    \
     {"getbkgd", (PyCFunction)_curses_window_getbkgd, METH_NOARGS, _curses_window_getbkgd__doc__},
 
-static PyObject *
+static long
 _curses_window_getbkgd_impl(PyCursesWindowObject *self);
 
 static PyObject *
-_curses_window_getbkgd(PyObject *self, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_window_getbkgd_impl((PyCursesWindowObject *)self);
-}
-
-PyDoc_STRVAR(_curses_window_in_wch__doc__,
-"in_wch([y, x])\n"
-"Return the complex character at the given position in the window.\n"
-"\n"
-"  y\n"
-"    Y-coordinate.\n"
-"  x\n"
-"    X-coordinate.\n"
-"\n"
-"The returned object is a complexchar carrying the cell\'s text,\n"
-"attributes and color pair.");
-
-#define _CURSES_WINDOW_IN_WCH_METHODDEF    \
-    {"in_wch", _PyCFunction_CAST(_curses_window_in_wch), METH_FASTCALL, _curses_window_in_wch__doc__},
-
-static PyObject *
-_curses_window_in_wch_impl(PyCursesWindowObject *self, int group_right_1,
-                           int y, int x);
-
-static PyObject *
-_curses_window_in_wch(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_getbkgd(PyCursesWindowObject *self, PyObject *Py_UNUSED(ignored))
 {
     PyObject *return_value = NULL;
-    int group_right_1 = 0;
-    int y = 0;
-    int x = 0;
+    long _return_value;
 
-    switch (nargs) {
-        case 0:
-        case 2:
-            break;
-        default:
-            PyErr_SetString(PyExc_TypeError, "_curses.window.in_wch requires 0 to 2 arguments");
-            goto exit;
+    _return_value = _curses_window_getbkgd_impl(self);
+    if ((_return_value == -1) && PyErr_Occurred()) {
+        goto exit;
     }
-    if (nargs >= 2) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_in_wch_impl((PyCursesWindowObject *)self, group_right_1, y, x);
+    return_value = PyLong_FromLong(_return_value);
 
 exit:
     return return_value;
-}
-
-PyDoc_STRVAR(_curses_window_getbkgrnd__doc__,
-"getbkgrnd($self, /)\n"
-"--\n"
-"\n"
-"Return the window\'s current background complex character.");
-
-#define _CURSES_WINDOW_GETBKGRND_METHODDEF    \
-    {"getbkgrnd", (PyCFunction)_curses_window_getbkgrnd, METH_NOARGS, _curses_window_getbkgrnd__doc__},
-
-static PyObject *
-_curses_window_getbkgrnd_impl(PyCursesWindowObject *self);
-
-static PyObject *
-_curses_window_getbkgrnd(PyObject *self, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_window_getbkgrnd_impl((PyCursesWindowObject *)self);
 }
 
 PyDoc_STRVAR(_curses_window_getch__doc__,
@@ -1343,40 +778,34 @@ PyDoc_STRVAR(_curses_window_getch__doc__,
 "key.  Otherwise their bytes are returned one at a time.");
 
 #define _CURSES_WINDOW_GETCH_METHODDEF    \
-    {"getch", _PyCFunction_CAST(_curses_window_getch), METH_FASTCALL, _curses_window_getch__doc__},
+    {"getch", (PyCFunction)_curses_window_getch, METH_VARARGS, _curses_window_getch__doc__},
 
 static PyObject *
 _curses_window_getch_impl(PyCursesWindowObject *self, int group_right_1,
                           int y, int x);
 
 static PyObject *
-_curses_window_getch(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_getch(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_right_1 = 0;
     int y = 0;
     int x = 0;
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 0:
+            break;
         case 2:
+            if (!PyArg_ParseTuple(args, "ii:getch", &y, &x)) {
+                goto exit;
+            }
+            group_right_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.window.getch requires 0 to 2 arguments");
             goto exit;
     }
-    if (nargs >= 2) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_getch_impl((PyCursesWindowObject *)self, group_right_1, y, x);
+    return_value = _curses_window_getch_impl(self, group_right_1, y, x);
 
 exit:
     return return_value;
@@ -1397,44 +826,40 @@ PyDoc_STRVAR(_curses_window_getkey__doc__,
 "there is no input.");
 
 #define _CURSES_WINDOW_GETKEY_METHODDEF    \
-    {"getkey", _PyCFunction_CAST(_curses_window_getkey), METH_FASTCALL, _curses_window_getkey__doc__},
+    {"getkey", (PyCFunction)_curses_window_getkey, METH_VARARGS, _curses_window_getkey__doc__},
 
 static PyObject *
 _curses_window_getkey_impl(PyCursesWindowObject *self, int group_right_1,
                            int y, int x);
 
 static PyObject *
-_curses_window_getkey(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_getkey(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_right_1 = 0;
     int y = 0;
     int x = 0;
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 0:
+            break;
         case 2:
+            if (!PyArg_ParseTuple(args, "ii:getkey", &y, &x)) {
+                goto exit;
+            }
+            group_right_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.window.getkey requires 0 to 2 arguments");
             goto exit;
     }
-    if (nargs >= 2) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_getkey_impl((PyCursesWindowObject *)self, group_right_1, y, x);
+    return_value = _curses_window_getkey_impl(self, group_right_1, y, x);
 
 exit:
     return return_value;
 }
+
+#if defined(HAVE_NCURSESW)
 
 PyDoc_STRVAR(_curses_window_get_wch__doc__,
 "get_wch([y, x])\n"
@@ -1453,108 +878,43 @@ PyDoc_STRVAR(_curses_window_get_wch__doc__,
 "are returned one at a time.");
 
 #define _CURSES_WINDOW_GET_WCH_METHODDEF    \
-    {"get_wch", _PyCFunction_CAST(_curses_window_get_wch), METH_FASTCALL, _curses_window_get_wch__doc__},
+    {"get_wch", (PyCFunction)_curses_window_get_wch, METH_VARARGS, _curses_window_get_wch__doc__},
 
 static PyObject *
 _curses_window_get_wch_impl(PyCursesWindowObject *self, int group_right_1,
                             int y, int x);
 
 static PyObject *
-_curses_window_get_wch(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_get_wch(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_right_1 = 0;
     int y = 0;
     int x = 0;
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 0:
+            break;
         case 2:
+            if (!PyArg_ParseTuple(args, "ii:get_wch", &y, &x)) {
+                goto exit;
+            }
+            group_right_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.window.get_wch requires 0 to 2 arguments");
             goto exit;
     }
-    if (nargs >= 2) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_get_wch_impl((PyCursesWindowObject *)self, group_right_1, y, x);
+    return_value = _curses_window_get_wch_impl(self, group_right_1, y, x);
 
 exit:
     return return_value;
 }
 
-PyDoc_STRVAR(_curses_window_getstr__doc__,
-"getstr([y, x,] n=2047)\n"
-"Read a line of input and return it as a bytes object.\n"
-"\n"
-"  y\n"
-"    Y-coordinate.\n"
-"  x\n"
-"    X-coordinate.\n"
-"  n\n"
-"    Maximal number of bytes.\n"
-"\n"
-"The input is read with primitive line editing capacity, encoded in\n"
-"the current locale, and does not include the terminating newline.\n"
-"At most n bytes are read.");
-
-#define _CURSES_WINDOW_GETSTR_METHODDEF    \
-    {"getstr", _PyCFunction_CAST(_curses_window_getstr), METH_FASTCALL, _curses_window_getstr__doc__},
-
-static PyObject *
-_curses_window_getstr_impl(PyCursesWindowObject *self, int group_left_1,
-                           int y, int x, unsigned int n);
-
-static PyObject *
-_curses_window_getstr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int group_left_1 = 0;
-    int y = 0;
-    int x = 0;
-    unsigned int n = 2047;
-
-    Py_ssize_t offset = 0;
-    if (nargs > 3) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.getstr requires 0 to 3 arguments");
-        goto exit;
-    }
-    if (nargs >= 2) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        offset += 2;
-        group_left_1 = 1;
-    }
-    if (nargs <= offset) {
-        goto skip_optional;
-    }
-    if (!_PyLong_UnsignedInt_Converter(args[offset], &n)) {
-        goto exit;
-    }
-skip_optional:
-    return_value = _curses_window_getstr_impl((PyCursesWindowObject *)self, group_left_1, y, x, n);
-
-exit:
-    return return_value;
-}
+#endif /* defined(HAVE_NCURSESW) */
 
 PyDoc_STRVAR(_curses_window_hline__doc__,
-"hline([y, x,] ch, n, [attr])\n"
+"hline([y, x,] ch, n, [attr=_curses.A_NORMAL])\n"
 "Display a horizontal line.\n"
 "\n"
 "  y\n"
@@ -1569,15 +929,15 @@ PyDoc_STRVAR(_curses_window_hline__doc__,
 "    Attributes for the characters.");
 
 #define _CURSES_WINDOW_HLINE_METHODDEF    \
-    {"hline", _PyCFunction_CAST(_curses_window_hline), METH_FASTCALL, _curses_window_hline__doc__},
+    {"hline", (PyCFunction)_curses_window_hline, METH_VARARGS, _curses_window_hline__doc__},
 
 static PyObject *
 _curses_window_hline_impl(PyCursesWindowObject *self, int group_left_1,
                           int y, int x, PyObject *ch, int n,
-                          int group_right_1, attr_t attr);
+                          int group_right_1, long attr);
 
 static PyObject *
-_curses_window_hline(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_hline(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_left_1 = 0;
@@ -1586,44 +946,45 @@ _curses_window_hline(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     PyObject *ch;
     int n;
     int group_right_1 = 0;
-    attr_t attr = 0;
+    long attr = A_NORMAL;
 
-    Py_ssize_t offset = 0;
-    if (nargs < 2 || nargs > 5) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.hline requires 2 to 5 arguments");
-        goto exit;
-    }
-    if (nargs >= 4) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
+    switch (PyTuple_GET_SIZE(args)) {
+        case 2:
+            if (!PyArg_ParseTuple(args, "Oi:hline", &ch, &n)) {
+                goto exit;
+            }
+            break;
+        case 3:
+            if (!PyArg_ParseTuple(args, "Oil:hline", &ch, &n, &attr)) {
+                goto exit;
+            }
+            group_right_1 = 1;
+            break;
+        case 4:
+            if (!PyArg_ParseTuple(args, "iiOi:hline", &y, &x, &ch, &n)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            break;
+        case 5:
+            if (!PyArg_ParseTuple(args, "iiOil:hline", &y, &x, &ch, &n, &attr)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            group_right_1 = 1;
+            break;
+        default:
+            PyErr_SetString(PyExc_TypeError, "_curses.window.hline requires 2 to 5 arguments");
             goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        offset += 2;
-        group_left_1 = 1;
     }
-    ch = args[offset];
-    n = PyLong_AsInt(args[offset + 1]);
-    if (n == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    if (nargs == 3 || nargs == 5) {
-        if (!attr_converter(args[nargs - 1], &attr)) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_hline_impl((PyCursesWindowObject *)self, group_left_1, y, x, ch, n, group_right_1, attr);
+    return_value = _curses_window_hline_impl(self, group_left_1, y, x, ch, n, group_right_1, attr);
 
 exit:
     return return_value;
 }
 
 PyDoc_STRVAR(_curses_window_insch__doc__,
-"insch([y, x,] ch, [attr])\n"
+"insch([y, x,] ch, [attr=_curses.A_NORMAL])\n"
 "Insert a character before the current or specified position.\n"
 "\n"
 "  y\n"
@@ -1639,15 +1000,15 @@ PyDoc_STRVAR(_curses_window_insch__doc__,
 "right, with the rightmost characters on the line being lost.");
 
 #define _CURSES_WINDOW_INSCH_METHODDEF    \
-    {"insch", _PyCFunction_CAST(_curses_window_insch), METH_FASTCALL, _curses_window_insch__doc__},
+    {"insch", (PyCFunction)_curses_window_insch, METH_VARARGS, _curses_window_insch__doc__},
 
 static PyObject *
 _curses_window_insch_impl(PyCursesWindowObject *self, int group_left_1,
                           int y, int x, PyObject *ch, int group_right_1,
-                          attr_t attr);
+                          long attr);
 
 static PyObject *
-_curses_window_insch(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_insch(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_left_1 = 0;
@@ -1655,33 +1016,38 @@ _curses_window_insch(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     int x = 0;
     PyObject *ch;
     int group_right_1 = 0;
-    attr_t attr = 0;
+    long attr = A_NORMAL;
 
-    Py_ssize_t offset = 0;
-    if (nargs < 1 || nargs > 4) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.insch requires 1 to 4 arguments");
-        goto exit;
-    }
-    if (nargs >= 3) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
+    switch (PyTuple_GET_SIZE(args)) {
+        case 1:
+            if (!PyArg_ParseTuple(args, "O:insch", &ch)) {
+                goto exit;
+            }
+            break;
+        case 2:
+            if (!PyArg_ParseTuple(args, "Ol:insch", &ch, &attr)) {
+                goto exit;
+            }
+            group_right_1 = 1;
+            break;
+        case 3:
+            if (!PyArg_ParseTuple(args, "iiO:insch", &y, &x, &ch)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            break;
+        case 4:
+            if (!PyArg_ParseTuple(args, "iiOl:insch", &y, &x, &ch, &attr)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            group_right_1 = 1;
+            break;
+        default:
+            PyErr_SetString(PyExc_TypeError, "_curses.window.insch requires 1 to 4 arguments");
             goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        offset += 2;
-        group_left_1 = 1;
     }
-    ch = args[offset];
-    if (nargs == 2 || nargs == 4) {
-        if (!attr_converter(args[nargs - 1], &attr)) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_insch_impl((PyCursesWindowObject *)self, group_left_1, y, x, ch, group_right_1, attr);
+    return_value = _curses_window_insch_impl(self, group_left_1, y, x, ch, group_right_1, attr);
 
 exit:
     return return_value;
@@ -1700,283 +1066,39 @@ PyDoc_STRVAR(_curses_window_inch__doc__,
 "attributes.");
 
 #define _CURSES_WINDOW_INCH_METHODDEF    \
-    {"inch", _PyCFunction_CAST(_curses_window_inch), METH_FASTCALL, _curses_window_inch__doc__},
+    {"inch", (PyCFunction)_curses_window_inch, METH_VARARGS, _curses_window_inch__doc__},
 
-static PyObject *
+static unsigned long
 _curses_window_inch_impl(PyCursesWindowObject *self, int group_right_1,
                          int y, int x);
 
 static PyObject *
-_curses_window_inch(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_inch(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_right_1 = 0;
     int y = 0;
     int x = 0;
+    unsigned long _return_value;
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 0:
+            break;
         case 2:
+            if (!PyArg_ParseTuple(args, "ii:inch", &y, &x)) {
+                goto exit;
+            }
+            group_right_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.window.inch requires 0 to 2 arguments");
             goto exit;
     }
-    if (nargs >= 2) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_inch_impl((PyCursesWindowObject *)self, group_right_1, y, x);
-
-exit:
-    return return_value;
-}
-
-PyDoc_STRVAR(_curses_window_instr__doc__,
-"instr([y, x,] [n])\n"
-"Return the text of the window as a bytes object.\n"
-"\n"
-"  y\n"
-"    Y-coordinate.\n"
-"  x\n"
-"    X-coordinate.\n"
-"  n\n"
-"    Maximal number of bytes.  The rest of the line by default.\n"
-"\n"
-"Read from the current cursor position, or from y, x if specified, to\n"
-"the end of the line or at most n bytes if n is specified, and return\n"
-"the text in the encoding of the current locale, with attributes and\n"
-"color pairs stripped.");
-
-#define _CURSES_WINDOW_INSTR_METHODDEF    \
-    {"instr", _PyCFunction_CAST(_curses_window_instr), METH_FASTCALL, _curses_window_instr__doc__},
-
-static PyObject *
-_curses_window_instr_impl(PyCursesWindowObject *self, int group_right_1,
-                          int y, int x, int group_right_2, unsigned int n);
-
-static PyObject *
-_curses_window_instr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int group_right_1 = 0;
-    int y = 0;
-    int x = 0;
-    int group_right_2 = 0;
-    unsigned int n = 0;
-
-    if (nargs > 3) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.instr requires 0 to 3 arguments");
+    _return_value = _curses_window_inch_impl(self, group_right_1, y, x);
+    if ((_return_value == (unsigned long)-1) && PyErr_Occurred()) {
         goto exit;
     }
-    if (nargs >= 2) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    if (nargs == 1 || nargs == 3) {
-        if (!_PyLong_UnsignedInt_Converter(args[nargs - 1], &n)) {
-            goto exit;
-        }
-        group_right_2 = 1;
-    }
-    return_value = _curses_window_instr_impl((PyCursesWindowObject *)self, group_right_1, y, x, group_right_2, n);
-
-exit:
-    return return_value;
-}
-
-PyDoc_STRVAR(_curses_window_get_wstr__doc__,
-"get_wstr([y, x,] n=2047)\n"
-"Read a line of input and return it as a str.\n"
-"\n"
-"  y\n"
-"    Y-coordinate.\n"
-"  x\n"
-"    X-coordinate.\n"
-"  n\n"
-"    Maximal number of characters.\n"
-"\n"
-"This is the wide-character variant of getstr().  The input is read\n"
-"with primitive line editing capacity and does not include the\n"
-"terminating newline.  At most n characters are read.");
-
-#define _CURSES_WINDOW_GET_WSTR_METHODDEF    \
-    {"get_wstr", _PyCFunction_CAST(_curses_window_get_wstr), METH_FASTCALL, _curses_window_get_wstr__doc__},
-
-static PyObject *
-_curses_window_get_wstr_impl(PyCursesWindowObject *self, int group_left_1,
-                             int y, int x, unsigned int n);
-
-static PyObject *
-_curses_window_get_wstr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int group_left_1 = 0;
-    int y = 0;
-    int x = 0;
-    unsigned int n = 2047;
-
-    Py_ssize_t offset = 0;
-    if (nargs > 3) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.get_wstr requires 0 to 3 arguments");
-        goto exit;
-    }
-    if (nargs >= 2) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        offset += 2;
-        group_left_1 = 1;
-    }
-    if (nargs <= offset) {
-        goto skip_optional;
-    }
-    if (!_PyLong_UnsignedInt_Converter(args[offset], &n)) {
-        goto exit;
-    }
-skip_optional:
-    return_value = _curses_window_get_wstr_impl((PyCursesWindowObject *)self, group_left_1, y, x, n);
-
-exit:
-    return return_value;
-}
-
-PyDoc_STRVAR(_curses_window_in_wstr__doc__,
-"in_wstr([y, x,] [n])\n"
-"Return the text of the window as a str.\n"
-"\n"
-"  y\n"
-"    Y-coordinate.\n"
-"  x\n"
-"    X-coordinate.\n"
-"  n\n"
-"    Maximal number of characters.  The rest of the line by default.\n"
-"\n"
-"This is the wide-character variant of instr().  Read from the\n"
-"current cursor position, or from y, x if specified, to the end of\n"
-"the line or at most n characters if n is specified, with attributes\n"
-"and color pairs stripped.");
-
-#define _CURSES_WINDOW_IN_WSTR_METHODDEF    \
-    {"in_wstr", _PyCFunction_CAST(_curses_window_in_wstr), METH_FASTCALL, _curses_window_in_wstr__doc__},
-
-static PyObject *
-_curses_window_in_wstr_impl(PyCursesWindowObject *self, int group_right_1,
-                            int y, int x, int group_right_2, unsigned int n);
-
-static PyObject *
-_curses_window_in_wstr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int group_right_1 = 0;
-    int y = 0;
-    int x = 0;
-    int group_right_2 = 0;
-    unsigned int n = 0;
-
-    if (nargs > 3) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.in_wstr requires 0 to 3 arguments");
-        goto exit;
-    }
-    if (nargs >= 2) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    if (nargs == 1 || nargs == 3) {
-        if (!_PyLong_UnsignedInt_Converter(args[nargs - 1], &n)) {
-            goto exit;
-        }
-        group_right_2 = 1;
-    }
-    return_value = _curses_window_in_wstr_impl((PyCursesWindowObject *)self, group_right_1, y, x, group_right_2, n);
-
-exit:
-    return return_value;
-}
-
-PyDoc_STRVAR(_curses_window_in_wchstr__doc__,
-"in_wchstr([y, x,] [n])\n"
-"Return the styled cells of the window as a complexstr.\n"
-"\n"
-"  y\n"
-"    Y-coordinate.\n"
-"  x\n"
-"    X-coordinate.\n"
-"  n\n"
-"    Maximal number of cells.  The rest of the line by default.\n"
-"\n"
-"Read from the current cursor position, or from y, x if specified,\n"
-"to the end of the line or at most n cells if n is specified.\n"
-"Unlike instr() and in_wstr(), each cell keeps its attributes and\n"
-"color pair, so the result can be written back unchanged with\n"
-"addstr().");
-
-#define _CURSES_WINDOW_IN_WCHSTR_METHODDEF    \
-    {"in_wchstr", _PyCFunction_CAST(_curses_window_in_wchstr), METH_FASTCALL, _curses_window_in_wchstr__doc__},
-
-static PyObject *
-_curses_window_in_wchstr_impl(PyCursesWindowObject *self, int group_right_1,
-                              int y, int x, int group_right_2,
-                              unsigned int n);
-
-static PyObject *
-_curses_window_in_wchstr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int group_right_1 = 0;
-    int y = 0;
-    int x = 0;
-    int group_right_2 = 0;
-    unsigned int n = 0;
-
-    if (nargs > 3) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.in_wchstr requires 0 to 3 arguments");
-        goto exit;
-    }
-    if (nargs >= 2) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    if (nargs == 1 || nargs == 3) {
-        if (!_PyLong_UnsignedInt_Converter(args[nargs - 1], &n)) {
-            goto exit;
-        }
-        group_right_2 = 1;
-    }
-    return_value = _curses_window_in_wchstr_impl((PyCursesWindowObject *)self, group_right_1, y, x, group_right_2, n);
+    return_value = PyLong_FromUnsignedLong(_return_value);
 
 exit:
     return return_value;
@@ -2002,15 +1124,15 @@ PyDoc_STRVAR(_curses_window_insstr__doc__,
 "moving to y, x, if specified).");
 
 #define _CURSES_WINDOW_INSSTR_METHODDEF    \
-    {"insstr", _PyCFunction_CAST(_curses_window_insstr), METH_FASTCALL, _curses_window_insstr__doc__},
+    {"insstr", (PyCFunction)_curses_window_insstr, METH_VARARGS, _curses_window_insstr__doc__},
 
 static PyObject *
 _curses_window_insstr_impl(PyCursesWindowObject *self, int group_left_1,
                            int y, int x, PyObject *str, int group_right_1,
-                           attr_t attr);
+                           long attr);
 
 static PyObject *
-_curses_window_insstr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_insstr(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_left_1 = 0;
@@ -2018,33 +1140,38 @@ _curses_window_insstr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     int x = 0;
     PyObject *str;
     int group_right_1 = 0;
-    attr_t attr = 0;
+    long attr = 0;
 
-    Py_ssize_t offset = 0;
-    if (nargs < 1 || nargs > 4) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.insstr requires 1 to 4 arguments");
-        goto exit;
-    }
-    if (nargs >= 3) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
+    switch (PyTuple_GET_SIZE(args)) {
+        case 1:
+            if (!PyArg_ParseTuple(args, "O:insstr", &str)) {
+                goto exit;
+            }
+            break;
+        case 2:
+            if (!PyArg_ParseTuple(args, "Ol:insstr", &str, &attr)) {
+                goto exit;
+            }
+            group_right_1 = 1;
+            break;
+        case 3:
+            if (!PyArg_ParseTuple(args, "iiO:insstr", &y, &x, &str)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            break;
+        case 4:
+            if (!PyArg_ParseTuple(args, "iiOl:insstr", &y, &x, &str, &attr)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            group_right_1 = 1;
+            break;
+        default:
+            PyErr_SetString(PyExc_TypeError, "_curses.window.insstr requires 1 to 4 arguments");
             goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        offset += 2;
-        group_left_1 = 1;
     }
-    str = args[offset];
-    if (nargs == 2 || nargs == 4) {
-        if (!attr_converter(args[nargs - 1], &attr)) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_insstr_impl((PyCursesWindowObject *)self, group_left_1, y, x, str, group_right_1, attr);
+    return_value = _curses_window_insstr_impl(self, group_left_1, y, x, str, group_right_1, attr);
 
 exit:
     return return_value;
@@ -2073,15 +1200,15 @@ PyDoc_STRVAR(_curses_window_insnstr__doc__,
 "does not change (after moving to y, x, if specified).");
 
 #define _CURSES_WINDOW_INSNSTR_METHODDEF    \
-    {"insnstr", _PyCFunction_CAST(_curses_window_insnstr), METH_FASTCALL, _curses_window_insnstr__doc__},
+    {"insnstr", (PyCFunction)_curses_window_insnstr, METH_VARARGS, _curses_window_insnstr__doc__},
 
 static PyObject *
 _curses_window_insnstr_impl(PyCursesWindowObject *self, int group_left_1,
                             int y, int x, PyObject *str, int n,
-                            int group_right_1, attr_t attr);
+                            int group_right_1, long attr);
 
 static PyObject *
-_curses_window_insnstr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_insnstr(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_left_1 = 0;
@@ -2090,37 +1217,38 @@ _curses_window_insnstr(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     PyObject *str;
     int n;
     int group_right_1 = 0;
-    attr_t attr = 0;
+    long attr = 0;
 
-    Py_ssize_t offset = 0;
-    if (nargs < 2 || nargs > 5) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.insnstr requires 2 to 5 arguments");
-        goto exit;
-    }
-    if (nargs >= 4) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
+    switch (PyTuple_GET_SIZE(args)) {
+        case 2:
+            if (!PyArg_ParseTuple(args, "Oi:insnstr", &str, &n)) {
+                goto exit;
+            }
+            break;
+        case 3:
+            if (!PyArg_ParseTuple(args, "Oil:insnstr", &str, &n, &attr)) {
+                goto exit;
+            }
+            group_right_1 = 1;
+            break;
+        case 4:
+            if (!PyArg_ParseTuple(args, "iiOi:insnstr", &y, &x, &str, &n)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            break;
+        case 5:
+            if (!PyArg_ParseTuple(args, "iiOil:insnstr", &y, &x, &str, &n, &attr)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            group_right_1 = 1;
+            break;
+        default:
+            PyErr_SetString(PyExc_TypeError, "_curses.window.insnstr requires 2 to 5 arguments");
             goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        offset += 2;
-        group_left_1 = 1;
     }
-    str = args[offset];
-    n = PyLong_AsInt(args[offset + 1]);
-    if (n == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    if (nargs == 3 || nargs == 5) {
-        if (!attr_converter(args[nargs - 1], &attr)) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_insnstr_impl((PyCursesWindowObject *)self, group_left_1, y, x, str, n, group_right_1, attr);
+    return_value = _curses_window_insnstr_impl(self, group_left_1, y, x, str, n, group_right_1, attr);
 
 exit:
     return return_value;
@@ -2145,7 +1273,7 @@ static PyObject *
 _curses_window_is_linetouched_impl(PyCursesWindowObject *self, int line);
 
 static PyObject *
-_curses_window_is_linetouched(PyObject *self, PyObject *arg)
+_curses_window_is_linetouched(PyCursesWindowObject *self, PyObject *arg)
 {
     PyObject *return_value = NULL;
     int line;
@@ -2154,7 +1282,7 @@ _curses_window_is_linetouched(PyObject *self, PyObject *arg)
     if (line == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    return_value = _curses_window_is_linetouched_impl((PyCursesWindowObject *)self, line);
+    return_value = _curses_window_is_linetouched_impl(self, line);
 
 exit:
     return return_value;
@@ -2171,7 +1299,7 @@ PyDoc_STRVAR(_curses_window_noutrefresh__doc__,
 "screen.  To accomplish that, call doupdate().");
 
 #define _CURSES_WINDOW_NOUTREFRESH_METHODDEF    \
-    {"noutrefresh", _PyCFunction_CAST(_curses_window_noutrefresh), METH_FASTCALL, _curses_window_noutrefresh__doc__},
+    {"noutrefresh", (PyCFunction)_curses_window_noutrefresh, METH_VARARGS, _curses_window_noutrefresh__doc__},
 
 static PyObject *
 _curses_window_noutrefresh_impl(PyCursesWindowObject *self,
@@ -2180,7 +1308,7 @@ _curses_window_noutrefresh_impl(PyCursesWindowObject *self,
                                 int smaxcol);
 
 static PyObject *
-_curses_window_noutrefresh(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_noutrefresh(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_right_1 = 0;
@@ -2191,42 +1319,20 @@ _curses_window_noutrefresh(PyObject *self, PyObject *const *args, Py_ssize_t nar
     int smaxrow = 0;
     int smaxcol = 0;
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 0:
+            break;
         case 6:
+            if (!PyArg_ParseTuple(args, "iiiiii:noutrefresh", &pminrow, &pmincol, &sminrow, &smincol, &smaxrow, &smaxcol)) {
+                goto exit;
+            }
+            group_right_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.window.noutrefresh requires 0 to 6 arguments");
             goto exit;
     }
-    if (nargs >= 6) {
-        pminrow = PyLong_AsInt(args[0]);
-        if (pminrow == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        pmincol = PyLong_AsInt(args[1]);
-        if (pmincol == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        sminrow = PyLong_AsInt(args[2]);
-        if (sminrow == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        smincol = PyLong_AsInt(args[3]);
-        if (smincol == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        smaxrow = PyLong_AsInt(args[4]);
-        if (smaxrow == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        smaxcol = PyLong_AsInt(args[5]);
-        if (smaxcol == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_noutrefresh_impl((PyCursesWindowObject *)self, group_right_1, pminrow, pmincol, sminrow, smincol, smaxrow, smaxcol);
+    return_value = _curses_window_noutrefresh_impl(self, group_right_1, pminrow, pmincol, sminrow, smincol, smaxrow, smaxcol);
 
 exit:
     return return_value;
@@ -2253,9 +1359,9 @@ static PyObject *
 _curses_window_noutrefresh_impl(PyCursesWindowObject *self);
 
 static PyObject *
-_curses_window_noutrefresh(PyObject *self, PyObject *Py_UNUSED(ignored))
+_curses_window_noutrefresh(PyCursesWindowObject *self, PyObject *Py_UNUSED(ignored))
 {
-    return _curses_window_noutrefresh_impl((PyCursesWindowObject *)self);
+    return _curses_window_noutrefresh_impl(self);
 }
 
 #endif /* !defined(py_is_pad) */
@@ -2275,7 +1381,7 @@ PyDoc_STRVAR(_curses_window_overlay__doc__,
 "a rectangle in the destination window.");
 
 #define _CURSES_WINDOW_OVERLAY_METHODDEF    \
-    {"overlay", _PyCFunction_CAST(_curses_window_overlay), METH_FASTCALL, _curses_window_overlay__doc__},
+    {"overlay", (PyCFunction)_curses_window_overlay, METH_VARARGS, _curses_window_overlay__doc__},
 
 static PyObject *
 _curses_window_overlay_impl(PyCursesWindowObject *self,
@@ -2284,7 +1390,7 @@ _curses_window_overlay_impl(PyCursesWindowObject *self,
                             int dmincol, int dmaxrow, int dmaxcol);
 
 static PyObject *
-_curses_window_overlay(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_overlay(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     PyCursesWindowObject *destwin;
@@ -2296,47 +1402,23 @@ _curses_window_overlay(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     int dmaxrow = 0;
     int dmaxcol = 0;
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 1:
+            if (!PyArg_ParseTuple(args, "O!:overlay", &PyCursesWindow_Type, &destwin)) {
+                goto exit;
+            }
+            break;
         case 7:
+            if (!PyArg_ParseTuple(args, "O!iiiiii:overlay", &PyCursesWindow_Type, &destwin, &sminrow, &smincol, &dminrow, &dmincol, &dmaxrow, &dmaxcol)) {
+                goto exit;
+            }
+            group_right_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.window.overlay requires 1 to 7 arguments");
             goto exit;
     }
-    if (!PyObject_TypeCheck(args[0], clinic_state()->window_type)) {
-        _PyArg_BadArgument("overlay", "argument 1", (clinic_state()->window_type)->tp_name, args[0]);
-        goto exit;
-    }
-    destwin = (PyCursesWindowObject *)args[0];
-    if (nargs >= 7) {
-        sminrow = PyLong_AsInt(args[1]);
-        if (sminrow == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        smincol = PyLong_AsInt(args[2]);
-        if (smincol == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        dminrow = PyLong_AsInt(args[3]);
-        if (dminrow == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        dmincol = PyLong_AsInt(args[4]);
-        if (dmincol == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        dmaxrow = PyLong_AsInt(args[5]);
-        if (dmaxrow == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        dmaxcol = PyLong_AsInt(args[6]);
-        if (dmaxcol == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_overlay_impl((PyCursesWindowObject *)self, destwin, group_right_1, sminrow, smincol, dminrow, dmincol, dmaxrow, dmaxcol);
+    return_value = _curses_window_overlay_impl(self, destwin, group_right_1, sminrow, smincol, dminrow, dmincol, dmaxrow, dmaxcol);
 
 exit:
     return return_value;
@@ -2358,7 +1440,7 @@ PyDoc_STRVAR(_curses_window_overwrite__doc__,
 "a rectangle in the destination window.");
 
 #define _CURSES_WINDOW_OVERWRITE_METHODDEF    \
-    {"overwrite", _PyCFunction_CAST(_curses_window_overwrite), METH_FASTCALL, _curses_window_overwrite__doc__},
+    {"overwrite", (PyCFunction)_curses_window_overwrite, METH_VARARGS, _curses_window_overwrite__doc__},
 
 static PyObject *
 _curses_window_overwrite_impl(PyCursesWindowObject *self,
@@ -2368,7 +1450,7 @@ _curses_window_overwrite_impl(PyCursesWindowObject *self,
                               int dmaxcol);
 
 static PyObject *
-_curses_window_overwrite(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_overwrite(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     PyCursesWindowObject *destwin;
@@ -2380,47 +1462,23 @@ _curses_window_overwrite(PyObject *self, PyObject *const *args, Py_ssize_t nargs
     int dmaxrow = 0;
     int dmaxcol = 0;
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 1:
+            if (!PyArg_ParseTuple(args, "O!:overwrite", &PyCursesWindow_Type, &destwin)) {
+                goto exit;
+            }
+            break;
         case 7:
+            if (!PyArg_ParseTuple(args, "O!iiiiii:overwrite", &PyCursesWindow_Type, &destwin, &sminrow, &smincol, &dminrow, &dmincol, &dmaxrow, &dmaxcol)) {
+                goto exit;
+            }
+            group_right_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.window.overwrite requires 1 to 7 arguments");
             goto exit;
     }
-    if (!PyObject_TypeCheck(args[0], clinic_state()->window_type)) {
-        _PyArg_BadArgument("overwrite", "argument 1", (clinic_state()->window_type)->tp_name, args[0]);
-        goto exit;
-    }
-    destwin = (PyCursesWindowObject *)args[0];
-    if (nargs >= 7) {
-        sminrow = PyLong_AsInt(args[1]);
-        if (sminrow == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        smincol = PyLong_AsInt(args[2]);
-        if (smincol == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        dminrow = PyLong_AsInt(args[3]);
-        if (dminrow == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        dmincol = PyLong_AsInt(args[4]);
-        if (dmincol == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        dmaxrow = PyLong_AsInt(args[5]);
-        if (dmaxrow == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        dmaxcol = PyLong_AsInt(args[6]);
-        if (dmaxcol == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_overwrite_impl((PyCursesWindowObject *)self, destwin, group_right_1, sminrow, smincol, dminrow, dmincol, dmaxrow, dmaxcol);
+    return_value = _curses_window_overwrite_impl(self, destwin, group_right_1, sminrow, smincol, dminrow, dmincol, dmaxrow, dmaxcol);
 
 exit:
     return return_value;
@@ -2436,19 +1494,6 @@ PyDoc_STRVAR(_curses_window_putwin__doc__,
 
 #define _CURSES_WINDOW_PUTWIN_METHODDEF    \
     {"putwin", (PyCFunction)_curses_window_putwin, METH_O, _curses_window_putwin__doc__},
-
-static PyObject *
-_curses_window_putwin_impl(PyCursesWindowObject *self, PyObject *file);
-
-static PyObject *
-_curses_window_putwin(PyObject *self, PyObject *file)
-{
-    PyObject *return_value = NULL;
-
-    return_value = _curses_window_putwin_impl((PyCursesWindowObject *)self, file);
-
-    return return_value;
-}
 
 PyDoc_STRVAR(_curses_window_redrawln__doc__,
 "redrawln($self, beg, num, /)\n"
@@ -2470,7 +1515,7 @@ static PyObject *
 _curses_window_redrawln_impl(PyCursesWindowObject *self, int beg, int num);
 
 static PyObject *
-_curses_window_redrawln(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_redrawln(PyCursesWindowObject *self, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
     int beg;
@@ -2487,7 +1532,7 @@ _curses_window_redrawln(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     if (num == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    return_value = _curses_window_redrawln_impl((PyCursesWindowObject *)self, beg, num);
+    return_value = _curses_window_redrawln_impl(self, beg, num);
 
 exit:
     return return_value;
@@ -2511,7 +1556,7 @@ PyDoc_STRVAR(_curses_window_refresh__doc__,
 "pmincol, sminrow, or smincol are treated as if they were zero.");
 
 #define _CURSES_WINDOW_REFRESH_METHODDEF    \
-    {"refresh", _PyCFunction_CAST(_curses_window_refresh), METH_FASTCALL, _curses_window_refresh__doc__},
+    {"refresh", (PyCFunction)_curses_window_refresh, METH_VARARGS, _curses_window_refresh__doc__},
 
 static PyObject *
 _curses_window_refresh_impl(PyCursesWindowObject *self, int group_right_1,
@@ -2519,7 +1564,7 @@ _curses_window_refresh_impl(PyCursesWindowObject *self, int group_right_1,
                             int smincol, int smaxrow, int smaxcol);
 
 static PyObject *
-_curses_window_refresh(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_refresh(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_right_1 = 0;
@@ -2530,42 +1575,20 @@ _curses_window_refresh(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     int smaxrow = 0;
     int smaxcol = 0;
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 0:
+            break;
         case 6:
+            if (!PyArg_ParseTuple(args, "iiiiii:refresh", &pminrow, &pmincol, &sminrow, &smincol, &smaxrow, &smaxcol)) {
+                goto exit;
+            }
+            group_right_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.window.refresh requires 0 to 6 arguments");
             goto exit;
     }
-    if (nargs >= 6) {
-        pminrow = PyLong_AsInt(args[0]);
-        if (pminrow == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        pmincol = PyLong_AsInt(args[1]);
-        if (pmincol == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        sminrow = PyLong_AsInt(args[2]);
-        if (sminrow == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        smincol = PyLong_AsInt(args[3]);
-        if (smincol == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        smaxrow = PyLong_AsInt(args[4]);
-        if (smaxrow == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        smaxcol = PyLong_AsInt(args[5]);
-        if (smaxcol == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_refresh_impl((PyCursesWindowObject *)self, group_right_1, pminrow, pmincol, sminrow, smincol, smaxrow, smaxcol);
+    return_value = _curses_window_refresh_impl(self, group_right_1, pminrow, pmincol, sminrow, smincol, smaxrow, smaxcol);
 
 exit:
     return return_value;
@@ -2592,7 +1615,7 @@ _curses_window_setscrreg_impl(PyCursesWindowObject *self, int top,
                               int bottom);
 
 static PyObject *
-_curses_window_setscrreg(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_setscrreg(PyCursesWindowObject *self, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
     int top;
@@ -2609,7 +1632,7 @@ _curses_window_setscrreg(PyObject *self, PyObject *const *args, Py_ssize_t nargs
     if (bottom == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    return_value = _curses_window_setscrreg_impl((PyCursesWindowObject *)self, top, bottom);
+    return_value = _curses_window_setscrreg_impl(self, top, bottom);
 
 exit:
     return return_value;
@@ -2632,14 +1655,14 @@ PyDoc_STRVAR(_curses_window_subwin__doc__,
 "to the lower right corner of the window.");
 
 #define _CURSES_WINDOW_SUBWIN_METHODDEF    \
-    {"subwin", _PyCFunction_CAST(_curses_window_subwin), METH_FASTCALL, _curses_window_subwin__doc__},
+    {"subwin", (PyCFunction)_curses_window_subwin, METH_VARARGS, _curses_window_subwin__doc__},
 
 static PyObject *
 _curses_window_subwin_impl(PyCursesWindowObject *self, int group_left_1,
                            int nlines, int ncols, int begin_y, int begin_x);
 
 static PyObject *
-_curses_window_subwin(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_subwin(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_left_1 = 0;
@@ -2648,34 +1671,23 @@ _curses_window_subwin(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     int begin_y;
     int begin_x;
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 2:
+            if (!PyArg_ParseTuple(args, "ii:subwin", &begin_y, &begin_x)) {
+                goto exit;
+            }
+            break;
         case 4:
+            if (!PyArg_ParseTuple(args, "iiii:subwin", &nlines, &ncols, &begin_y, &begin_x)) {
+                goto exit;
+            }
+            group_left_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.window.subwin requires 2 to 4 arguments");
             goto exit;
     }
-    if (nargs >= 4) {
-        nlines = PyLong_AsInt(args[0]);
-        if (nlines == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        ncols = PyLong_AsInt(args[1]);
-        if (ncols == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_left_1 = 1;
-    }
-    begin_y = PyLong_AsInt(args[nargs - 2]);
-    if (begin_y == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    begin_x = PyLong_AsInt(args[nargs - 1]);
-    if (begin_x == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    return_value = _curses_window_subwin_impl((PyCursesWindowObject *)self, group_left_1, nlines, ncols, begin_y, begin_x);
+    return_value = _curses_window_subwin_impl(self, group_left_1, nlines, ncols, begin_y, begin_x);
 
 exit:
     return return_value;
@@ -2692,31 +1704,33 @@ PyDoc_STRVAR(_curses_window_scroll__doc__,
 "negative.");
 
 #define _CURSES_WINDOW_SCROLL_METHODDEF    \
-    {"scroll", _PyCFunction_CAST(_curses_window_scroll), METH_FASTCALL, _curses_window_scroll__doc__},
+    {"scroll", (PyCFunction)_curses_window_scroll, METH_VARARGS, _curses_window_scroll__doc__},
 
 static PyObject *
 _curses_window_scroll_impl(PyCursesWindowObject *self, int group_right_1,
                            int lines);
 
 static PyObject *
-_curses_window_scroll(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_scroll(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_right_1 = 0;
     int lines = 1;
 
-    if (nargs > 1) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.scroll requires 0 to 1 arguments");
-        goto exit;
-    }
-    if (nargs >= 1) {
-        lines = PyLong_AsInt(args[0]);
-        if (lines == -1 && PyErr_Occurred()) {
+    switch (PyTuple_GET_SIZE(args)) {
+        case 0:
+            break;
+        case 1:
+            if (!PyArg_ParseTuple(args, "i:scroll", &lines)) {
+                goto exit;
+            }
+            group_right_1 = 1;
+            break;
+        default:
+            PyErr_SetString(PyExc_TypeError, "_curses.window.scroll requires 0 to 1 arguments");
             goto exit;
-        }
-        group_right_1 = 1;
     }
-    return_value = _curses_window_scroll_impl((PyCursesWindowObject *)self, group_right_1, lines);
+    return_value = _curses_window_scroll_impl(self, group_right_1, lines);
 
 exit:
     return return_value;
@@ -2731,14 +1745,14 @@ PyDoc_STRVAR(_curses_window_touchline__doc__,
 "(changed=False).");
 
 #define _CURSES_WINDOW_TOUCHLINE_METHODDEF    \
-    {"touchline", _PyCFunction_CAST(_curses_window_touchline), METH_FASTCALL, _curses_window_touchline__doc__},
+    {"touchline", (PyCFunction)_curses_window_touchline, METH_VARARGS, _curses_window_touchline__doc__},
 
 static PyObject *
 _curses_window_touchline_impl(PyCursesWindowObject *self, int start,
                               int count, int group_right_1, int changed);
 
 static PyObject *
-_curses_window_touchline(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_touchline(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int start;
@@ -2746,33 +1760,30 @@ _curses_window_touchline(PyObject *self, PyObject *const *args, Py_ssize_t nargs
     int group_right_1 = 0;
     int changed = 1;
 
-    if (nargs < 2 || nargs > 3) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.touchline requires 2 to 3 arguments");
-        goto exit;
-    }
-    start = PyLong_AsInt(args[0]);
-    if (start == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    count = PyLong_AsInt(args[1]);
-    if (count == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    if (nargs >= 3) {
-        changed = PyObject_IsTrue(args[2]);
-        if (changed < 0) {
+    switch (PyTuple_GET_SIZE(args)) {
+        case 2:
+            if (!PyArg_ParseTuple(args, "ii:touchline", &start, &count)) {
+                goto exit;
+            }
+            break;
+        case 3:
+            if (!PyArg_ParseTuple(args, "iip:touchline", &start, &count, &changed)) {
+                goto exit;
+            }
+            group_right_1 = 1;
+            break;
+        default:
+            PyErr_SetString(PyExc_TypeError, "_curses.window.touchline requires 2 to 3 arguments");
             goto exit;
-        }
-        group_right_1 = 1;
     }
-    return_value = _curses_window_touchline_impl((PyCursesWindowObject *)self, start, count, group_right_1, changed);
+    return_value = _curses_window_touchline_impl(self, start, count, group_right_1, changed);
 
 exit:
     return return_value;
 }
 
 PyDoc_STRVAR(_curses_window_vline__doc__,
-"vline([y, x,] ch, n, [attr])\n"
+"vline([y, x,] ch, n, [attr=_curses.A_NORMAL])\n"
 "Display a vertical line.\n"
 "\n"
 "  y\n"
@@ -2787,15 +1798,15 @@ PyDoc_STRVAR(_curses_window_vline__doc__,
 "    Attributes for the character.");
 
 #define _CURSES_WINDOW_VLINE_METHODDEF    \
-    {"vline", _PyCFunction_CAST(_curses_window_vline), METH_FASTCALL, _curses_window_vline__doc__},
+    {"vline", (PyCFunction)_curses_window_vline, METH_VARARGS, _curses_window_vline__doc__},
 
 static PyObject *
 _curses_window_vline_impl(PyCursesWindowObject *self, int group_left_1,
                           int y, int x, PyObject *ch, int n,
-                          int group_right_1, attr_t attr);
+                          int group_right_1, long attr);
 
 static PyObject *
-_curses_window_vline(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
+_curses_window_vline(PyCursesWindowObject *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     int group_left_1 = 0;
@@ -2804,37 +1815,38 @@ _curses_window_vline(PyObject *self, PyObject *const *args, Py_ssize_t nargs)
     PyObject *ch;
     int n;
     int group_right_1 = 0;
-    attr_t attr = 0;
+    long attr = A_NORMAL;
 
-    Py_ssize_t offset = 0;
-    if (nargs < 2 || nargs > 5) {
-        PyErr_SetString(PyExc_TypeError, "_curses.window.vline requires 2 to 5 arguments");
-        goto exit;
-    }
-    if (nargs >= 4) {
-        y = PyLong_AsInt(args[0]);
-        if (y == -1 && PyErr_Occurred()) {
+    switch (PyTuple_GET_SIZE(args)) {
+        case 2:
+            if (!PyArg_ParseTuple(args, "Oi:vline", &ch, &n)) {
+                goto exit;
+            }
+            break;
+        case 3:
+            if (!PyArg_ParseTuple(args, "Oil:vline", &ch, &n, &attr)) {
+                goto exit;
+            }
+            group_right_1 = 1;
+            break;
+        case 4:
+            if (!PyArg_ParseTuple(args, "iiOi:vline", &y, &x, &ch, &n)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            break;
+        case 5:
+            if (!PyArg_ParseTuple(args, "iiOil:vline", &y, &x, &ch, &n, &attr)) {
+                goto exit;
+            }
+            group_left_1 = 1;
+            group_right_1 = 1;
+            break;
+        default:
+            PyErr_SetString(PyExc_TypeError, "_curses.window.vline requires 2 to 5 arguments");
             goto exit;
-        }
-        x = PyLong_AsInt(args[1]);
-        if (x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        offset += 2;
-        group_left_1 = 1;
     }
-    ch = args[offset];
-    n = PyLong_AsInt(args[offset + 1]);
-    if (n == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    if (nargs == 3 || nargs == 5) {
-        if (!attr_converter(args[nargs - 1], &attr)) {
-            goto exit;
-        }
-        group_right_1 = 1;
-    }
-    return_value = _curses_window_vline_impl((PyCursesWindowObject *)self, group_left_1, y, x, ch, n, group_right_1, attr);
+    return_value = _curses_window_vline_impl(self, group_left_1, y, x, ch, n, group_right_1, attr);
 
 exit:
     return return_value;
@@ -2866,32 +1878,6 @@ _curses_filter(PyObject *module, PyObject *Py_UNUSED(ignored))
 }
 
 #endif /* defined(HAVE_CURSES_FILTER) */
-
-#if defined(_Py_HAVE_CURSES_NOFILTER)
-
-PyDoc_STRVAR(_curses_nofilter__doc__,
-"nofilter($module, /)\n"
-"--\n"
-"\n"
-"Undo the effect of a preceding filter() call.\n"
-"\n"
-"Must be called before initscr().  It restores the normal behaviour that\n"
-"filter() disables, so that the next initscr() or newterm() uses the full\n"
-"screen rather than a single line.");
-
-#define _CURSES_NOFILTER_METHODDEF    \
-    {"nofilter", (PyCFunction)_curses_nofilter, METH_NOARGS, _curses_nofilter__doc__},
-
-static PyObject *
-_curses_nofilter_impl(PyObject *module);
-
-static PyObject *
-_curses_nofilter(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_nofilter_impl(module);
-}
-
-#endif /* defined(_Py_HAVE_CURSES_NOFILTER) */
 
 PyDoc_STRVAR(_curses_baudrate__doc__,
 "baudrate($module, /)\n"
@@ -2991,94 +1977,6 @@ skip_optional:
 exit:
     return return_value;
 }
-
-#if ((defined(NCURSES_EXT_FUNCS) && NCURSES_EXT_FUNCS >= 20240427) || defined(PDCURSES))
-
-PyDoc_STRVAR(_curses_is_cbreak__doc__,
-"is_cbreak($module, /)\n"
-"--\n"
-"\n"
-"Return True if cbreak mode is enabled, False otherwise.");
-
-#define _CURSES_IS_CBREAK_METHODDEF    \
-    {"is_cbreak", (PyCFunction)_curses_is_cbreak, METH_NOARGS, _curses_is_cbreak__doc__},
-
-static PyObject *
-_curses_is_cbreak_impl(PyObject *module);
-
-static PyObject *
-_curses_is_cbreak(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_is_cbreak_impl(module);
-}
-
-#endif /* ((defined(NCURSES_EXT_FUNCS) && NCURSES_EXT_FUNCS >= 20240427) || defined(PDCURSES)) */
-
-#if ((defined(NCURSES_EXT_FUNCS) && NCURSES_EXT_FUNCS >= 20240427) || defined(PDCURSES))
-
-PyDoc_STRVAR(_curses_is_echo__doc__,
-"is_echo($module, /)\n"
-"--\n"
-"\n"
-"Return True if echo mode is enabled, False otherwise.");
-
-#define _CURSES_IS_ECHO_METHODDEF    \
-    {"is_echo", (PyCFunction)_curses_is_echo, METH_NOARGS, _curses_is_echo__doc__},
-
-static PyObject *
-_curses_is_echo_impl(PyObject *module);
-
-static PyObject *
-_curses_is_echo(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_is_echo_impl(module);
-}
-
-#endif /* ((defined(NCURSES_EXT_FUNCS) && NCURSES_EXT_FUNCS >= 20240427) || defined(PDCURSES)) */
-
-#if ((defined(NCURSES_EXT_FUNCS) && NCURSES_EXT_FUNCS >= 20240427) || defined(PDCURSES))
-
-PyDoc_STRVAR(_curses_is_nl__doc__,
-"is_nl($module, /)\n"
-"--\n"
-"\n"
-"Return True if nl mode is enabled, False otherwise.");
-
-#define _CURSES_IS_NL_METHODDEF    \
-    {"is_nl", (PyCFunction)_curses_is_nl, METH_NOARGS, _curses_is_nl__doc__},
-
-static PyObject *
-_curses_is_nl_impl(PyObject *module);
-
-static PyObject *
-_curses_is_nl(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_is_nl_impl(module);
-}
-
-#endif /* ((defined(NCURSES_EXT_FUNCS) && NCURSES_EXT_FUNCS >= 20240427) || defined(PDCURSES)) */
-
-#if ((defined(NCURSES_EXT_FUNCS) && NCURSES_EXT_FUNCS >= 20240427) || defined(PDCURSES))
-
-PyDoc_STRVAR(_curses_is_raw__doc__,
-"is_raw($module, /)\n"
-"--\n"
-"\n"
-"Return True if raw mode is enabled, False otherwise.");
-
-#define _CURSES_IS_RAW_METHODDEF    \
-    {"is_raw", (PyCFunction)_curses_is_raw, METH_NOARGS, _curses_is_raw__doc__},
-
-static PyObject *
-_curses_is_raw_impl(PyObject *module);
-
-static PyObject *
-_curses_is_raw(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_is_raw_impl(module);
-}
-
-#endif /* ((defined(NCURSES_EXT_FUNCS) && NCURSES_EXT_FUNCS >= 20240427) || defined(PDCURSES)) */
 
 PyDoc_STRVAR(_curses_color_content__doc__,
 "color_content($module, color_number, /)\n"
@@ -3356,24 +2254,6 @@ _curses_erasechar(PyObject *module, PyObject *Py_UNUSED(ignored))
     return _curses_erasechar_impl(module);
 }
 
-PyDoc_STRVAR(_curses_erasewchar__doc__,
-"erasewchar($module, /)\n"
-"--\n"
-"\n"
-"Return the user\'s current wide-character erase character.");
-
-#define _CURSES_ERASEWCHAR_METHODDEF    \
-    {"erasewchar", (PyCFunction)_curses_erasewchar, METH_NOARGS, _curses_erasewchar__doc__},
-
-static PyObject *
-_curses_erasewchar_impl(PyObject *module);
-
-static PyObject *
-_curses_erasewchar(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_erasewchar_impl(module);
-}
-
 PyDoc_STRVAR(_curses_flash__doc__,
 "flash($module, /)\n"
 "--\n"
@@ -3526,26 +2406,11 @@ _curses_ungetmouse(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     if (z == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    if (!PyIndex_Check(args[4])) {
+    if (!PyLong_Check(args[4])) {
         _PyArg_BadArgument("ungetmouse", "argument 5", "int", args[4]);
         goto exit;
     }
-    {
-        Py_ssize_t _bytes = PyLong_AsNativeBytes(args[4], &bstate, sizeof(unsigned long),
-                Py_ASNATIVEBYTES_NATIVE_ENDIAN |
-                Py_ASNATIVEBYTES_ALLOW_INDEX |
-                Py_ASNATIVEBYTES_UNSIGNED_BUFFER);
-        if (_bytes < 0) {
-            goto exit;
-        }
-        if ((size_t)_bytes > sizeof(unsigned long)) {
-            if (PyErr_WarnEx(PyExc_DeprecationWarning,
-                "integer value out of range", 1) < 0)
-            {
-                goto exit;
-            }
-        }
-    }
+    bstate = PyLong_AsUnsignedLongMask(args[4]);
     return_value = _curses_ungetmouse_impl(module, id, x, y, z, bstate);
 
 exit:
@@ -3565,81 +2430,6 @@ PyDoc_STRVAR(_curses_getwin__doc__,
 
 #define _CURSES_GETWIN_METHODDEF    \
     {"getwin", (PyCFunction)_curses_getwin, METH_O, _curses_getwin__doc__},
-
-#if defined(_Py_HAVE_CURSES_SCR_DUMP)
-
-PyDoc_STRVAR(_curses_scr_dump__doc__,
-"scr_dump($module, filename, /)\n"
-"--\n"
-"\n"
-"Write the current contents of the virtual screen to a file.\n"
-"\n"
-"  filename\n"
-"    The file to write to.\n"
-"\n"
-"The file can later be used to restore the screen with scr_restore(),\n"
-"scr_init() or scr_set().");
-
-#define _CURSES_SCR_DUMP_METHODDEF    \
-    {"scr_dump", (PyCFunction)_curses_scr_dump, METH_O, _curses_scr_dump__doc__},
-
-#endif /* defined(_Py_HAVE_CURSES_SCR_DUMP) */
-
-#if defined(_Py_HAVE_CURSES_SCR_DUMP)
-
-PyDoc_STRVAR(_curses_scr_restore__doc__,
-"scr_restore($module, filename, /)\n"
-"--\n"
-"\n"
-"Set the virtual screen to the contents of a file made by scr_dump().\n"
-"\n"
-"  filename\n"
-"    The file to read from.\n"
-"\n"
-"The next call to doupdate() or refresh() restores the screen to those\n"
-"contents.");
-
-#define _CURSES_SCR_RESTORE_METHODDEF    \
-    {"scr_restore", (PyCFunction)_curses_scr_restore, METH_O, _curses_scr_restore__doc__},
-
-#endif /* defined(_Py_HAVE_CURSES_SCR_DUMP) */
-
-#if defined(_Py_HAVE_CURSES_SCR_DUMP)
-
-PyDoc_STRVAR(_curses_scr_init__doc__,
-"scr_init($module, filename, /)\n"
-"--\n"
-"\n"
-"Initialize the assumed terminal contents from a scr_dump() file.\n"
-"\n"
-"  filename\n"
-"    The file to read from.\n"
-"\n"
-"Use it as what the terminal currently displays, for example after\n"
-"another program has drawn the screen.");
-
-#define _CURSES_SCR_INIT_METHODDEF    \
-    {"scr_init", (PyCFunction)_curses_scr_init, METH_O, _curses_scr_init__doc__},
-
-#endif /* defined(_Py_HAVE_CURSES_SCR_DUMP) */
-
-#if defined(_Py_HAVE_CURSES_SCR_DUMP) && defined(_Py_HAVE_CURSES_SCR_SET)
-
-PyDoc_STRVAR(_curses_scr_set__doc__,
-"scr_set($module, filename, /)\n"
-"--\n"
-"\n"
-"Use a scr_dump() file as both the virtual screen and the terminal.\n"
-"\n"
-"  filename\n"
-"    The file to read from.\n"
-"\n"
-"This combines the effects of scr_restore() and scr_init().");
-
-#define _CURSES_SCR_SET_METHODDEF    \
-    {"scr_set", (PyCFunction)_curses_scr_set, METH_O, _curses_scr_set__doc__},
-
-#endif /* defined(_Py_HAVE_CURSES_SCR_DUMP) && defined(_Py_HAVE_CURSES_SCR_SET) */
 
 PyDoc_STRVAR(_curses_halfdelay__doc__,
 "halfdelay($module, tenths, /)\n"
@@ -3778,151 +2568,6 @@ exit:
 
 #endif /* defined(HAVE_CURSES_HAS_KEY) */
 
-#if defined(_Py_HAVE_CURSES_DEFINE_KEY)
-
-PyDoc_STRVAR(_curses_define_key__doc__,
-"define_key($module, definition, keycode, /)\n"
-"--\n"
-"\n"
-"Define an escape sequence for a key code.\n"
-"\n"
-"  definition\n"
-"    Escape sequence to bind, or None to remove a binding.\n"
-"  keycode\n"
-"    Key code to generate.\n"
-"\n"
-"If definition is None, any existing binding for keycode is removed.\n"
-"If keycode is zero or negative, the binding for definition is removed.");
-
-#define _CURSES_DEFINE_KEY_METHODDEF    \
-    {"define_key", _PyCFunction_CAST(_curses_define_key), METH_FASTCALL, _curses_define_key__doc__},
-
-static PyObject *
-_curses_define_key_impl(PyObject *module, const char *definition,
-                        int keycode);
-
-static PyObject *
-_curses_define_key(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    const char *definition;
-    int keycode;
-
-    if (!_PyArg_CheckPositional("define_key", nargs, 2, 2)) {
-        goto exit;
-    }
-    if (args[0] == Py_None) {
-        definition = NULL;
-    }
-    else if (PyUnicode_Check(args[0])) {
-        definition = _PyUnicode_AsUTF8NoNUL(args[0]);
-        if (definition == NULL) {
-            goto exit;
-        }
-    }
-    else {
-        _PyArg_BadArgument("define_key", "argument 1", "str or None", args[0]);
-        goto exit;
-    }
-    keycode = PyLong_AsInt(args[1]);
-    if (keycode == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    return_value = _curses_define_key_impl(module, definition, keycode);
-
-exit:
-    return return_value;
-}
-
-#endif /* defined(_Py_HAVE_CURSES_DEFINE_KEY) */
-
-#if defined(_Py_HAVE_CURSES_KEY_DEFINED)
-
-PyDoc_STRVAR(_curses_key_defined__doc__,
-"key_defined($module, definition, /)\n"
-"--\n"
-"\n"
-"Return the key code bound to an escape sequence.\n"
-"\n"
-"  definition\n"
-"    Escape sequence.\n"
-"\n"
-"Return 0 if no key code is bound to the escape sequence, or -1 if the\n"
-"escape sequence is a prefix of another bound sequence (so ambiguous).");
-
-#define _CURSES_KEY_DEFINED_METHODDEF    \
-    {"key_defined", (PyCFunction)_curses_key_defined, METH_O, _curses_key_defined__doc__},
-
-static PyObject *
-_curses_key_defined_impl(PyObject *module, const char *definition);
-
-static PyObject *
-_curses_key_defined(PyObject *module, PyObject *arg)
-{
-    PyObject *return_value = NULL;
-    const char *definition;
-
-    if (!PyUnicode_Check(arg)) {
-        _PyArg_BadArgument("key_defined", "argument", "str", arg);
-        goto exit;
-    }
-    definition = _PyUnicode_AsUTF8NoNUL(arg);
-    if (definition == NULL) {
-        goto exit;
-    }
-    return_value = _curses_key_defined_impl(module, definition);
-
-exit:
-    return return_value;
-}
-
-#endif /* defined(_Py_HAVE_CURSES_KEY_DEFINED) */
-
-#if defined(_Py_HAVE_CURSES_KEYOK)
-
-PyDoc_STRVAR(_curses_keyok__doc__,
-"keyok($module, keycode, enable, /)\n"
-"--\n"
-"\n"
-"Enable or disable interpretation of an individual key code.\n"
-"\n"
-"  keycode\n"
-"    Key code.\n"
-"  enable\n"
-"    Whether the key code is interpreted.");
-
-#define _CURSES_KEYOK_METHODDEF    \
-    {"keyok", _PyCFunction_CAST(_curses_keyok), METH_FASTCALL, _curses_keyok__doc__},
-
-static PyObject *
-_curses_keyok_impl(PyObject *module, int keycode, int enable);
-
-static PyObject *
-_curses_keyok(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int keycode;
-    int enable;
-
-    if (!_PyArg_CheckPositional("keyok", nargs, 2, 2)) {
-        goto exit;
-    }
-    keycode = PyLong_AsInt(args[0]);
-    if (keycode == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    enable = PyObject_IsTrue(args[1]);
-    if (enable < 0) {
-        goto exit;
-    }
-    return_value = _curses_keyok_impl(module, keycode, enable);
-
-exit:
-    return return_value;
-}
-
-#endif /* defined(_Py_HAVE_CURSES_KEYOK) */
-
 PyDoc_STRVAR(_curses_init_color__doc__,
 "init_color($module, color_number, r, g, b, /)\n"
 "--\n"
@@ -4028,161 +2673,13 @@ exit:
     return return_value;
 }
 
-#if (_NCURSES_EXTENDED_COLOR_FUNCS)
-
-PyDoc_STRVAR(_curses_alloc_pair__doc__,
-"alloc_pair($module, fg, bg, /)\n"
-"--\n"
-"\n"
-"Allocate a color pair for the given foreground and background colors.\n"
-"\n"
-"  fg\n"
-"    Foreground color number.\n"
-"  bg\n"
-"    Background color number.\n"
-"\n"
-"If a color pair for the same colors already exists, return its number.\n"
-"Otherwise allocate a new color pair and return its number.");
-
-#define _CURSES_ALLOC_PAIR_METHODDEF    \
-    {"alloc_pair", _PyCFunction_CAST(_curses_alloc_pair), METH_FASTCALL, _curses_alloc_pair__doc__},
-
-static PyObject *
-_curses_alloc_pair_impl(PyObject *module, int fg, int bg);
-
-static PyObject *
-_curses_alloc_pair(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int fg;
-    int bg;
-
-    if (!_PyArg_CheckPositional("alloc_pair", nargs, 2, 2)) {
-        goto exit;
-    }
-    if (!color_allow_default_converter(args[0], &fg)) {
-        goto exit;
-    }
-    if (!color_allow_default_converter(args[1], &bg)) {
-        goto exit;
-    }
-    return_value = _curses_alloc_pair_impl(module, fg, bg);
-
-exit:
-    return return_value;
-}
-
-#endif /* (_NCURSES_EXTENDED_COLOR_FUNCS) */
-
-#if (_NCURSES_EXTENDED_COLOR_FUNCS)
-
-PyDoc_STRVAR(_curses_find_pair__doc__,
-"find_pair($module, fg, bg, /)\n"
-"--\n"
-"\n"
-"Return the number of a color pair for the given colors, or -1.\n"
-"\n"
-"  fg\n"
-"    Foreground color number.\n"
-"  bg\n"
-"    Background color number.\n"
-"\n"
-"Return -1 if no color pair for this combination of foreground and\n"
-"background colors has been allocated.");
-
-#define _CURSES_FIND_PAIR_METHODDEF    \
-    {"find_pair", _PyCFunction_CAST(_curses_find_pair), METH_FASTCALL, _curses_find_pair__doc__},
-
-static PyObject *
-_curses_find_pair_impl(PyObject *module, int fg, int bg);
-
-static PyObject *
-_curses_find_pair(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int fg;
-    int bg;
-
-    if (!_PyArg_CheckPositional("find_pair", nargs, 2, 2)) {
-        goto exit;
-    }
-    if (!color_allow_default_converter(args[0], &fg)) {
-        goto exit;
-    }
-    if (!color_allow_default_converter(args[1], &bg)) {
-        goto exit;
-    }
-    return_value = _curses_find_pair_impl(module, fg, bg);
-
-exit:
-    return return_value;
-}
-
-#endif /* (_NCURSES_EXTENDED_COLOR_FUNCS) */
-
-#if (_NCURSES_EXTENDED_COLOR_FUNCS)
-
-PyDoc_STRVAR(_curses_free_pair__doc__,
-"free_pair($module, pair, /)\n"
-"--\n"
-"\n"
-"Free a color pair allocated by alloc_pair().\n"
-"\n"
-"  pair\n"
-"    The number of the color pair to free.");
-
-#define _CURSES_FREE_PAIR_METHODDEF    \
-    {"free_pair", (PyCFunction)_curses_free_pair, METH_O, _curses_free_pair__doc__},
-
-static PyObject *
-_curses_free_pair_impl(PyObject *module, int pair);
-
-static PyObject *
-_curses_free_pair(PyObject *module, PyObject *arg)
-{
-    PyObject *return_value = NULL;
-    int pair;
-
-    if (!pair_converter(arg, &pair)) {
-        goto exit;
-    }
-    return_value = _curses_free_pair_impl(module, pair);
-
-exit:
-    return return_value;
-}
-
-#endif /* (_NCURSES_EXTENDED_COLOR_FUNCS) */
-
-#if (_NCURSES_EXTENDED_COLOR_FUNCS)
-
-PyDoc_STRVAR(_curses_reset_color_pairs__doc__,
-"reset_color_pairs($module, /)\n"
-"--\n"
-"\n"
-"Discard all color-pair definitions.");
-
-#define _CURSES_RESET_COLOR_PAIRS_METHODDEF    \
-    {"reset_color_pairs", (PyCFunction)_curses_reset_color_pairs, METH_NOARGS, _curses_reset_color_pairs__doc__},
-
-static PyObject *
-_curses_reset_color_pairs_impl(PyObject *module);
-
-static PyObject *
-_curses_reset_color_pairs(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_reset_color_pairs_impl(module);
-}
-
-#endif /* (_NCURSES_EXTENDED_COLOR_FUNCS) */
-
 PyDoc_STRVAR(_curses_initscr__doc__,
 "initscr($module, /)\n"
 "--\n"
 "\n"
 "Initialize the library.\n"
 "\n"
-"Return a window object which represents the whole screen.");
+"Return a WindowObject which represents the whole screen.");
 
 #define _CURSES_INITSCR_METHODDEF    \
     {"initscr", (PyCFunction)_curses_initscr, METH_NOARGS, _curses_initscr__doc__},
@@ -4225,11 +2722,9 @@ _curses_setupterm(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyO
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
         .ob_item = { &_Py_ID(term), &_Py_ID(fd), },
     };
     #undef NUM_KEYWORDS
@@ -4251,8 +2746,7 @@ _curses_setupterm(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyO
     const char *term = NULL;
     int fd = -1;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 0, /*maxpos*/ 2, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 0, 2, 0, argsbuf);
     if (!args) {
         goto exit;
     }
@@ -4264,8 +2758,13 @@ _curses_setupterm(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyO
             term = NULL;
         }
         else if (PyUnicode_Check(args[0])) {
-            term = _PyUnicode_AsUTF8NoNUL(args[0]);
+            Py_ssize_t term_length;
+            term = PyUnicode_AsUTF8AndSize(args[0], &term_length);
             if (term == NULL) {
+                goto exit;
+            }
+            if (strlen(term) != (size_t)term_length) {
+                PyErr_SetString(PyExc_ValueError, "embedded null character");
                 goto exit;
             }
         }
@@ -4287,107 +2786,6 @@ skip_optional_pos:
 exit:
     return return_value;
 }
-
-PyDoc_STRVAR(_curses_newterm__doc__,
-"newterm($module, type=None, fd=None, infd=None, /)\n"
-"--\n"
-"\n"
-"Return a new screen for the terminal, in addition to the initial screen.\n"
-"\n"
-"  type\n"
-"    Terminal name; if None, the TERM environment variable is used.\n"
-"  fd\n"
-"    Output file object or descriptor (default: sys.stdout).\n"
-"  infd\n"
-"    Input file object or descriptor (default: sys.stdin).\n"
-"\n"
-"This is an alternative to initscr() for programs running on more than\n"
-"one terminal.  Use set_term() to switch between the screens.");
-
-#define _CURSES_NEWTERM_METHODDEF    \
-    {"newterm", _PyCFunction_CAST(_curses_newterm), METH_FASTCALL, _curses_newterm__doc__},
-
-static PyObject *
-_curses_newterm_impl(PyObject *module, const char *type, PyObject *fd,
-                     PyObject *infd);
-
-static PyObject *
-_curses_newterm(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    const char *type = NULL;
-    PyObject *fd = Py_None;
-    PyObject *infd = Py_None;
-
-    if (!_PyArg_CheckPositional("newterm", nargs, 0, 3)) {
-        goto exit;
-    }
-    if (nargs < 1) {
-        goto skip_optional;
-    }
-    if (args[0] == Py_None) {
-        type = NULL;
-    }
-    else if (PyUnicode_Check(args[0])) {
-        type = _PyUnicode_AsUTF8NoNUL(args[0]);
-        if (type == NULL) {
-            goto exit;
-        }
-    }
-    else {
-        _PyArg_BadArgument("newterm", "argument 1", "str or None", args[0]);
-        goto exit;
-    }
-    if (nargs < 2) {
-        goto skip_optional;
-    }
-    fd = args[1];
-    if (nargs < 3) {
-        goto skip_optional;
-    }
-    infd = args[2];
-skip_optional:
-    return_value = _curses_newterm_impl(module, type, fd, infd);
-
-exit:
-    return return_value;
-}
-
-PyDoc_STRVAR(_curses_set_term__doc__,
-"set_term($module, screen, /)\n"
-"--\n"
-"\n"
-"Switch to the given screen and return the previously current screen.\n"
-"\n"
-"Returns None if the previous screen was the one created by initscr().");
-
-#define _CURSES_SET_TERM_METHODDEF    \
-    {"set_term", (PyCFunction)_curses_set_term, METH_O, _curses_set_term__doc__},
-
-#if defined(_Py_HAVE_CURSES_NEW_PRESCR)
-
-PyDoc_STRVAR(_curses_new_prescr__doc__,
-"new_prescr($module, /)\n"
-"--\n"
-"\n"
-"Create a screen and return it, without initializing a terminal.\n"
-"\n"
-"The screen can be used to call functions that affect the screen before\n"
-"calling newterm() or initscr().");
-
-#define _CURSES_NEW_PRESCR_METHODDEF    \
-    {"new_prescr", (PyCFunction)_curses_new_prescr, METH_NOARGS, _curses_new_prescr__doc__},
-
-static PyObject *
-_curses_new_prescr_impl(PyObject *module);
-
-static PyObject *
-_curses_new_prescr(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_new_prescr_impl(module);
-}
-
-#endif /* defined(_Py_HAVE_CURSES_NEW_PRESCR) */
 
 #if defined(HAVE_CURSES_ESCDELAY)
 
@@ -4661,24 +3059,6 @@ _curses_killchar(PyObject *module, PyObject *Py_UNUSED(ignored))
     return _curses_killchar_impl(module);
 }
 
-PyDoc_STRVAR(_curses_killwchar__doc__,
-"killwchar($module, /)\n"
-"--\n"
-"\n"
-"Return the user\'s current wide-character line kill character.");
-
-#define _CURSES_KILLWCHAR_METHODDEF    \
-    {"killwchar", (PyCFunction)_curses_killwchar, METH_NOARGS, _curses_killwchar__doc__},
-
-static PyObject *
-_curses_killwchar_impl(PyObject *module);
-
-static PyObject *
-_curses_killwchar(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_killwchar_impl(module);
-}
-
 PyDoc_STRVAR(_curses_longname__doc__,
 "longname($module, /)\n"
 "--\n"
@@ -4730,28 +3110,6 @@ _curses_meta(PyObject *module, PyObject *arg)
 exit:
     return return_value;
 }
-
-#if (defined(HAVE_CURSES_GETMOUSE) || defined(PDCURSES)) && (defined(_Py_HAVE_CURSES_HAS_MOUSE) || defined(PDCURSES))
-
-PyDoc_STRVAR(_curses_has_mouse__doc__,
-"has_mouse($module, /)\n"
-"--\n"
-"\n"
-"Return True if the mouse driver has been successfully initialized.");
-
-#define _CURSES_HAS_MOUSE_METHODDEF    \
-    {"has_mouse", (PyCFunction)_curses_has_mouse, METH_NOARGS, _curses_has_mouse__doc__},
-
-static PyObject *
-_curses_has_mouse_impl(PyObject *module);
-
-static PyObject *
-_curses_has_mouse(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_has_mouse_impl(module);
-}
-
-#endif /* (defined(HAVE_CURSES_GETMOUSE) || defined(PDCURSES)) && (defined(_Py_HAVE_CURSES_HAS_MOUSE) || defined(PDCURSES)) */
 
 #if (defined(HAVE_CURSES_GETMOUSE) || defined(PDCURSES))
 
@@ -4817,26 +3175,11 @@ _curses_mousemask(PyObject *module, PyObject *arg)
     PyObject *return_value = NULL;
     unsigned long newmask;
 
-    if (!PyIndex_Check(arg)) {
+    if (!PyLong_Check(arg)) {
         _PyArg_BadArgument("mousemask", "argument", "int", arg);
         goto exit;
     }
-    {
-        Py_ssize_t _bytes = PyLong_AsNativeBytes(arg, &newmask, sizeof(unsigned long),
-                Py_ASNATIVEBYTES_NATIVE_ENDIAN |
-                Py_ASNATIVEBYTES_ALLOW_INDEX |
-                Py_ASNATIVEBYTES_UNSIGNED_BUFFER);
-        if (_bytes < 0) {
-            goto exit;
-        }
-        if ((size_t)_bytes > sizeof(unsigned long)) {
-            if (PyErr_WarnEx(PyExc_DeprecationWarning,
-                "integer value out of range", 1) < 0)
-            {
-                goto exit;
-            }
-        }
-    }
+    newmask = PyLong_AsUnsignedLongMask(arg);
     return_value = _curses_mousemask_impl(module, newmask);
 
 exit:
@@ -4939,14 +3282,14 @@ PyDoc_STRVAR(_curses_newwin__doc__,
 "lower right corner of the screen.");
 
 #define _CURSES_NEWWIN_METHODDEF    \
-    {"newwin", _PyCFunction_CAST(_curses_newwin), METH_FASTCALL, _curses_newwin__doc__},
+    {"newwin", (PyCFunction)_curses_newwin, METH_VARARGS, _curses_newwin__doc__},
 
 static PyObject *
 _curses_newwin_impl(PyObject *module, int nlines, int ncols,
                     int group_right_1, int begin_y, int begin_x);
 
 static PyObject *
-_curses_newwin(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+_curses_newwin(PyObject *module, PyObject *args)
 {
     PyObject *return_value = NULL;
     int nlines;
@@ -4955,32 +3298,21 @@ _curses_newwin(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     int begin_y = 0;
     int begin_x = 0;
 
-    switch (nargs) {
+    switch (PyTuple_GET_SIZE(args)) {
         case 2:
+            if (!PyArg_ParseTuple(args, "ii:newwin", &nlines, &ncols)) {
+                goto exit;
+            }
+            break;
         case 4:
+            if (!PyArg_ParseTuple(args, "iiii:newwin", &nlines, &ncols, &begin_y, &begin_x)) {
+                goto exit;
+            }
+            group_right_1 = 1;
             break;
         default:
             PyErr_SetString(PyExc_TypeError, "_curses.newwin requires 2 to 4 arguments");
             goto exit;
-    }
-    nlines = PyLong_AsInt(args[0]);
-    if (nlines == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    ncols = PyLong_AsInt(args[1]);
-    if (ncols == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    if (nargs >= 4) {
-        begin_y = PyLong_AsInt(args[2]);
-        if (begin_y == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        begin_x = PyLong_AsInt(args[3]);
-        if (begin_x == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_1 = 1;
     }
     return_value = _curses_newwin_impl(module, nlines, ncols, group_right_1, begin_y, begin_x);
 
@@ -5174,15 +3506,16 @@ PyDoc_STRVAR(_curses_pair_number__doc__,
     {"pair_number", (PyCFunction)_curses_pair_number, METH_O, _curses_pair_number__doc__},
 
 static PyObject *
-_curses_pair_number_impl(PyObject *module, attr_t attr);
+_curses_pair_number_impl(PyObject *module, int attr);
 
 static PyObject *
 _curses_pair_number(PyObject *module, PyObject *arg)
 {
     PyObject *return_value = NULL;
-    attr_t attr;
+    int attr;
 
-    if (!attr_converter(arg, &attr)) {
+    attr = PyLong_AsInt(arg);
+    if (attr == -1 && PyErr_Occurred()) {
         goto exit;
     }
     return_value = _curses_pair_number_impl(module, attr);
@@ -5261,6 +3594,8 @@ exit:
     return return_value;
 }
 
+#if (defined(HAVE_CURSES_RESIZETERM) || defined(HAVE_CURSES_RESIZE_TERM))
+
 PyDoc_STRVAR(_curses_update_lines_cols__doc__,
 "update_lines_cols($module, /)\n"
 "--\n"
@@ -5280,6 +3615,8 @@ _curses_update_lines_cols(PyObject *module, PyObject *Py_UNUSED(ignored))
 {
     return _curses_update_lines_cols_impl(module);
 }
+
+#endif /* (defined(HAVE_CURSES_RESIZETERM) || defined(HAVE_CURSES_RESIZE_TERM)) */
 
 PyDoc_STRVAR(_curses_raw__doc__,
 "raw($module, flag=True, /)\n"
@@ -5645,31 +3982,6 @@ _curses_termattrs(PyObject *module, PyObject *Py_UNUSED(ignored))
     return _curses_termattrs_impl(module);
 }
 
-#if defined(_Py_HAVE_CURSES_TERM_ATTRS)
-
-PyDoc_STRVAR(_curses_term_attrs__doc__,
-"term_attrs($module, /)\n"
-"--\n"
-"\n"
-"Return a logical OR of all video attributes supported by the terminal.\n"
-"\n"
-"The attributes are WA_* values, the extended-attribute counterparts of\n"
-"the A_* values returned by termattrs().");
-
-#define _CURSES_TERM_ATTRS_METHODDEF    \
-    {"term_attrs", (PyCFunction)_curses_term_attrs, METH_NOARGS, _curses_term_attrs__doc__},
-
-static PyObject *
-_curses_term_attrs_impl(PyObject *module);
-
-static PyObject *
-_curses_term_attrs(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_term_attrs_impl(module);
-}
-
-#endif /* defined(_Py_HAVE_CURSES_TERM_ATTRS) */
-
 PyDoc_STRVAR(_curses_termname__doc__,
 "termname($module, /)\n"
 "--\n"
@@ -5716,8 +4028,13 @@ _curses_tigetflag(PyObject *module, PyObject *arg)
         _PyArg_BadArgument("tigetflag", "argument", "str", arg);
         goto exit;
     }
-    capname = _PyUnicode_AsUTF8NoNUL(arg);
+    Py_ssize_t capname_length;
+    capname = PyUnicode_AsUTF8AndSize(arg, &capname_length);
     if (capname == NULL) {
+        goto exit;
+    }
+    if (strlen(capname) != (size_t)capname_length) {
+        PyErr_SetString(PyExc_ValueError, "embedded null character");
         goto exit;
     }
     return_value = _curses_tigetflag_impl(module, capname);
@@ -5754,8 +4071,13 @@ _curses_tigetnum(PyObject *module, PyObject *arg)
         _PyArg_BadArgument("tigetnum", "argument", "str", arg);
         goto exit;
     }
-    capname = _PyUnicode_AsUTF8NoNUL(arg);
+    Py_ssize_t capname_length;
+    capname = PyUnicode_AsUTF8AndSize(arg, &capname_length);
     if (capname == NULL) {
+        goto exit;
+    }
+    if (strlen(capname) != (size_t)capname_length) {
+        PyErr_SetString(PyExc_ValueError, "embedded null character");
         goto exit;
     }
     return_value = _curses_tigetnum_impl(module, capname);
@@ -5792,8 +4114,13 @@ _curses_tigetstr(PyObject *module, PyObject *arg)
         _PyArg_BadArgument("tigetstr", "argument", "str", arg);
         goto exit;
     }
-    capname = _PyUnicode_AsUTF8NoNUL(arg);
+    Py_ssize_t capname_length;
+    capname = PyUnicode_AsUTF8AndSize(arg, &capname_length);
     if (capname == NULL) {
+        goto exit;
+    }
+    if (strlen(capname) != (size_t)capname_length) {
+        PyErr_SetString(PyExc_ValueError, "embedded null character");
         goto exit;
     }
     return_value = _curses_tigetstr_impl(module, capname);
@@ -5834,7 +4161,7 @@ _curses_tparm(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     int i8 = 0;
     int i9 = 0;
 
-    if (!PyArg_ParseArray(args, nargs, "y|iiiiiiiii:tparm",
+    if (!_PyArg_ParseStack(args, nargs, "y|iiiiiiiii:tparm",
         &str, &i1, &i2, &i3, &i4, &i5, &i6, &i7, &i8, &i9)) {
         goto exit;
     }
@@ -5889,23 +4216,10 @@ PyDoc_STRVAR(_curses_unctrl__doc__,
 "\n"
 "Control characters are displayed as a caret followed by the\n"
 "character, for example as ^C.  Printing characters are left as they\n"
-"are.  Any attributes and color pair are ignored.  ch must fit in a\n"
-"single byte; use wunctrl() for other characters.");
+"are.  Any attributes and color pair are ignored.");
 
 #define _CURSES_UNCTRL_METHODDEF    \
     {"unctrl", (PyCFunction)_curses_unctrl, METH_O, _curses_unctrl__doc__},
-
-PyDoc_STRVAR(_curses_wunctrl__doc__,
-"wunctrl($module, ch, /)\n"
-"--\n"
-"\n"
-"Return a printable representation of the wide character ch.\n"
-"\n"
-"Control characters are displayed as a caret followed by the character,\n"
-"for example as ^C.  Printing characters are left as they are.");
-
-#define _CURSES_WUNCTRL_METHODDEF    \
-    {"wunctrl", (PyCFunction)_curses_wunctrl, METH_O, _curses_wunctrl__doc__},
 
 PyDoc_STRVAR(_curses_ungetch__doc__,
 "ungetch($module, ch, /)\n"
@@ -5916,6 +4230,8 @@ PyDoc_STRVAR(_curses_ungetch__doc__,
 #define _CURSES_UNGETCH_METHODDEF    \
     {"ungetch", (PyCFunction)_curses_ungetch, METH_O, _curses_ungetch__doc__},
 
+#if defined(HAVE_NCURSESW)
+
 PyDoc_STRVAR(_curses_unget_wch__doc__,
 "unget_wch($module, ch, /)\n"
 "--\n"
@@ -5925,459 +4241,7 @@ PyDoc_STRVAR(_curses_unget_wch__doc__,
 #define _CURSES_UNGET_WCH_METHODDEF    \
     {"unget_wch", (PyCFunction)_curses_unget_wch, METH_O, _curses_unget_wch__doc__},
 
-PyDoc_STRVAR(_curses_slk_init__doc__,
-"slk_init($module, fmt=0, /)\n"
-"--\n"
-"\n"
-"Reserve a line for soft labels and choose their layout.\n"
-"\n"
-"  fmt\n"
-"    Label layout: 0 = 3-2-3, 1 = 4-4 (8 labels each); 2 = 4-4-4,\n"
-"    3 = 4-4-4 with an index line (12 labels each, ncurses extensions).\n"
-"\n"
-"Must be called before initscr() or newterm().");
-
-#define _CURSES_SLK_INIT_METHODDEF    \
-    {"slk_init", _PyCFunction_CAST(_curses_slk_init), METH_FASTCALL, _curses_slk_init__doc__},
-
-static PyObject *
-_curses_slk_init_impl(PyObject *module, int fmt);
-
-static PyObject *
-_curses_slk_init(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int fmt = 0;
-
-    if (!_PyArg_CheckPositional("slk_init", nargs, 0, 1)) {
-        goto exit;
-    }
-    if (nargs < 1) {
-        goto skip_optional;
-    }
-    fmt = PyLong_AsInt(args[0]);
-    if (fmt == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-skip_optional:
-    return_value = _curses_slk_init_impl(module, fmt);
-
-exit:
-    return return_value;
-}
-
-PyDoc_STRVAR(_curses_slk_set__doc__,
-"slk_set($module, labnum, label, justify=0, /)\n"
-"--\n"
-"\n"
-"Set the text of a soft label.\n"
-"\n"
-"  labnum\n"
-"    The label number (1 to 8, or 1 to 12 in a 12-label layout).\n"
-"  label\n"
-"    The text to display.\n"
-"  justify\n"
-"    0 = left, 1 = center, 2 = right.");
-
-#define _CURSES_SLK_SET_METHODDEF    \
-    {"slk_set", _PyCFunction_CAST(_curses_slk_set), METH_FASTCALL, _curses_slk_set__doc__},
-
-static PyObject *
-_curses_slk_set_impl(PyObject *module, int labnum, PyObject *label,
-                     int justify);
-
-static PyObject *
-_curses_slk_set(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int labnum;
-    PyObject *label;
-    int justify = 0;
-
-    if (!_PyArg_CheckPositional("slk_set", nargs, 2, 3)) {
-        goto exit;
-    }
-    labnum = PyLong_AsInt(args[0]);
-    if (labnum == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    if (!PyUnicode_Check(args[1])) {
-        _PyArg_BadArgument("slk_set", "argument 2", "str", args[1]);
-        goto exit;
-    }
-    label = args[1];
-    if (nargs < 3) {
-        goto skip_optional;
-    }
-    justify = PyLong_AsInt(args[2]);
-    if (justify == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-skip_optional:
-    return_value = _curses_slk_set_impl(module, labnum, label, justify);
-
-exit:
-    return return_value;
-}
-
-PyDoc_STRVAR(_curses_slk_label__doc__,
-"slk_label($module, labnum, /)\n"
-"--\n"
-"\n"
-"Return the current text of a soft label.\n"
-"\n"
-"  labnum\n"
-"    The label number.");
-
-#define _CURSES_SLK_LABEL_METHODDEF    \
-    {"slk_label", (PyCFunction)_curses_slk_label, METH_O, _curses_slk_label__doc__},
-
-static PyObject *
-_curses_slk_label_impl(PyObject *module, int labnum);
-
-static PyObject *
-_curses_slk_label(PyObject *module, PyObject *arg)
-{
-    PyObject *return_value = NULL;
-    int labnum;
-
-    labnum = PyLong_AsInt(arg);
-    if (labnum == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    return_value = _curses_slk_label_impl(module, labnum);
-
-exit:
-    return return_value;
-}
-
-PyDoc_STRVAR(_curses_slk_refresh__doc__,
-"slk_refresh($module, /)\n"
-"--\n"
-"\n"
-"Update the soft labels on the screen.");
-
-#define _CURSES_SLK_REFRESH_METHODDEF    \
-    {"slk_refresh", (PyCFunction)_curses_slk_refresh, METH_NOARGS, _curses_slk_refresh__doc__},
-
-static PyObject *
-_curses_slk_refresh_impl(PyObject *module);
-
-static PyObject *
-_curses_slk_refresh(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_slk_refresh_impl(module);
-}
-
-PyDoc_STRVAR(_curses_slk_noutrefresh__doc__,
-"slk_noutrefresh($module, /)\n"
-"--\n"
-"\n"
-"Update the soft labels on the virtual screen only.");
-
-#define _CURSES_SLK_NOUTREFRESH_METHODDEF    \
-    {"slk_noutrefresh", (PyCFunction)_curses_slk_noutrefresh, METH_NOARGS, _curses_slk_noutrefresh__doc__},
-
-static PyObject *
-_curses_slk_noutrefresh_impl(PyObject *module);
-
-static PyObject *
-_curses_slk_noutrefresh(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_slk_noutrefresh_impl(module);
-}
-
-PyDoc_STRVAR(_curses_slk_clear__doc__,
-"slk_clear($module, /)\n"
-"--\n"
-"\n"
-"Erase the soft labels from the screen.");
-
-#define _CURSES_SLK_CLEAR_METHODDEF    \
-    {"slk_clear", (PyCFunction)_curses_slk_clear, METH_NOARGS, _curses_slk_clear__doc__},
-
-static PyObject *
-_curses_slk_clear_impl(PyObject *module);
-
-static PyObject *
-_curses_slk_clear(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_slk_clear_impl(module);
-}
-
-PyDoc_STRVAR(_curses_slk_restore__doc__,
-"slk_restore($module, /)\n"
-"--\n"
-"\n"
-"Restore the soft labels after a preceding slk_clear().");
-
-#define _CURSES_SLK_RESTORE_METHODDEF    \
-    {"slk_restore", (PyCFunction)_curses_slk_restore, METH_NOARGS, _curses_slk_restore__doc__},
-
-static PyObject *
-_curses_slk_restore_impl(PyObject *module);
-
-static PyObject *
-_curses_slk_restore(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_slk_restore_impl(module);
-}
-
-PyDoc_STRVAR(_curses_slk_touch__doc__,
-"slk_touch($module, /)\n"
-"--\n"
-"\n"
-"Force the soft labels to be redrawn by the next slk_refresh().");
-
-#define _CURSES_SLK_TOUCH_METHODDEF    \
-    {"slk_touch", (PyCFunction)_curses_slk_touch, METH_NOARGS, _curses_slk_touch__doc__},
-
-static PyObject *
-_curses_slk_touch_impl(PyObject *module);
-
-static PyObject *
-_curses_slk_touch(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_slk_touch_impl(module);
-}
-
-PyDoc_STRVAR(_curses_slk_attron__doc__,
-"slk_attron($module, attr, /)\n"
-"--\n"
-"\n"
-"Add the given chtype attributes to the soft labels.");
-
-#define _CURSES_SLK_ATTRON_METHODDEF    \
-    {"slk_attron", (PyCFunction)_curses_slk_attron, METH_O, _curses_slk_attron__doc__},
-
-static PyObject *
-_curses_slk_attron_impl(PyObject *module, attr_t attr);
-
-static PyObject *
-_curses_slk_attron(PyObject *module, PyObject *arg)
-{
-    PyObject *return_value = NULL;
-    attr_t attr;
-
-    if (!attr_converter(arg, &attr)) {
-        goto exit;
-    }
-    return_value = _curses_slk_attron_impl(module, attr);
-
-exit:
-    return return_value;
-}
-
-PyDoc_STRVAR(_curses_slk_attroff__doc__,
-"slk_attroff($module, attr, /)\n"
-"--\n"
-"\n"
-"Remove the given chtype attributes from the soft labels.");
-
-#define _CURSES_SLK_ATTROFF_METHODDEF    \
-    {"slk_attroff", (PyCFunction)_curses_slk_attroff, METH_O, _curses_slk_attroff__doc__},
-
-static PyObject *
-_curses_slk_attroff_impl(PyObject *module, attr_t attr);
-
-static PyObject *
-_curses_slk_attroff(PyObject *module, PyObject *arg)
-{
-    PyObject *return_value = NULL;
-    attr_t attr;
-
-    if (!attr_converter(arg, &attr)) {
-        goto exit;
-    }
-    return_value = _curses_slk_attroff_impl(module, attr);
-
-exit:
-    return return_value;
-}
-
-PyDoc_STRVAR(_curses_slk_attrset__doc__,
-"slk_attrset($module, attr, /)\n"
-"--\n"
-"\n"
-"Set the chtype attributes of the soft labels.");
-
-#define _CURSES_SLK_ATTRSET_METHODDEF    \
-    {"slk_attrset", (PyCFunction)_curses_slk_attrset, METH_O, _curses_slk_attrset__doc__},
-
-static PyObject *
-_curses_slk_attrset_impl(PyObject *module, attr_t attr);
-
-static PyObject *
-_curses_slk_attrset(PyObject *module, PyObject *arg)
-{
-    PyObject *return_value = NULL;
-    attr_t attr;
-
-    if (!attr_converter(arg, &attr)) {
-        goto exit;
-    }
-    return_value = _curses_slk_attrset_impl(module, attr);
-
-exit:
-    return return_value;
-}
-
-#if (defined(NCURSES_EXT_FUNCS) || defined(PDCURSES))
-
-PyDoc_STRVAR(_curses_slk_attr__doc__,
-"slk_attr($module, /)\n"
-"--\n"
-"\n"
-"Return the current chtype attributes of the soft labels.");
-
-#define _CURSES_SLK_ATTR_METHODDEF    \
-    {"slk_attr", (PyCFunction)_curses_slk_attr, METH_NOARGS, _curses_slk_attr__doc__},
-
-static PyObject *
-_curses_slk_attr_impl(PyObject *module);
-
-static PyObject *
-_curses_slk_attr(PyObject *module, PyObject *Py_UNUSED(ignored))
-{
-    return _curses_slk_attr_impl(module);
-}
-
-#endif /* (defined(NCURSES_EXT_FUNCS) || defined(PDCURSES)) */
-
-#if defined(_Py_HAVE_CURSES_SLK_ATTR_ON)
-
-PyDoc_STRVAR(_curses_slk_attr_on__doc__,
-"slk_attr_on($module, attr, /)\n"
-"--\n"
-"\n"
-"Turn on attributes of the soft labels without affecting others.");
-
-#define _CURSES_SLK_ATTR_ON_METHODDEF    \
-    {"slk_attr_on", (PyCFunction)_curses_slk_attr_on, METH_O, _curses_slk_attr_on__doc__},
-
-static PyObject *
-_curses_slk_attr_on_impl(PyObject *module, attr_t attr);
-
-static PyObject *
-_curses_slk_attr_on(PyObject *module, PyObject *arg)
-{
-    PyObject *return_value = NULL;
-    attr_t attr;
-
-    if (!attr_converter(arg, &attr)) {
-        goto exit;
-    }
-    return_value = _curses_slk_attr_on_impl(module, attr);
-
-exit:
-    return return_value;
-}
-
-#endif /* defined(_Py_HAVE_CURSES_SLK_ATTR_ON) */
-
-#if defined(_Py_HAVE_CURSES_SLK_ATTR_OFF)
-
-PyDoc_STRVAR(_curses_slk_attr_off__doc__,
-"slk_attr_off($module, attr, /)\n"
-"--\n"
-"\n"
-"Turn off attributes of the soft labels without affecting others.");
-
-#define _CURSES_SLK_ATTR_OFF_METHODDEF    \
-    {"slk_attr_off", (PyCFunction)_curses_slk_attr_off, METH_O, _curses_slk_attr_off__doc__},
-
-static PyObject *
-_curses_slk_attr_off_impl(PyObject *module, attr_t attr);
-
-static PyObject *
-_curses_slk_attr_off(PyObject *module, PyObject *arg)
-{
-    PyObject *return_value = NULL;
-    attr_t attr;
-
-    if (!attr_converter(arg, &attr)) {
-        goto exit;
-    }
-    return_value = _curses_slk_attr_off_impl(module, attr);
-
-exit:
-    return return_value;
-}
-
-#endif /* defined(_Py_HAVE_CURSES_SLK_ATTR_OFF) */
-
-#if defined(_Py_HAVE_CURSES_SLK_ATTR_SET)
-
-PyDoc_STRVAR(_curses_slk_attr_set__doc__,
-"slk_attr_set($module, attr, pair=0, /)\n"
-"--\n"
-"\n"
-"Set the attributes and color pair of the soft labels.");
-
-#define _CURSES_SLK_ATTR_SET_METHODDEF    \
-    {"slk_attr_set", _PyCFunction_CAST(_curses_slk_attr_set), METH_FASTCALL, _curses_slk_attr_set__doc__},
-
-static PyObject *
-_curses_slk_attr_set_impl(PyObject *module, attr_t attr, int pair);
-
-static PyObject *
-_curses_slk_attr_set(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    attr_t attr;
-    int pair = 0;
-
-    if (!_PyArg_CheckPositional("slk_attr_set", nargs, 1, 2)) {
-        goto exit;
-    }
-    if (!attr_converter(args[0], &attr)) {
-        goto exit;
-    }
-    if (nargs < 2) {
-        goto skip_optional;
-    }
-    if (!pair_converter(args[1], &pair)) {
-        goto exit;
-    }
-skip_optional:
-    return_value = _curses_slk_attr_set_impl(module, attr, pair);
-
-exit:
-    return return_value;
-}
-
-#endif /* defined(_Py_HAVE_CURSES_SLK_ATTR_SET) */
-
-#if defined(_Py_HAVE_CURSES_SLK_COLOR)
-
-PyDoc_STRVAR(_curses_slk_color__doc__,
-"slk_color($module, pair, /)\n"
-"--\n"
-"\n"
-"Set the color pair of the soft labels.");
-
-#define _CURSES_SLK_COLOR_METHODDEF    \
-    {"slk_color", (PyCFunction)_curses_slk_color, METH_O, _curses_slk_color__doc__},
-
-static PyObject *
-_curses_slk_color_impl(PyObject *module, int pair);
-
-static PyObject *
-_curses_slk_color(PyObject *module, PyObject *arg)
-{
-    PyObject *return_value = NULL;
-    int pair;
-
-    if (!pair_converter(arg, &pair)) {
-        goto exit;
-    }
-    return_value = _curses_slk_color_impl(module, pair);
-
-exit:
-    return return_value;
-}
-
-#endif /* defined(_Py_HAVE_CURSES_SLK_COLOR) */
+#endif /* defined(HAVE_NCURSESW) */
 
 #if defined(HAVE_CURSES_USE_ENV)
 
@@ -6426,7 +4290,10 @@ PyDoc_STRVAR(_curses_use_default_colors__doc__,
 "use_default_colors($module, /)\n"
 "--\n"
 "\n"
-"Equivalent to assume_default_colors(-1, -1).");
+"Allow use of default values for colors on terminals supporting this feature.\n"
+"\n"
+"Use this to support transparency in your application.  The default color\n"
+"is assigned to the color number -1.");
 
 #define _CURSES_USE_DEFAULT_COLORS_METHODDEF    \
     {"use_default_colors", (PyCFunction)_curses_use_default_colors, METH_NOARGS, _curses_use_default_colors__doc__},
@@ -6438,51 +4305,6 @@ static PyObject *
 _curses_use_default_colors(PyObject *module, PyObject *Py_UNUSED(ignored))
 {
     return _curses_use_default_colors_impl(module);
-}
-
-#endif /* !defined(STRICT_SYSV_CURSES) */
-
-#if !defined(STRICT_SYSV_CURSES)
-
-PyDoc_STRVAR(_curses_assume_default_colors__doc__,
-"assume_default_colors($module, fg, bg, /)\n"
-"--\n"
-"\n"
-"Allow use of default values for colors on terminals supporting this feature.\n"
-"\n"
-"Assign terminal default foreground/background colors to color number -1.\n"
-"Change the definition of the color-pair 0 to (fg, bg).\n"
-"\n"
-"Use this to support transparency in your application.");
-
-#define _CURSES_ASSUME_DEFAULT_COLORS_METHODDEF    \
-    {"assume_default_colors", _PyCFunction_CAST(_curses_assume_default_colors), METH_FASTCALL, _curses_assume_default_colors__doc__},
-
-static PyObject *
-_curses_assume_default_colors_impl(PyObject *module, int fg, int bg);
-
-static PyObject *
-_curses_assume_default_colors(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    int fg;
-    int bg;
-
-    if (!_PyArg_CheckPositional("assume_default_colors", nargs, 2, 2)) {
-        goto exit;
-    }
-    fg = PyLong_AsInt(args[0]);
-    if (fg == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    bg = PyLong_AsInt(args[1]);
-    if (bg == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    return_value = _curses_assume_default_colors_impl(module, fg, bg);
-
-exit:
-    return return_value;
 }
 
 #endif /* !defined(STRICT_SYSV_CURSES) */
@@ -6508,37 +4330,13 @@ _curses_has_extended_color_support(PyObject *module, PyObject *Py_UNUSED(ignored
     return _curses_has_extended_color_support_impl(module);
 }
 
-#ifndef _CURSES_WINDOW_ATTR_GET_METHODDEF
-    #define _CURSES_WINDOW_ATTR_GET_METHODDEF
-#endif /* !defined(_CURSES_WINDOW_ATTR_GET_METHODDEF) */
-
-#ifndef _CURSES_WINDOW_ATTR_SET_METHODDEF
-    #define _CURSES_WINDOW_ATTR_SET_METHODDEF
-#endif /* !defined(_CURSES_WINDOW_ATTR_SET_METHODDEF) */
-
-#ifndef _CURSES_WINDOW_ATTR_ON_METHODDEF
-    #define _CURSES_WINDOW_ATTR_ON_METHODDEF
-#endif /* !defined(_CURSES_WINDOW_ATTR_ON_METHODDEF) */
-
-#ifndef _CURSES_WINDOW_ATTR_OFF_METHODDEF
-    #define _CURSES_WINDOW_ATTR_OFF_METHODDEF
-#endif /* !defined(_CURSES_WINDOW_ATTR_OFF_METHODDEF) */
-
-#ifndef _CURSES_WINDOW_COLOR_SET_METHODDEF
-    #define _CURSES_WINDOW_COLOR_SET_METHODDEF
-#endif /* !defined(_CURSES_WINDOW_COLOR_SET_METHODDEF) */
-
-#ifndef _CURSES_WINDOW_CHGAT_METHODDEF
-    #define _CURSES_WINDOW_CHGAT_METHODDEF
-#endif /* !defined(_CURSES_WINDOW_CHGAT_METHODDEF) */
-
 #ifndef _CURSES_WINDOW_ENCLOSE_METHODDEF
     #define _CURSES_WINDOW_ENCLOSE_METHODDEF
 #endif /* !defined(_CURSES_WINDOW_ENCLOSE_METHODDEF) */
 
-#ifndef _CURSES_WINDOW_MOUSE_TRAFO_METHODDEF
-    #define _CURSES_WINDOW_MOUSE_TRAFO_METHODDEF
-#endif /* !defined(_CURSES_WINDOW_MOUSE_TRAFO_METHODDEF) */
+#ifndef _CURSES_WINDOW_GET_WCH_METHODDEF
+    #define _CURSES_WINDOW_GET_WCH_METHODDEF
+#endif /* !defined(_CURSES_WINDOW_GET_WCH_METHODDEF) */
 
 #ifndef _CURSES_WINDOW_NOUTREFRESH_METHODDEF
     #define _CURSES_WINDOW_NOUTREFRESH_METHODDEF
@@ -6547,26 +4345,6 @@ _curses_has_extended_color_support(PyObject *module, PyObject *Py_UNUSED(ignored
 #ifndef _CURSES_FILTER_METHODDEF
     #define _CURSES_FILTER_METHODDEF
 #endif /* !defined(_CURSES_FILTER_METHODDEF) */
-
-#ifndef _CURSES_NOFILTER_METHODDEF
-    #define _CURSES_NOFILTER_METHODDEF
-#endif /* !defined(_CURSES_NOFILTER_METHODDEF) */
-
-#ifndef _CURSES_IS_CBREAK_METHODDEF
-    #define _CURSES_IS_CBREAK_METHODDEF
-#endif /* !defined(_CURSES_IS_CBREAK_METHODDEF) */
-
-#ifndef _CURSES_IS_ECHO_METHODDEF
-    #define _CURSES_IS_ECHO_METHODDEF
-#endif /* !defined(_CURSES_IS_ECHO_METHODDEF) */
-
-#ifndef _CURSES_IS_NL_METHODDEF
-    #define _CURSES_IS_NL_METHODDEF
-#endif /* !defined(_CURSES_IS_NL_METHODDEF) */
-
-#ifndef _CURSES_IS_RAW_METHODDEF
-    #define _CURSES_IS_RAW_METHODDEF
-#endif /* !defined(_CURSES_IS_RAW_METHODDEF) */
 
 #ifndef _CURSES_GETSYX_METHODDEF
     #define _CURSES_GETSYX_METHODDEF
@@ -6580,57 +4358,9 @@ _curses_has_extended_color_support(PyObject *module, PyObject *Py_UNUSED(ignored
     #define _CURSES_UNGETMOUSE_METHODDEF
 #endif /* !defined(_CURSES_UNGETMOUSE_METHODDEF) */
 
-#ifndef _CURSES_SCR_DUMP_METHODDEF
-    #define _CURSES_SCR_DUMP_METHODDEF
-#endif /* !defined(_CURSES_SCR_DUMP_METHODDEF) */
-
-#ifndef _CURSES_SCR_RESTORE_METHODDEF
-    #define _CURSES_SCR_RESTORE_METHODDEF
-#endif /* !defined(_CURSES_SCR_RESTORE_METHODDEF) */
-
-#ifndef _CURSES_SCR_INIT_METHODDEF
-    #define _CURSES_SCR_INIT_METHODDEF
-#endif /* !defined(_CURSES_SCR_INIT_METHODDEF) */
-
-#ifndef _CURSES_SCR_SET_METHODDEF
-    #define _CURSES_SCR_SET_METHODDEF
-#endif /* !defined(_CURSES_SCR_SET_METHODDEF) */
-
 #ifndef _CURSES_HAS_KEY_METHODDEF
     #define _CURSES_HAS_KEY_METHODDEF
 #endif /* !defined(_CURSES_HAS_KEY_METHODDEF) */
-
-#ifndef _CURSES_DEFINE_KEY_METHODDEF
-    #define _CURSES_DEFINE_KEY_METHODDEF
-#endif /* !defined(_CURSES_DEFINE_KEY_METHODDEF) */
-
-#ifndef _CURSES_KEY_DEFINED_METHODDEF
-    #define _CURSES_KEY_DEFINED_METHODDEF
-#endif /* !defined(_CURSES_KEY_DEFINED_METHODDEF) */
-
-#ifndef _CURSES_KEYOK_METHODDEF
-    #define _CURSES_KEYOK_METHODDEF
-#endif /* !defined(_CURSES_KEYOK_METHODDEF) */
-
-#ifndef _CURSES_ALLOC_PAIR_METHODDEF
-    #define _CURSES_ALLOC_PAIR_METHODDEF
-#endif /* !defined(_CURSES_ALLOC_PAIR_METHODDEF) */
-
-#ifndef _CURSES_FIND_PAIR_METHODDEF
-    #define _CURSES_FIND_PAIR_METHODDEF
-#endif /* !defined(_CURSES_FIND_PAIR_METHODDEF) */
-
-#ifndef _CURSES_FREE_PAIR_METHODDEF
-    #define _CURSES_FREE_PAIR_METHODDEF
-#endif /* !defined(_CURSES_FREE_PAIR_METHODDEF) */
-
-#ifndef _CURSES_RESET_COLOR_PAIRS_METHODDEF
-    #define _CURSES_RESET_COLOR_PAIRS_METHODDEF
-#endif /* !defined(_CURSES_RESET_COLOR_PAIRS_METHODDEF) */
-
-#ifndef _CURSES_NEW_PRESCR_METHODDEF
-    #define _CURSES_NEW_PRESCR_METHODDEF
-#endif /* !defined(_CURSES_NEW_PRESCR_METHODDEF) */
 
 #ifndef _CURSES_GET_ESCDELAY_METHODDEF
     #define _CURSES_GET_ESCDELAY_METHODDEF
@@ -6652,10 +4382,6 @@ _curses_has_extended_color_support(PyObject *module, PyObject *Py_UNUSED(ignored
     #define _CURSES_IS_TERM_RESIZED_METHODDEF
 #endif /* !defined(_CURSES_IS_TERM_RESIZED_METHODDEF) */
 
-#ifndef _CURSES_HAS_MOUSE_METHODDEF
-    #define _CURSES_HAS_MOUSE_METHODDEF
-#endif /* !defined(_CURSES_HAS_MOUSE_METHODDEF) */
-
 #ifndef _CURSES_MOUSEINTERVAL_METHODDEF
     #define _CURSES_MOUSEINTERVAL_METHODDEF
 #endif /* !defined(_CURSES_MOUSEINTERVAL_METHODDEF) */
@@ -6663,6 +4389,10 @@ _curses_has_extended_color_support(PyObject *module, PyObject *Py_UNUSED(ignored
 #ifndef _CURSES_MOUSEMASK_METHODDEF
     #define _CURSES_MOUSEMASK_METHODDEF
 #endif /* !defined(_CURSES_MOUSEMASK_METHODDEF) */
+
+#ifndef _CURSES_UPDATE_LINES_COLS_METHODDEF
+    #define _CURSES_UPDATE_LINES_COLS_METHODDEF
+#endif /* !defined(_CURSES_UPDATE_LINES_COLS_METHODDEF) */
 
 #ifndef _CURSES_RESIZETERM_METHODDEF
     #define _CURSES_RESIZETERM_METHODDEF
@@ -6676,33 +4406,13 @@ _curses_has_extended_color_support(PyObject *module, PyObject *Py_UNUSED(ignored
     #define _CURSES_SETSYX_METHODDEF
 #endif /* !defined(_CURSES_SETSYX_METHODDEF) */
 
-#ifndef _CURSES_TERM_ATTRS_METHODDEF
-    #define _CURSES_TERM_ATTRS_METHODDEF
-#endif /* !defined(_CURSES_TERM_ATTRS_METHODDEF) */
-
 #ifndef _CURSES_TYPEAHEAD_METHODDEF
     #define _CURSES_TYPEAHEAD_METHODDEF
 #endif /* !defined(_CURSES_TYPEAHEAD_METHODDEF) */
 
-#ifndef _CURSES_SLK_ATTR_METHODDEF
-    #define _CURSES_SLK_ATTR_METHODDEF
-#endif /* !defined(_CURSES_SLK_ATTR_METHODDEF) */
-
-#ifndef _CURSES_SLK_ATTR_ON_METHODDEF
-    #define _CURSES_SLK_ATTR_ON_METHODDEF
-#endif /* !defined(_CURSES_SLK_ATTR_ON_METHODDEF) */
-
-#ifndef _CURSES_SLK_ATTR_OFF_METHODDEF
-    #define _CURSES_SLK_ATTR_OFF_METHODDEF
-#endif /* !defined(_CURSES_SLK_ATTR_OFF_METHODDEF) */
-
-#ifndef _CURSES_SLK_ATTR_SET_METHODDEF
-    #define _CURSES_SLK_ATTR_SET_METHODDEF
-#endif /* !defined(_CURSES_SLK_ATTR_SET_METHODDEF) */
-
-#ifndef _CURSES_SLK_COLOR_METHODDEF
-    #define _CURSES_SLK_COLOR_METHODDEF
-#endif /* !defined(_CURSES_SLK_COLOR_METHODDEF) */
+#ifndef _CURSES_UNGET_WCH_METHODDEF
+    #define _CURSES_UNGET_WCH_METHODDEF
+#endif /* !defined(_CURSES_UNGET_WCH_METHODDEF) */
 
 #ifndef _CURSES_USE_ENV_METHODDEF
     #define _CURSES_USE_ENV_METHODDEF
@@ -6711,8 +4421,4 @@ _curses_has_extended_color_support(PyObject *module, PyObject *Py_UNUSED(ignored
 #ifndef _CURSES_USE_DEFAULT_COLORS_METHODDEF
     #define _CURSES_USE_DEFAULT_COLORS_METHODDEF
 #endif /* !defined(_CURSES_USE_DEFAULT_COLORS_METHODDEF) */
-
-#ifndef _CURSES_ASSUME_DEFAULT_COLORS_METHODDEF
-    #define _CURSES_ASSUME_DEFAULT_COLORS_METHODDEF
-#endif /* !defined(_CURSES_ASSUME_DEFAULT_COLORS_METHODDEF) */
-/*[clinic end generated code: output=417ad397dfaa96ce input=a9049054013a1b77]*/
+/*[clinic end generated code: output=a449af71cde3da29 input=a9049054013a1b77]*/

@@ -87,14 +87,13 @@ extern "C" {
                                  (x) == INDENT    || \\
                                  (x) == DEDENT)
 #define ISSTRINGLIT(x)          ((x) == STRING           || \\
-                                 (x) == FSTRING_MIDDLE   || \\
-                                 (x) == TSTRING_MIDDLE)
+                                 (x) == FSTRING_MIDDLE)
 
 
 // Export these 4 symbols for 'test_peg_generator'
 PyAPI_DATA(const char * const) _PyParser_TokenNames[]; /* Token names */
 PyAPI_FUNC(int) _PyToken_OneChar(int);
-PyAPI_FUNC(int) _PyToken_TwoChars(int, int, int);
+PyAPI_FUNC(int) _PyToken_TwoChars(int, int);
 PyAPI_FUNC(int) _PyToken_ThreeChars(int, int, int);
 
 #ifdef __cplusplus
@@ -142,7 +141,7 @@ _PyToken_OneChar(int c1)
 }
 
 int
-_PyToken_TwoChars(int c1, int c2, int BARRY_AS_BDFL)
+_PyToken_TwoChars(int c1, int c2)
 {
 %s\
     return OP;
@@ -171,10 +170,7 @@ def generate_chars_to_token(mapping, n=1):
             write(indent)
             write('    break;\n')
         else:
-            if c == '>' and value == 'NOTEQUAL':
-                write("case '%s': return BARRY_AS_BDFL ? %s : OP;\n" % (c, value))
-            else:
-                write("case '%s': return %s;\n" % (c, value))
+            write("case '%s': return %s;\n" % (c, value))
     write(indent)
     write('}\n')
     return ''.join(result)
@@ -281,13 +277,13 @@ EXACT_TOKEN_TYPES = {
 %s
 }
 
-def ISTERMINAL(x: int) -> bool:
+def ISTERMINAL(x):
     return x < NT_OFFSET
 
-def ISNONTERMINAL(x: int) -> bool:
+def ISNONTERMINAL(x):
     return x >= NT_OFFSET
 
-def ISEOF(x: int) -> bool:
+def ISEOF(x):
     return x == ENDMARKER
 '''
 

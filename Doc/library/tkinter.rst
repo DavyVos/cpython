@@ -4,23 +4,25 @@
 .. module:: tkinter
    :synopsis: Interface to Tcl/Tk for graphical user interfaces
 
+.. moduleauthor:: Guido van Rossum <guido@Python.org>
+
 **Source code:** :source:`Lib/tkinter/__init__.py`
 
 --------------
 
-The :mod:`!tkinter` package ("Tk interface") is the standard Python interface to
-the Tcl/Tk GUI toolkit.  Both Tk and :mod:`!tkinter` are available on most Unix
+The :mod:`tkinter` package ("Tk interface") is the standard Python interface to
+the Tcl/Tk GUI toolkit.  Both Tk and :mod:`tkinter` are available on most Unix
 platforms, including macOS, as well as on Windows systems.
 
 Running ``python -m tkinter`` from the command line should open a window
-demonstrating a simple Tk interface, letting you know that :mod:`!tkinter` is
+demonstrating a simple Tk interface, letting you know that :mod:`tkinter` is
 properly installed on your system, and also showing what version of Tcl/Tk is
 installed, so you can read the Tcl/Tk documentation specific to that version.
 
 Tkinter supports a range of Tcl/Tk versions, built either with or without
 thread support.
 Tcl/Tk 8.5.12 is the minimum supported version; the official Python binary
-release bundles Tcl/Tk 9.0.
+release bundles Tcl/Tk 8.6.
 See the source code for the :mod:`_tkinter` module for more information about
 supported versions.
 
@@ -39,8 +41,6 @@ details that are unchanged.
    Both old and new APIs are still available.
    Most documentation you will find online still uses the old API and
    can be woefully outdated.
-
-.. include:: ../includes/optional-module.rst
 
 .. seealso::
 
@@ -122,7 +122,7 @@ Tkinter modules
 ---------------
 
 Support for Tkinter is spread across several modules. Most applications will need the
-main :mod:`!tkinter` module, as well as the :mod:`tkinter.ttk` module, which provides
+main :mod:`tkinter` module, as well as the :mod:`tkinter.ttk` module, which provides
 the modern themed widget set and API::
 
 
@@ -132,7 +132,7 @@ the modern themed widget set and API::
 
 The modules that provide Tk support include:
 
-:mod:`!tkinter`
+:mod:`tkinter`
    Main Tkinter module.
 
 :mod:`tkinter.colorchooser`
@@ -147,9 +147,6 @@ The modules that provide Tk support include:
 :mod:`tkinter.font`
    Utilities to help work with fonts.
 
-:mod:`tkinter.fontchooser`
-   Dialog to let the user choose a font.
-
 :mod:`tkinter.messagebox`
    Access to standard Tk dialog boxes.
 
@@ -159,12 +156,9 @@ The modules that provide Tk support include:
 :mod:`tkinter.simpledialog`
    Basic dialogs and convenience functions.
 
-:mod:`tkinter.systray`
-   System tray icon and desktop notifications.
-
 :mod:`tkinter.ttk`
    Themed widget set introduced in Tk 8.5, providing modern alternatives
-   for many of the classic widgets in the main :mod:`!tkinter` module.
+   for many of the classic widgets in the main :mod:`tkinter` module.
 
 Additional modules:
 
@@ -173,22 +167,22 @@ Additional modules:
 
 :mod:`_tkinter`
    A binary module that contains the low-level interface to Tcl/Tk.
-   It is automatically imported by the main :mod:`!tkinter` module,
+   It is automatically imported by the main :mod:`tkinter` module,
    and should never be used directly by application programmers.
    It is usually a shared library (or DLL), but might in some cases be
    statically linked with the Python interpreter.
 
 :mod:`idlelib`
    Python's Integrated Development and Learning Environment (IDLE). Based
-   on :mod:`!tkinter`.
+   on :mod:`tkinter`.
 
 :mod:`!tkinter.constants`
    Symbolic constants that can be used in place of strings when passing
    various parameters to Tkinter calls. Automatically imported by the
-   main :mod:`!tkinter` module.
+   main :mod:`tkinter` module.
 
 :mod:`tkinter.dnd`
-   (experimental) Drag-and-drop support for :mod:`!tkinter`. This will
+   (experimental) Drag-and-drop support for :mod:`tkinter`. This will
    become deprecated when it is replaced with the Tk DND.
 
 :mod:`turtle`
@@ -444,7 +438,7 @@ You'd find documentation for all of these in the
 Threading model
 ---------------
 
-Python and Tcl/Tk have very different threading models, which :mod:`!tkinter`
+Python and Tcl/Tk have very different threading models, which :mod:`tkinter`
 tries to bridge. If you use threads, you may need to be aware of this.
 
 A Python interpreter may have many threads associated with it. In Tcl, multiple
@@ -452,9 +446,9 @@ threads can be created, but each thread has a separate Tcl interpreter instance
 associated with it. Threads can also create more than one interpreter instance,
 though each interpreter instance can be used only by the one thread that created it.
 
-Each :class:`Tk` object created by :mod:`!tkinter` contains a Tcl interpreter.
+Each :class:`Tk` object created by :mod:`tkinter` contains a Tcl interpreter.
 It also keeps track of which thread created that interpreter. Calls to
-:mod:`!tkinter` can be made from any Python thread. Internally, if a call comes
+:mod:`tkinter` can be made from any Python thread. Internally, if a call comes
 from a thread other than the one that created the :class:`Tk` object, an event
 is posted to the interpreter's event queue, and when executed, the result is
 returned to the calling Python thread.
@@ -471,19 +465,19 @@ This is different from many GUI toolkits where the GUI runs in a completely
 separate thread from all application code including event handlers.
 
 If the Tcl interpreter is not running the event loop and processing events, any
-:mod:`!tkinter` calls made from threads other than the one running the Tcl
+:mod:`tkinter` calls made from threads other than the one running the Tcl
 interpreter will fail.
 
 A number of special cases exist:
 
-* Tcl/Tk libraries built without thread support are now rare: Tcl/Tk 9.0 (the
-  bundled version) is always thread-aware, so this case only arises with some
-  older 8.x builds. When the library is not thread-aware,
+* Tcl/Tk libraries built without thread support are now rare: the bundled
+  Tcl/Tk 8.6 is built with thread support, so this case only arises with some
+  older non-threaded builds. When the library is not thread-aware,
   :mod:`!tkinter` calls the library from the originating Python thread, even
   if this is different than the thread that created the Tcl interpreter. A global
   lock ensures only one call occurs at a time.
 
-* While :mod:`!tkinter` allows you to create more than one instance of a :class:`Tk`
+* While :mod:`tkinter` allows you to create more than one instance of a :class:`Tk`
   object (with its own interpreter), all interpreters that are part of the same
   thread share a common event queue, which gets ugly fast. In practice, don't create
   more than one instance of :class:`Tk` at a time. Otherwise, it's best to create
@@ -494,7 +488,7 @@ A number of special cases exist:
   or abandon the event loop entirely. If you're doing anything tricky when it comes
   to events or threads, be aware of these possibilities.
 
-* There are a few select :mod:`!tkinter` functions that presently work only when
+* There are a few select :mod:`tkinter` functions that presently work only when
   called from the thread that created the Tcl interpreter.
 
 
@@ -773,76 +767,34 @@ Tk option data types
 
 Many widget options documented in the reference
 accept values of a small number of common types, described here.
-The standard options and their types are described in the
-:manpage:`options(3tk)` manual page.
 
 anchor
    Legal values are points of the compass: ``"n"``, ``"ne"``, ``"e"``, ``"se"``,
    ``"s"``, ``"sw"``, ``"w"``, ``"nw"``, and also ``"center"``.
-   The *labelanchor* option of :class:`LabelFrame` and
-   :class:`ttk.LabelFrame <tkinter.ttk.LabelFrame>`
-   accepts also ``"en"``, ``"es"``, ``"wn"`` and ``"ws"``.
-   The *sticky* option of the grid geometry manager accepts a combination
-   of the compass directions, such as ``"nsew"``, or an empty string.
 
 bitmap
    There are ten built-in, named bitmaps: ``'error'``, ``'gray12'``,
    ``'gray25'``, ``'gray50'``, ``'gray75'``, ``'hourglass'``, ``'info'``,
-   ``'questhead'``, ``'question'``, ``'warning'``.
-   On macOS the following bitmaps are available as well:
-   ``'application'``, ``'accessory'``, ``'folder'``, ``'pfolder'``,
-   ``'trash'``, ``'floppy'``, ``'ramdisk'``, ``'cdrom'``, ``'preferences'``,
-   ``'querydoc'``, ``'stop'``, ``'note'`` and ``'caution'``.
-   To specify an X bitmap file, give the full path to the file,
-   preceded with an ``@``, as in ``"@/usr/contrib/bitmap/gumby.bit"``.
+   ``'questhead'``, ``'question'``, ``'warning'``.  To specify an X bitmap
+   filename, give the full path to the file, preceded with an ``@``, as in
+   ``"@/usr/contrib/bitmap/gumby.bit"``.
 
 boolean
-   You can pass the integers 0 or 1, ``True`` or ``False``, or the strings
-   ``"0"``, ``"1"``, ``"yes"``, ``"no"``, ``"true"``, ``"false"``, ``"on"``
-   or ``"off"``.
-   The strings are matched ignoring case,
-   and an unambiguous prefix, such as ``"t"``, is enough.
-   Any non-zero integer means true.
+   You can pass integers 0 or 1 or the strings ``"yes"`` or ``"no"``.
 
 callback
-   This is any callable object.
-   Most callbacks take no arguments.  For example::
+   This is any Python function that takes no arguments.  For example::
 
       def print_it():
           print("hi there")
       fred["command"] = print_it
 
-   Some options call it with arguments,
-   such as the *command* option of :class:`Scale`,
-   which is called with the new value.
-
 color
-   Colors can be given as symbolic names, such as ``"red"`` or ``"light blue"``,
-   or as strings representing RGB values in 4 bit: ``"#RGB"``, 8 bit:
-   ``"#RRGGBB"``, 12 bit: ``"#RRRGGGBBB"``, or 16 bit: ``"#RRRRGGGGBBBB"``
-   ranges, where R,G,B here represent any legal hex digit.
-   Tk provides a portable set of symbolic names available on all platforms;
-   they are matched ignoring case and spaces,
-   so ``"light blue"``, ``"Light Blue"`` and ``"lightblue"``
-   are the same color.
-   The full list of names, including the platform-specific names
-   of the current system colors
-   (for example ``"systemButtonFace"`` on Windows
-   or ``"systemWindowBody"`` on macOS),
-   is given in the :manpage:`colors(3tk)` manual page.
-   :meth:`~tkinter.Misc.winfo_rgb` returns
-   the red, green and blue components of a color.
-
-compound
-   Determines how to combine an image and a text displayed in a widget.
-   Legal values are ``"none"`` (display the image if there is one,
-   otherwise the text), ``"text"``, ``"image"``,
-   ``"center"`` (display the text in the center of the image) and
-   ``"top"``, ``"bottom"``, ``"left"``, ``"right"``
-   (display the image above, below, to the left of or to the right
-   of the text).
-   The themed widgets accept all these values,
-   the classic widgets accept all except ``"text"`` and ``"image"``.
+   Colors can be given as the names of X colors in the rgb.txt file, or as strings
+   representing RGB values in 4 bit: ``"#RGB"``, 8 bit: ``"#RRGGBB"``, 12 bit:
+   ``"#RRRGGGBBB"``, or 16 bit: ``"#RRRRGGGGBBBB"`` ranges, where R,G,B here
+   represent any legal hex digit.  See the :manpage:`colors(3tk)` man page for
+   the list of named colors.
 
 cursor
    The name of the mouse cursor to display while the pointer is over the widget.
@@ -863,47 +815,25 @@ distance
    millimetres, ``p`` for printer's points.  For example, 3.5 inches is expressed
    as ``"3.5i"``.
 
-   When a screen distance option is read back (for example with :meth:`!cget`),
-   a distance with no unit suffix is returned as an :class:`int` or a :class:`float`.
-   A distance with a unit suffix depends on the screen resolution
-   and is returned as an opaque Tcl object that can be passed back to Tk.
-
-   .. versionchanged:: 3.16
-      Screen distances with no unit suffix are returned as an :class:`int`
-      or a :class:`float`.
-
 font
    Tk uses a font description such as ``{courier 10 bold}``; in
    :mod:`!tkinter` this is most naturally passed as a tuple of
    ``(family, size, *styles)`` (or as the equivalent string
    ``"Courier 10 bold"``).  Font sizes with positive numbers are measured in
    points; sizes with negative numbers are measured in pixels.
-   The name of a named font, such as ``"TkDefaultFont"``,
-   a :class:`tkinter.font.Font` instance,
-   or, on X11, an XLFD font name can be used as well.
+
+geometry
+   This is a string of the form ``widthxheight``, where width and height are
+   measured in pixels for most widgets (in characters for widgets displaying text).
+   For example: ``fred["geometry"] = "200x100"``.
 
 justify
    Legal values are the strings: ``"left"``, ``"center"``, and ``"right"``.
 
-orient
-   Legal values are ``"horizontal"`` and ``"vertical"``.
-
-padding
-   This is a legal distance (see above), applied on all sides,
-   or a sequence of up to four distances
-   specifying the left, top, right and bottom padding.
-   If fewer than four are specified,
-   the bottom padding defaults to the top one,
-   the right one to the left one, and the top one to the left one.
-   It is only supported by the themed widgets.
-
 region
-   Used for the *scrollregion* option of :class:`Canvas`.
-   This is a string with four space-delimited elements,
-   each of which is a legal distance (see above),
-   or a sequence of four such elements.
-   For example: ``"2 3 4 5"``, ``(2, 3, 4, 5)``, ``"3i 2i 4.5i 2i"`` and
-   ``"3c 2c 4c 10.43c"`` are all legal regions.
+   This is a string with four space-delimited elements, each of which is a legal
+   distance (see above).  For example: ``"2 3 4 5"`` and ``"3i 2i 4.5i 2i"`` and
+   ``"3c 2c 4c 10.43c"``  are all legal regions.
 
 relief
    Determines what the border style of a widget will be.  Legal values are:
@@ -914,19 +844,8 @@ scrollcommand
    This is almost always the :meth:`!set` method of some scrollbar widget, but can
    be any widget method that takes a single argument.
 
-state
-   Legal values are ``"normal"``, ``"disabled"`` and, depending on the widget,
-   also ``"active"``, ``"hidden"`` (for :class:`Canvas` items)
-   or ``"readonly"`` (for :class:`Entry`, :class:`Spinbox`
-   and the themed widgets).
-   The themed widgets have in addition a more general set of states,
-   which is manipulated with
-   :meth:`ttk.Widget.state <tkinter.ttk.Widget.state>`.
-
 wrap
-   Must be one of ``"none"``, ``"char"`` or ``"word"``
-   for the :class:`Text` widget and its tags;
-   for a tag an empty string means to use the widget's value.
+   Must be one of: ``"none"``, ``"char"``, or ``"word"``.
 
 .. _Bindings-and-Events:
 
@@ -1176,7 +1095,7 @@ Base and mixin classes
       Interpret the string *s* as a Tcl boolean and return the corresponding
       :class:`bool`.
       Tcl accepts values such as ``'1'``, ``'0'``, ``'yes'``, ``'no'``,
-      ``'true'``, ``'false'``, ``'on'`` and ``'off'``.
+      ``'true'`` and ``'false'``.
       Raise :exc:`ValueError` if *s* is not a valid boolean.
 
    .. method:: getdouble(s)
@@ -1386,9 +1305,8 @@ Base and mixin classes
       ``(columns, rows)`` tuple.
 
       :meth:`size` is an alias of :meth:`!grid_size`,
-      except on :class:`Listbox` and
-      :class:`ttk.Treeview <tkinter.ttk.Treeview>`,
-      which provide their own :meth:`!size` method.
+      except on the :class:`Listbox` widget,
+      which provides its own :meth:`!size` method.
 
    .. method:: grid_slaves(row=None, column=None)
 
@@ -1396,14 +1314,6 @@ Base and mixin classes
       recently managed first.
       If *row* or *column* is given, only the children in that row or column
       are returned.
-
-   .. method:: grid_content(row=None, column=None)
-
-      Same as :meth:`grid_slaves`: return the child widgets managed in this
-      container's grid, optionally restricted to a given *row* or *column*.
-
-      .. versionadded:: 3.15
-
 
    .. method:: propagate()
                propagate(flag)
@@ -1431,30 +1341,10 @@ Base and mixin classes
 
       :meth:`slaves` is an alias of :meth:`!pack_slaves`.
 
-   .. method:: content()
-      :no-typesetting:
-
-   .. method:: pack_content()
-
-      Same as :meth:`pack_slaves`: return the child widgets managed by this
-      container with the pack geometry manager, in packing order.
-
-      :meth:`content` is an alias of :meth:`!pack_content`.
-
-      .. versionadded:: 3.15
-
-
    .. method:: place_slaves()
 
       Return a list of the child widgets managed by this container with the
       place geometry manager.
-
-   .. method:: place_content()
-
-      Same as :meth:`place_slaves`: return the child widgets managed by this
-      container with the place geometry manager.
-
-      .. versionadded:: 3.15
 
    The methods with the ``bind`` and ``unbind`` prefixes associate event
    patterns with callbacks and remove those associations.
@@ -1582,10 +1472,10 @@ Base and mixin classes
    The methods with the ``after`` prefix schedule callbacks to run after a
    delay or when the application is idle.
 
-   .. method:: after(ms, func=None, *args, **kw)
+   .. method:: after(ms, func=None, *args)
 
       Schedule the callable *func* to be called after *ms* milliseconds, with
-      *args* and *kw* passed to it as positional and keyword arguments.
+      *args* passed to it as positional arguments.
       Return an identifier that can be passed to :meth:`after_cancel` to cancel
       the call.
 
@@ -1594,9 +1484,6 @@ Base and mixin classes
 
       .. versionchanged:: 3.10
          *func* can now be any callable object, not only a function.
-
-      .. versionchanged:: 3.14
-         Keyword arguments are now passed to *func*.
 
 
    .. method:: after_cancel(id)
@@ -1612,16 +1499,13 @@ Base and mixin classes
          :exc:`ValueError`.
 
 
-   .. method:: after_idle(func, *args, **kw)
+   .. method:: after_idle(func, *args)
 
-      Schedule the callable *func* to be called, with *args* and *kw* passed to
+      Schedule the callable *func* to be called, with *args* passed to
       it, when the Tk main loop next becomes idle, that is, when it has no
       other events to process.
       Return an identifier that can be passed to :meth:`after_cancel` to cancel
       the call.
-
-      .. versionchanged:: 3.14
-         Keyword arguments are now passed to *func*.
 
 
    .. method:: after_info(id=None)
@@ -1973,56 +1857,6 @@ Base and mixin classes
       color change when the mouse passes over a slider).
       Return the resulting setting.
 
-   .. method:: tk_appname(name=None)
-
-      Query or set the name used to communicate with this application through
-      the ``send`` command.
-      With no argument, return the current name; otherwise change it to *name*
-      and return the actual name set, which may have a suffix appended to keep
-      it unique among the applications on the display.
-
-      .. versionadded:: 3.16
-
-   .. method:: tk_useinputmethods(boolean=None, *, displayof=0)
-
-      Query or set whether Tk uses the X Input Methods (XIM) for filtering
-      events, and return the resulting state.
-      This is significant only on X11; if XIM support is not available it
-      always returns ``False``.
-
-      .. versionadded:: 3.16
-
-   .. method:: tk_caret(*, x=None, y=None, height=None)
-
-      Set or query the caret location for the widget's display.
-      The caret is the per-display insertion position used for global focus
-      indication (for accessibility) and for placing the input method
-      (XIM or IME) window.
-      With no argument, return the current location as a dictionary with the
-      keys ``'x'``, ``'y'`` and ``'height'``; otherwise update the given
-      coordinates.
-
-      .. versionadded:: 3.16
-
-   .. method:: tk_scaling(number=None, *, displayof=0)
-
-      Query or set the scaling factor used by Tk to convert between physical
-      units (such as points, inches or millimeters) and pixels, expressed as
-      the number of pixels per point (where a point is 1/72 inch).
-      With no argument, return the current factor; otherwise set it to the
-      floating-point *number*.
-
-      .. versionadded:: 3.16
-
-   .. method:: tk_inactive(reset=False, *, displayof=0)
-
-      Return the number of milliseconds since the last time the user interacted
-      with the system, or ``-1`` if the windowing system does not support this.
-      If *reset* is true, reset the inactivity timer to zero instead and return
-      ``None``.
-
-      .. versionadded:: 3.16
-
    The methods with the ``busy_`` prefix manage the busy state of a window,
    which shows a busy cursor and ignores user input.
 
@@ -2195,7 +2029,7 @@ Base and mixin classes
 
    .. method:: winfo_exists()
 
-      Return ``True`` if the widget exists, ``False`` otherwise.
+      Return true if the widget exists, false otherwise.
 
    .. method:: winfo_fpixels(number)
 
@@ -2209,9 +2043,6 @@ Base and mixin classes
 
       Return the geometry of the widget, in the form ``widthxheight+x+y``.
       All dimensions are in pixels.
-      The position is relative to the parent widget;
-      use :meth:`winfo_rootx` and :meth:`winfo_rooty`
-      for the position on the screen.
       An offset can be negative; see :meth:`~Wm.geometry`.
 
    .. method:: winfo_height()
@@ -2235,19 +2066,9 @@ Base and mixin classes
       window; otherwise it refers to the display of the application's main
       window.
 
-   .. method:: winfo_isdark()
-
-      On macOS and Windows, return ``True`` if the widget is in "dark mode",
-      and ``False`` otherwise.
-      Always return ``False`` on X11.
-
-      .. versionadded:: 3.16
-
-         Requires Tk 9.1 or newer.
-
    .. method:: winfo_ismapped()
 
-      Return ``True`` if the widget is currently mapped, ``False`` otherwise.
+      Return true if the widget is currently mapped, false otherwise.
 
    .. method:: winfo_manager()
 
@@ -2378,8 +2199,8 @@ Base and mixin classes
 
    .. method:: winfo_viewable()
 
-      Return ``True`` if the widget and all of its ancestors up through the
-      nearest toplevel window are mapped, ``False`` otherwise.
+      Return true if the widget and all of its ancestors up through the
+      nearest toplevel window are mapped, false otherwise.
 
    .. method:: winfo_visual()
 
@@ -2723,24 +2544,6 @@ Base and mixin classes
       empty string.
       :meth:`wm_group` is an alias of :meth:`!group`.
 
-   .. method:: wm_iconbadge(badge)
-      :no-typesetting:
-
-   .. method:: iconbadge(badge)
-
-      Set a badge for the window's icon, intended for display in the Dock
-      (macOS), taskbar (Windows) or app panel (X11).
-      *badge* may be a positive integer (for example a count of unread
-      messages) or an exclamation point to denote that attention is needed;
-      an empty string removes the badge.
-      On X11 the variable ``::tk::icons::base_icon(window)`` must be set to the
-      window's icon image for the badge to appear.
-      :meth:`wm_iconbadge` is an alias of :meth:`!iconbadge`.
-
-      .. versionadded:: 3.16
-
-         Requires Tk 9.0 or newer.
-
    .. method:: wm_iconbitmap(bitmap=None, default=None)
       :no-typesetting:
 
@@ -2952,22 +2755,6 @@ Base and mixin classes
       has been set.
       :meth:`wm_sizefrom` is an alias of :meth:`!sizefrom`.
 
-   .. method:: wm_stackorder(relation=None, window=None)
-      :no-typesetting:
-
-   .. method:: stackorder(relation=None, window=None)
-
-      Query the stacking order of top-level windows.
-      With no arguments, return a list of the mapped top-level widgets in
-      stacking order, from lowest to highest, recursively including this
-      window's top-level children.
-      If *relation* is ``'isabove'`` or ``'isbelow'`` and *window* is another
-      top-level, return ``True`` if this window is respectively above or below
-      *window* in the stacking order, and ``False`` otherwise.
-      :meth:`wm_stackorder` is an alias of :meth:`!stackorder`.
-
-      .. versionadded:: 3.16
-
    .. method:: wm_state(newstate=None)
       :no-typesetting:
 
@@ -3149,16 +2936,6 @@ Base and mixin classes
       this widget.
       :meth:`slaves` is an alias of :meth:`!pack_slaves`.
 
-   .. method:: content()
-      :no-typesetting:
-
-   .. method:: pack_content()
-
-      Same as :meth:`Misc.pack_content`.
-      :meth:`content` is an alias of :meth:`!pack_content`.
-
-      .. versionadded:: 3.15
-
 
 .. class:: Place()
 
@@ -3242,15 +3019,6 @@ Base and mixin classes
 
       Same as :meth:`Misc.place_slaves`: return the list of widgets placed in
       this widget.
-
-   .. method:: content()
-      :no-typesetting:
-
-   .. method:: place_content()
-
-      Same as :meth:`Misc.place_content`.
-
-      .. versionadded:: 3.15
 
 
 .. class:: Grid()
@@ -3378,9 +3146,8 @@ Base and mixin classes
       Same as :meth:`Misc.grid_size`: return a ``(columns, rows)`` tuple giving
       the size of the grid.
       :meth:`size` is an alias of :meth:`!grid_size`,
-      except on :class:`Listbox` and
-      :class:`ttk.Treeview <tkinter.ttk.Treeview>`,
-      which provide their own :meth:`!size` method.
+      except on the :class:`Listbox` widget,
+      which provides its own :meth:`!size` method.
 
    .. method:: propagate()
                propagate(flag)
@@ -3398,15 +3165,6 @@ Base and mixin classes
 
       Same as :meth:`Misc.grid_slaves`: return the widgets managed in the grid,
       optionally restricted to a *row* and/or *column*.
-
-   .. method:: content(row=None, column=None)
-      :no-typesetting:
-
-   .. method:: grid_content(row=None, column=None)
-
-      Same as :meth:`Misc.grid_content`.
-
-      .. versionadded:: 3.15
 
 
 .. class:: XView()
@@ -3438,8 +3196,6 @@ Base and mixin classes
       Shift the view left or right by *number* units.
       *what* is either ``'units'`` or ``'pages'``; a negative *number* scrolls
       left and a positive one scrolls right.
-      The :class:`Text` widget accepts also ``'pixels'``,
-      and then *number* can be a screen distance, such as ``'1i'``.
 
 
 .. class:: YView()
@@ -3470,8 +3226,6 @@ Base and mixin classes
       Shift the view up or down by *number* units.
       *what* is either ``'units'`` or ``'pages'``; a negative *number* scrolls
       up and a positive one scrolls down.
-      The :class:`Text` widget accepts also ``'pixels'``,
-      and then *number* can be a screen distance, such as ``'1i'``.
 
 
 .. class:: BaseWidget(master, widgetName, cnf={}, kw={}, extra=())
@@ -3686,13 +3440,6 @@ Widget classes
    A newly created item is placed at the top of the list; the order can be
    changed with :meth:`tag_raise` and :meth:`tag_lower`.
 
-   .. method:: tk_print()
-
-      Print the contents of the canvas using the native print dialog.
-      Requires Tk 8.7/9.0 or newer.
-
-      .. versionadded:: 3.16
-
    .. method:: create_arc(*args, **kw)
                create_bitmap(*args, **kw)
                create_image(*args, **kw)
@@ -3901,7 +3648,8 @@ Widget classes
 
       .. note::
 
-         Tk 8.6 added the *angle* option for ``text`` items.
+         Tk 8.6 added the *angle* option and Tk 9.0 added the *underline*
+         option for ``text`` items.
 
    .. method:: coords(tagOrId)
                coords(tagOrId, coordList, /)
@@ -3951,15 +3699,6 @@ Widget classes
       *yOrigin* changes by a factor of *yScale* (a factor of ``1.0`` leaves the
       coordinate unchanged).
 
-   .. method:: rotate(tagOrId, xOrigin, yOrigin, angle, /)
-
-      Rotate the coordinates of all items given by *tagOrId* in canvas
-      coordinate space about the origin (*xOrigin*, *yOrigin*) by *angle*
-      degrees anticlockwise.
-      Negative values of *angle* rotate clockwise.
-
-      .. versionadded:: 3.16
-
    .. method:: delete(*tagOrIds)
 
       Delete each of the items given by the *tagOrIds* arguments.
@@ -3978,17 +3717,6 @@ Widget classes
       character or coordinate whose index is *beforeThis*.
       For line and polygon items *string* must be a valid sequence of
       coordinates.
-
-   .. method:: rchars(tagOrId, first, last, string, /)
-
-      Replace the characters (for text items) or coordinates (for line and
-      polygon items) in the range from *first* to *last* inclusive of each of
-      the items given by *tagOrId* with *string*.
-      For line and polygon items *string* must be a valid sequence of
-      coordinates.
-      Items that do not support indexing ignore this operation.
-
-      .. versionadded:: 3.16
 
    .. method:: itemcget(tagOrId, option)
 
@@ -4484,14 +4212,6 @@ Widget classes
       Typically associated with mouse motion events, to produce the effect of
       dragging the entry at high speed through the window.
 
-   .. method:: validate()
-
-      Force an evaluation of the command given by the *validatecommand* option,
-      independently of the conditions specified by the *validate* option, and
-      return whether the value is considered valid.
-
-      .. versionadded:: 3.16
-
 
 .. class:: Frame(master=None, cnf={}, **kw)
 
@@ -4935,15 +4655,6 @@ Widget classes
       If the *postcommand* option has been specified, it is evaluated before
       the menu is posted.
 
-   .. method:: postcascade(index)
-
-      Post the submenu associated with the cascade entry given by *index*,
-      unposting any previously posted submenu.
-      This has no effect if *index* does not name a cascade entry or if the
-      menu itself is not posted.
-
-      .. versionadded:: 3.16
-
    .. method:: tk_popup(x, y, entry='')
 
       Post the menu as a popup at the root-window coordinates *x* and *y*.
@@ -5000,19 +4711,11 @@ Widget classes
    *variable* is a :class:`Variable` kept in sync with the selection, *value*
    is the initial choice, and *values* are the remaining menu entries.
    The keyword argument *command* may be given a callback that is invoked with
-   the selected value, and the keyword argument *name* sets the Tk widget name.
-   Other keyword arguments are passed to the underlying :class:`Menubutton`
-   and may override its default appearance.
+   the selected value.
 
    .. method:: destroy()
 
       Destroy the widget, also cleaning up the associated pop-up menu.
-
-   .. versionchanged:: 3.14
-      Added support for the *name* keyword argument.
-
-   .. versionchanged:: 3.16
-      Other :class:`Menubutton` options can now be passed as keyword arguments.
 
 
 
@@ -5062,13 +4765,13 @@ Widget classes
       containing *child*.
       *option* may be any value allowed by :meth:`paneconfigure`.
 
-   .. method:: paneconfig(child, cnf=None, **kw)
+   .. method:: paneconfig(tagOrId, cnf=None, **kw)
       :no-typesetting:
 
-   .. method:: paneconfigure(child, cnf=None, **kw)
+   .. method:: paneconfigure(tagOrId, cnf=None, **kw)
 
       Query or modify the management options of the pane containing the widget
-      *child*.
+      *tagOrId*.
       With no options, it returns a dictionary describing all of the available
       options for the pane; given a single option name as a string, it returns
       a description of that one option; otherwise it sets the given options.
@@ -5082,10 +4785,6 @@ Widget classes
       and *stretch* (how extra space is allocated to the pane: one of
       ``'always'``, ``'first'``, ``'last'``, ``'middle'`` or ``'never'``).
       :meth:`paneconfig` is an alias of :meth:`!paneconfigure`.
-
-      .. deprecated-removed:: 3.16 3.18
-         The first parameter was renamed from *tagOrId* to *child*.
-         The old name is still accepted as a keyword argument.
 
    .. method:: identify(x, y)
 
@@ -5298,10 +4997,10 @@ Widget classes
    *increment* options, or an explicit list of strings given by the *values*
    option (which takes precedence over the range).
    Each time an arrow is invoked the *command* callback, if any, is called; the
-   boolean *wrap* option controls whether stepping past either end of the range
-   wraps around to the other end;
-   the *format* option specifies how numeric values are formatted;
-   and the *validate* option enables validation of the entered text.
+   *wrap* option controls whether stepping past either end of the range wraps
+   around to the other end; the *format* option specifies how numeric values
+   are formatted; and the *validate* option enables validation of the entered
+   text.
    Inherits from :class:`Widget` and :class:`XView`.
 
    With a non-integer *increment*, see :ref:`numeric values and the locale
@@ -5468,14 +5167,6 @@ Widget classes
 
       .. versionadded:: 3.8
 
-   .. method:: validate()
-
-      Force an evaluation of the command given by the *validatecommand* option,
-      independently of the conditions specified by the *validate* option, and
-      return whether the value is considered valid.
-
-      .. versionadded:: 3.16
-
 
 
 .. class:: Text(master=None, cnf={}, **kw)
@@ -5506,13 +5197,6 @@ Widget classes
    ``'lineend'``, ``'wordstart'`` or ``'wordend'`` adjusts the index relative
    to its base; several modifiers may be combined and are applied from left to
    right, for example ``'insert wordstart - 1 c'``.
-
-   .. method:: tk_print()
-
-      Print the contents of the text widget using the native print dialog.
-      Requires Tk 8.7/9.0 or newer.
-
-      .. versionadded:: 3.16
 
    .. method:: insert(index, chars, *args)
 
@@ -5703,7 +5387,7 @@ Widget classes
          baseline, for superscripts and subscripts.
 
       *underline*
-         Whether to underline the text (a boolean).
+         Whether to underline the text.
 
       *underlinefg*
          The color of the underline; it defaults to the text color.
@@ -5861,8 +5545,7 @@ Widget classes
       Embed a window (any widget) at *index*.
       The options, given in *cnf* and *kw*, include *window* (the widget to
       embed), *create* (a callback that creates the widget on demand), *align*,
-      the boolean *stretch* (whether the widget is stretched vertically to the
-      height of the line), *padx* and *pady*.
+      *stretch*, *padx* and *pady*.
       The embedded widget must be a descendant of the text widget's parent.
 
    .. method:: window_cget(index, option)
@@ -5895,23 +5578,9 @@ Widget classes
    .. method:: edit_modified(arg=None)
 
       If *arg* is omitted, return the current state of the modified flag as
-      a :class:`bool`; the flag is set automatically whenever the text is
+      true or false; the flag is set automatically whenever the text is
       inserted or deleted.
       Otherwise set the flag to the boolean *arg*.
-
-   .. method:: edit_canundo()
-
-      Return ``True`` if there is an edit action on the undo stack that can be
-      undone, and ``False`` otherwise.
-
-      .. versionadded:: 3.16
-
-   .. method:: edit_canredo()
-
-      Return ``True`` if there is an edit action on the redo stack that can be
-      reapplied, and ``False`` otherwise.
-
-      .. versionadded:: 3.16
 
    .. method:: edit_undo()
 
@@ -5944,7 +5613,7 @@ Widget classes
       Separators are inserted automatically when the *autoseparators* option is
       true.
 
-   .. method:: search(pattern, index, stopindex=None, forwards=None, backwards=None, exact=None, regexp=None, nocase=None, count=None, elide=None, *, nolinestop=None, strictlimits=None)
+   .. method:: search(pattern, index, stopindex=None, forwards=None, backwards=None, exact=None, regexp=None, nocase=None, count=None, elide=None)
 
       Search for *pattern* starting at *index* and return the index of the
       first character of the first match, or an empty string if there is no
@@ -5954,28 +5623,10 @@ Widget classes
       The following boolean keyword flags control the search: *forwards* or
       *backwards* select the direction (forward is the default); *exact* (the
       default) or *regexp* select literal or regular-expression matching;
-      *nocase* makes the match case-insensitive; *elide* causes hidden text to
-      be searched as well; *nolinestop* (regexp only) lets ``.`` and ``[^``
-      match newlines; and *strictlimits* requires the whole match to lie within
-      *index* and *stopindex*.
+      *nocase* makes the match case-insensitive; and *elide* causes hidden text
+      to be searched as well.
       If *count* is a :class:`Variable`, the number of index positions in the
       match is stored in it.
-
-      .. versionchanged:: 3.15
-         Added the *nolinestop* and *strictlimits* parameters.
-
-
-   .. method:: search_all(pattern, index, stopindex=None, *, forwards=None, backwards=None, exact=None, regexp=None, nocase=None, count=None, elide=None, nolinestop=None, overlap=None, strictlimits=None)
-
-      Like :meth:`search`, but find every match in the searched range and
-      return a tuple of the starting indices of all matches (empty if there are
-      none).
-      By default overlapping matches are not reported; passing a true *overlap*
-      returns every match that is not wholly contained in another.
-      If *count* is a :class:`Variable`, it receives a list with one element
-      per match.
-
-      .. versionadded:: 3.15
 
 
    .. method:: scan_mark(x, y)
@@ -6031,29 +5682,6 @@ Widget classes
       the widget itself.
 
       .. versionadded:: 3.3
-
-   .. method:: sync(command=None)
-
-      Control the synchronization of the displayed view with the underlying
-      text, which may lag behind when line heights have not yet been computed
-      (for example, for lines that have never been displayed).
-      If *command* is omitted, bring the line metrics up to date immediately by
-      forcing computation of any outdated line heights, and return once they
-      are current.
-      Otherwise schedule *command* to be called, with no arguments, exactly
-      once as soon as all line heights are up to date; if there are no pending
-      calculations, it is called immediately.
-
-      .. versionadded:: 3.16
-
-   .. method:: pendingsync()
-
-      Return ``True`` if the line height calculations are not up to date, and
-      ``False`` otherwise.
-      The ``<<WidgetViewSync>>`` virtual event fires whenever this state
-      changes, with the *detail* field set to the new value.
-
-      .. versionadded:: 3.16
 
    .. method:: yview_pickplace(*what)
 
@@ -6307,14 +5935,6 @@ Image classes
       it is displayed as transparent and the background of whatever window it
       is displayed in shows through.
 
-   .. method:: redither()
-
-      Recalculate the dithered image in each window where it is displayed.
-      This is useful when the image data was supplied in pieces, in which case
-      the dithered image may not be exactly correct.
-
-      .. versionadded:: 3.16
-
    .. method:: cget(option)
 
       Return the current value of the configuration option *option*.
@@ -6382,7 +6002,7 @@ Image classes
 
 
    .. method:: data(format=None, *, from_coords=None, background=None, \
-                    grayscale=False, metadata=None)
+                    grayscale=False)
 
       Return the image data.
 
@@ -6406,27 +6026,16 @@ Image classes
       If *grayscale* is true, the data does not contain color information; all
       pixel data is transformed into grayscale.
 
-      *metadata* is a dictionary passed to the image format driver.
-      It requires Tcl/Tk 9.0 or newer.
-
       .. versionadded:: 3.13
 
-      .. versionchanged:: 3.16
-         Added the *metadata* parameter.
 
-
-   .. method:: get(x, y, *, withalpha=False)
+   .. method:: get(x, y)
 
       Return the color of the pixel at coordinates (*x*, *y*) as an
       ``(r, g, b)`` tuple of three integers between 0 and 255, representing the
       red, green and blue components respectively.
-      If *withalpha* is true, the returned tuple has a fourth element giving
-      the alpha (opacity) value of the pixel.
 
-      .. versionchanged:: 3.16
-         Added the *withalpha* parameter, which requires Tcl/Tk 9.0 or newer.
-
-   .. method:: put(data, to=None, *, format=None, metadata=None)
+   .. method:: put(data, to=None)
 
       Set pixels of the image to the colors given in *data*, which must be a
       string or a nested sequence of horizontal rows of pixel colors (for
@@ -6439,24 +6048,12 @@ Image classes
       bottom-right corner, of the region.
       The default position is ``(0, 0)``.
 
-      *format* specifies the format of the image *data*, so that only image
-      file format handlers whose names begin with it are tried.
-
-      *metadata* is a dictionary passed to the image format driver.
-      It requires Tcl/Tk 9.0 or newer.
-
-      .. versionchanged:: 3.16
-         Added the *format* and *metadata* parameters.
-
    .. method:: read(filename, format=None, *, from_coords=None, to=None, \
-                    shrink=False, metadata=None)
+                    shrink=False)
 
       Read image data from the file named *filename* into the image.
 
       *format* specifies the format of the image data in the file.
-
-      *metadata* is a dictionary passed to the image format driver.
-      It requires Tcl/Tk 9.0 or newer.
 
       *from_coords* specifies a rectangular sub-region of the image file data
       to be copied to the destination image.
@@ -6477,9 +6074,6 @@ Image classes
       corner of the image.
 
       .. versionadded:: 3.13
-
-      .. versionchanged:: 3.16
-         Added the *metadata* parameter.
 
 
    .. method:: subsample(x, y='', *, from_coords=None)
@@ -6513,7 +6107,7 @@ Image classes
 
 
    .. method:: write(filename, format=None, from_coords=None, *, \
-                     background=None, grayscale=False, metadata=None)
+                     background=None, grayscale=False)
 
       Write image data from the image to the file named *filename*.
 
@@ -6535,14 +6129,8 @@ Image classes
       If *grayscale* is true, the data does not contain color information; all
       pixel data is transformed into grayscale.
 
-      *metadata* is a dictionary passed to the image format driver.
-      It requires Tcl/Tk 9.0 or newer.
-
       .. versionchanged:: 3.13
          Added the *background* and *grayscale* parameters.
-
-      .. versionchanged:: 3.16
-         Added the *metadata* parameter.
 
 
    .. method:: zoom(x, y='', *, from_coords=None)
@@ -6663,22 +6251,6 @@ Other classes
 
       The amount the mouse wheel was rotated (for ``MouseWheel`` events).
 
-   .. attribute:: user_data
-
-      The data string of a virtual event, as passed to the *data* option of
-      :meth:`Misc.event_generate`.
-      It is ``'??'`` for non-virtual events.
-
-      .. versionadded:: 3.15
-
-   .. attribute:: detail
-
-      A fixed detail string for ``Enter``, ``Leave``, ``FocusIn``, ``FocusOut``
-      and ``ConfigureRequest`` events (see the Tcl/Tk documentation).
-      It is ``'??'`` for other events.
-
-      .. versionadded:: 3.15
-
 
 .. class:: EventType(*values)
 
@@ -6738,7 +6310,7 @@ Module-level functions
    Convert the Tcl boolean string *s* (one of ``'1'``, ``'true'``, ``'yes'``,
    ``'on'`` and similar, or their false counterparts) to a Python
    :class:`bool`.
-   Raise :exc:`ValueError` for an invalid value.
+   Raise :exc:`TclError` for an invalid value.
 
 .. function:: getdouble(s)
 
@@ -6820,13 +6392,13 @@ and :mod:`!tkinter.constants` namespaces.
           YES
           ON
 
-   Values that are true, all equal to the integer ``1``.
+   Truthy values, all equal to the integer ``1``.
 
 .. data:: FALSE
           NO
           OFF
 
-   Values that are false, all equal to the integer ``0``.
+   Falsy values, all equal to the integer ``0``.
 
 .. data:: N
           S
@@ -6971,32 +6543,3 @@ and :mod:`!tkinter.constants` namespaces.
           DOTBOX
 
    Other option values: ``'underline'``, ``'numeric'`` and ``'dotbox'``.
-
-
-Version information
-^^^^^^^^^^^^^^^^^^^
-
-.. data:: TCL_VERSION_INFO
-          TK_VERSION_INFO
-
-   The versions of the Tcl and Tk libraries that were used for building
-   the :mod:`!_tkinter` module, as named tuples with the same five fields
-   as :data:`sys.version_info`: *major*, *minor*, *micro*, *releaselevel*
-   and *serial*.
-   *releaselevel* is ``'alpha'``, ``'beta'`` or ``'final'``.
-   Converting them to a string gives the version in the usual Tcl/Tk notation,
-   for example ``'9.0.3'`` for a final release or ``'9.1b2'`` for a
-   pre-release.
-   These may be different from the libraries actually used at runtime,
-   which are available as :meth:`Misc.info_patchlevel` (the Tcl version)
-   and the ``tk_patchLevel`` Tcl variable.
-
-   .. versionadded:: 3.16
-
-.. data:: TkVersion
-          TclVersion
-
-   The major and minor version of the Tk and Tcl libraries that were used
-   for building the :mod:`!_tkinter` module, as floats, for example ``8.6``.
-   Prefer :data:`TK_VERSION_INFO` and :data:`TCL_VERSION_INFO`, which are
-   more precise and compare correctly.

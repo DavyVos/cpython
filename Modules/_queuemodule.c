@@ -51,14 +51,13 @@ RingBuf_Init(RingBuf *buf)
 {
     buf->put_idx = 0;
     buf->get_idx = 0;
-    buf->items_cap = 0;
+    buf->items_cap = INITIAL_RING_BUF_CAPACITY;
     buf->num_items = 0;
-    buf->items = PyMem_Calloc(INITIAL_RING_BUF_CAPACITY, sizeof(PyObject *));
+    buf->items = PyMem_Calloc(buf->items_cap, sizeof(PyObject *));
     if (buf->items == NULL) {
         PyErr_NoMemory();
         return -1;
     }
-    buf->items_cap = INITIAL_RING_BUF_CAPACITY;
     return 0;
 }
 
@@ -155,6 +154,8 @@ RingBuf_Get(RingBuf *buf)
 }
 
 // Returns 0 on success or -1 if the buffer failed to grow.
+//
+// Steals a reference to item.
 static int
 RingBuf_Put(RingBuf *buf, PyObject *item)
 {
@@ -164,10 +165,11 @@ RingBuf_Put(RingBuf *buf, PyObject *item)
         // Buffer is full, grow it.
         if (resize_ringbuf(buf, buf->items_cap * 2) < 0) {
             PyErr_NoMemory();
+            Py_DECREF(item);
             return -1;
         }
     }
-    buf->items[buf->put_idx] = Py_NewRef(item);
+    buf->items[buf->put_idx] = item;
     buf->put_idx = (buf->put_idx + 1) % buf->items_cap;
     buf->num_items++;
     return 0;
@@ -197,8 +199,6 @@ typedef struct {
     PyObject *weakreflist;
 } simplequeueobject;
 
-#define simplequeueobject_CAST(op)  ((simplequeueobject *)(op))
-
 /*[clinic input]
 module _queue
 class _queue.SimpleQueue "simplequeueobject *" "simplequeue_get_state_by_type(type)->SimpleQueueType"
@@ -206,30 +206,27 @@ class _queue.SimpleQueue "simplequeueobject *" "simplequeue_get_state_by_type(ty
 /*[clinic end generated code: output=da39a3ee5e6b4b0d input=0a4023fe4d198c8d]*/
 
 static int
-simplequeue_clear(PyObject *op)
+simplequeue_clear(simplequeueobject *self)
 {
-    simplequeueobject *self = simplequeueobject_CAST(op);
     RingBuf_Fini(&self->buf);
     return 0;
 }
 
 static void
-simplequeue_dealloc(PyObject *op)
+simplequeue_dealloc(simplequeueobject *self)
 {
-    simplequeueobject *self = simplequeueobject_CAST(op);
     PyTypeObject *tp = Py_TYPE(self);
 
     PyObject_GC_UnTrack(self);
-    (void)simplequeue_clear(op);
-    FT_CLEAR_WEAKREFS(op, self->weakreflist);
-    tp->tp_free(self);
+    (void)simplequeue_clear(self);
+    FT_CLEAR_WEAKREFS((PyObject *) self, self->weakreflist);
+    Py_TYPE(self)->tp_free(self);
     Py_DECREF(tp);
 }
 
 static int
-simplequeue_traverse(PyObject *op, visitproc visit, void *arg)
+simplequeue_traverse(simplequeueobject *self, visitproc visit, void *arg)
 {
-    simplequeueobject *self = simplequeueobject_CAST(op);
     RingBuf *buf = &self->buf;
     for (Py_ssize_t i = 0, num_items = buf->num_items; i < num_items; i++) {
         Py_VISIT(RingBuf_At(buf, i));
@@ -270,17 +267,18 @@ typedef struct {
 } HandoffData;
 
 static void
-maybe_handoff_item(void *arg, void *park_arg, int has_more_waiters)
+maybe_handoff_item(HandoffData *data, PyObject **item, int has_more_waiters)
 {
-    HandoffData *data = (HandoffData*)arg;
-    PyObject **item = (PyObject**)park_arg;
-    data->queue->has_threads_waiting = has_more_waiters;
-
-    data->handed_off = item != NULL;
-    if (data->handed_off) {
-        // There was at least one waiting thread, hand off the item
-        *item = Py_NewRef(data->item);
+    if (item == NULL) {
+        // No threads were waiting
+        data->handed_off = false;
     }
+    else {
+        // There was at least one waiting thread, hand off the item
+        *item = data->item;
+        data->handed_off = true;
+    }
+    data->queue->has_threads_waiting = has_more_waiters;
 }
 
 /*[clinic input]
@@ -303,21 +301,20 @@ _queue_SimpleQueue_put_impl(simplequeueobject *self, PyObject *item,
                             int block, PyObject *timeout)
 /*[clinic end generated code: output=4333136e88f90d8b input=9f9ff270a74670c3]*/
 {
+    HandoffData data = {
+        .handed_off = 0,
+        .item = Py_NewRef(item),
+        .queue = self,
+    };
     if (self->has_threads_waiting) {
-        HandoffData data = {
-            .handed_off = 0,
-            .item = item,
-            .queue = self,
-        };
         // Try to hand the item off directly if there are threads waiting
         _PyParkingLot_Unpark(&self->has_threads_waiting,
-                             maybe_handoff_item, &data);
-        if (data.handed_off) {
-            Py_RETURN_NONE;
-        }
+                             (_Py_unpark_fn_t *)maybe_handoff_item, &data);
     }
-    if (RingBuf_Put(&self->buf, item) < 0) {
-        return NULL;
+    if (!data.handed_off) {
+        if (RingBuf_Put(&self->buf, item) < 0) {
+            return NULL;
+        }
     }
     Py_RETURN_NONE;
 }
@@ -499,22 +496,6 @@ _queue_SimpleQueue_qsize_impl(simplequeueobject *self)
     return RingBuf_Len(&self->buf);
 }
 
-/*[clinic input]
-@critical_section
-_queue.SimpleQueue.__sizeof__ -> Py_ssize_t
-
-Returns size in memory, in bytes.
-[clinic start generated code]*/
-
-static Py_ssize_t
-_queue_SimpleQueue___sizeof___impl(simplequeueobject *self)
-/*[clinic end generated code: output=58ce4e3bbc078fd4 input=a3a7f05c9616598f]*/
-{
-    Py_ssize_t res = sizeof(simplequeueobject);
-    res += self->buf.items_cap * sizeof(PyObject *);
-    return res;
-}
-
 static int
 queue_traverse(PyObject *m, visitproc visit, void *arg)
 {
@@ -536,7 +517,7 @@ queue_clear(PyObject *m)
 static void
 queue_free(void *m)
 {
-    (void)queue_clear((PyObject *)m);
+    queue_clear((PyObject *)m);
 }
 
 #include "clinic/_queuemodule.c.h"
@@ -549,7 +530,6 @@ static PyMethodDef simplequeue_methods[] = {
     _QUEUE_SIMPLEQUEUE_PUT_METHODDEF
     _QUEUE_SIMPLEQUEUE_PUT_NOWAIT_METHODDEF
     _QUEUE_SIMPLEQUEUE_QSIZE_METHODDEF
-    _QUEUE_SIMPLEQUEUE___SIZEOF___METHODDEF
     {"__class_getitem__",    Py_GenericAlias,
     METH_O|METH_CLASS,       PyDoc_STR("SimpleQueues are generic over the type of their contents")},
     {NULL,           NULL}              /* sentinel */
@@ -615,7 +595,6 @@ queuemodule_exec(PyObject *module)
 }
 
 static PyModuleDef_Slot queuemodule_slots[] = {
-    _Py_ABI_SLOT,
     {Py_mod_exec, queuemodule_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {Py_mod_gil, Py_MOD_GIL_NOT_USED},

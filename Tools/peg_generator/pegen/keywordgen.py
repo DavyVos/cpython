@@ -1,7 +1,6 @@
 """Generate Lib/keyword.py from the Grammar and Tokens files using pgen"""
 
 import argparse
-import pathlib
 
 from .build import build_parser, generate_token_definitions
 from .c_generator import CParserGenerator
@@ -42,14 +41,13 @@ def main() -> None:
         description="Generate the Lib/keywords.py file from the grammar."
     )
     parser.add_argument(
-        "grammar", type=pathlib.Path, help="The file with the grammar definition in PEG format"
+        "grammar", help="The file with the grammar definition in PEG format"
     )
     parser.add_argument(
-        "tokens_file", type=pathlib.Path, help="The file with the token definitions"
+        "tokens_file", help="The file with the token definitions"
     )
     parser.add_argument(
         "keyword_file",
-        type=pathlib.Path,
         help="The path to write the keyword definitions",
     )
     args = parser.parse_args()

@@ -1,6 +1,5 @@
 import dataclasses
 import json
-from _colorize import get_colors  # type: ignore[import-not-found]
 from typing import Any
 
 from .utils import (
@@ -109,78 +108,57 @@ class TestResult:
         return State.is_failed(self.state)
 
     def _format_failed(self):
-        ansi = get_colors()
-        red, reset = ansi.BOLD_RED, ansi.RESET
         if self.errors and self.failures:
             le = len(self.errors)
             lf = len(self.failures)
             error_s = "error" + ("s" if le > 1 else "")
             failure_s = "failure" + ("s" if lf > 1 else "")
-            return (
-                f"{red}{self.test_name} failed "
-                f"({le} {error_s}, {lf} {failure_s}){reset}"
-            )
+            return f"{self.test_name} failed ({le} {error_s}, {lf} {failure_s})"
 
         if self.errors:
             le = len(self.errors)
             error_s = "error" + ("s" if le > 1 else "")
-            return f"{red}{self.test_name} failed ({le} {error_s}){reset}"
+            return f"{self.test_name} failed ({le} {error_s})"
 
         if self.failures:
             lf = len(self.failures)
             failure_s = "failure" + ("s" if lf > 1 else "")
-            return f"{red}{self.test_name} failed ({lf} {failure_s}){reset}"
+            return f"{self.test_name} failed ({lf} {failure_s})"
 
-        return f"{red}{self.test_name} failed{reset}"
+        return f"{self.test_name} failed"
 
     def __str__(self) -> str:
-        ansi = get_colors()
-        green = ansi.GREEN
-        red = ansi.BOLD_RED
-        reset = ansi.RESET
-        yellow = ansi.YELLOW
-
         match self.state:
             case State.PASSED:
-                return f"{green}{self.test_name} passed{reset}"
+                return f"{self.test_name} passed"
             case State.FAILED:
-                return f"{red}{self._format_failed()}{reset}"
+                return self._format_failed()
             case State.SKIPPED:
-                return f"{yellow}{self.test_name} skipped{reset}"
+                return f"{self.test_name} skipped"
             case State.UNCAUGHT_EXC:
-                return (
-                    f"{red}{self.test_name} failed (uncaught exception){reset}"
-                )
+                return f"{self.test_name} failed (uncaught exception)"
             case State.REFLEAK:
-                return f"{red}{self.test_name} failed (reference leak){reset}"
+                return f"{self.test_name} failed (reference leak)"
             case State.ENV_CHANGED:
-                return f"{red}{self.test_name} failed (env changed){reset}"
+                return f"{self.test_name} failed (env changed)"
             case State.RESOURCE_DENIED:
-                return f"{yellow}{self.test_name} skipped (resource denied){reset}"
+                return f"{self.test_name} skipped (resource denied)"
             case State.INTERRUPTED:
-                return f"{yellow}{self.test_name} interrupted{reset}"
+                return f"{self.test_name} interrupted"
             case State.WORKER_FAILED:
-                return (
-                    f"{red}{self.test_name} worker non-zero exit code{reset}"
-                )
+                return f"{self.test_name} worker non-zero exit code"
             case State.WORKER_BUG:
-                return f"{red}{self.test_name} worker bug{reset}"
+                return f"{self.test_name} worker bug"
             case State.DID_NOT_RUN:
-                return f"{yellow}{self.test_name} ran no tests{reset}"
+                return f"{self.test_name} ran no tests"
             case State.TIMEOUT:
                 assert self.duration is not None, "self.duration is None"
                 return f"{self.test_name} timed out ({format_duration(self.duration)})"
             case _:
-                raise ValueError(
-                    f"{red}unknown result state: {{state!r}}{reset}"
-                )
+                raise ValueError("unknown result state: {state!r}")
 
     def has_meaningful_duration(self):
         return State.has_meaningful_duration(self.state)
-
-    @property
-    def failed_test_cases(self) -> list[tuple[str, str]]:
-        return (self.errors or []) + (self.failures or [])
 
     def set_env_changed(self, *reasons):
         if self.state is None or self.state == State.PASSED:
@@ -226,7 +204,6 @@ class TestResult:
 
     def write_json_into(self, file) -> None:
         json.dump(self, file, cls=_EncodeTestResult)
-        file.flush()
 
     @staticmethod
     def from_json(worker_json: StrJSON) -> 'TestResult':

@@ -1,27 +1,24 @@
 """Utility code for constructing importers, etc."""
-
+from ._abc import Loader
+from ._bootstrap import module_from_spec
 from ._bootstrap import _resolve_name
+from ._bootstrap import spec_from_loader
 from ._bootstrap import _find_spec
+from ._bootstrap_external import MAGIC_NUMBER
+from ._bootstrap_external import _RAW_MAGIC_NUMBER
+from ._bootstrap_external import cache_from_source
+from ._bootstrap_external import decode_source
+from ._bootstrap_external import source_from_cache
+from ._bootstrap_external import spec_from_file_location
 
 import _imp
 import sys
 import types
 
 
-# Public API
-from ._abc import Loader
-from ._bootstrap import module_from_spec
-from ._bootstrap import spec_from_loader
-from ._bootstrap_external import MAGIC_NUMBER
-from ._bootstrap_external import cache_from_source
-from ._bootstrap_external import decode_source
-from ._bootstrap_external import source_from_cache
-from ._bootstrap_external import spec_from_file_location
-
-
 def source_hash(source_bytes):
     "Return the hash of *source_bytes* as used in hash-based pyc files."
-    return _imp.source_hash(_imp.pyc_magic_number_token, source_bytes)
+    return _imp.source_hash(_RAW_MAGIC_NUMBER, source_bytes)
 
 
 def resolve_name(name, package):
@@ -275,9 +272,3 @@ class LazyLoader(Loader):
         loader_state['is_loading'] = False
         module.__spec__.loader_state = loader_state
         module.__class__ = _LazyModule
-
-
-__all__ = ['LazyLoader', 'Loader', 'MAGIC_NUMBER',
-           'cache_from_source', 'decode_source', 'find_spec',
-           'module_from_spec', 'resolve_name', 'source_from_cache',
-           'source_hash', 'spec_from_file_location', 'spec_from_loader']

@@ -14,7 +14,6 @@ typedef struct PyModuleDef_Slot PyModuleDef_Slot;
 typedef struct PyMethodDef PyMethodDef;
 typedef struct PyGetSetDef PyGetSetDef;
 typedef struct PyMemberDef PyMemberDef;
-typedef struct PySlot PySlot;
 
 typedef struct _object PyObject;
 typedef struct _longobject PyLongObject;

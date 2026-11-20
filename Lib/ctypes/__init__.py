@@ -2,28 +2,26 @@
 
 import os as _os
 import sys as _sys
+import sysconfig as _sysconfig
 import types as _types
 
-lazy import sysconfig as _sysconfig
+__version__ = "1.1.0"
 
 from _ctypes import Union, Structure, Array
 from _ctypes import _Pointer
 from _ctypes import CFuncPtr as _CFuncPtr
+from _ctypes import __version__ as _ctypes_version
 from _ctypes import RTLD_LOCAL, RTLD_GLOBAL
 from _ctypes import ArgumentError
 from _ctypes import SIZEOF_TIME_T
-try:
-    from _ctypes import (LIBFFI_VERSION, libffi_version,
-                         LIBFFI_VERSION_INFO, libffi_version_info)
-except ImportError:
-    # libffi < 3.5 does not provide version information.
-    pass
-from _ctypes import CField
 
 from struct import calcsize as _calcsize
 
+if __version__ != _ctypes_version:
+    raise Exception("Version number mismatch", __version__, _ctypes_version)
+
 if _os.name == "nt":
-    from _ctypes import COMError, CopyComPointer, FormatError
+    from _ctypes import FormatError
 
 DEFAULT_MODE = RTLD_LOCAL
 if _os.name == "posix" and _sys.platform == "darwin":
@@ -165,7 +163,6 @@ class py_object(_SimpleCData):
             return super().__repr__()
         except ValueError:
             return "%s(<NULL>)" % type(self).__name__
-    __class_getitem__ = classmethod(_types.GenericAlias)
 _check_size(py_object, "P")
 
 class c_short(_SimpleCData):
@@ -209,18 +206,6 @@ class c_longdouble(_SimpleCData):
     _type_ = "g"
 if sizeof(c_longdouble) == sizeof(c_double):
     c_longdouble = c_double
-
-try:
-    class c_double_complex(_SimpleCData):
-        _type_ = "Zd"
-    _check_size(c_double_complex)
-    class c_float_complex(_SimpleCData):
-        _type_ = "Zf"
-    _check_size(c_float_complex)
-    class c_longdouble_complex(_SimpleCData):
-        _type_ = "Zg"
-except AttributeError:
-    pass
 
 if _calcsize("l") == _calcsize("q"):
     # if long and long long have the same size, make c_longlong an alias for c_long
@@ -269,72 +254,7 @@ _check_size(c_void_p)
 class c_bool(_SimpleCData):
     _type_ = "?"
 
-def POINTER(cls):
-    """Create and return a new ctypes pointer type.
-
-    Pointer types are cached and reused internally,
-    so calling this function repeatedly is cheap.
-    """
-    if cls is None:
-        return c_void_p
-    try:
-        return cls.__pointer_type__
-    except AttributeError:
-        pass
-    if isinstance(cls, str):
-        # handle old-style incomplete types (see test_ctypes.test_incomplete)
-        import warnings
-        warnings._deprecated("ctypes.POINTER with string", remove=(3, 19))
-        try:
-            return _pointer_type_cache_fallback[cls]
-        except KeyError:
-            result = type(f'LP_{cls}', (_Pointer,), {})
-            _pointer_type_cache_fallback[cls] = result
-            return result
-
-    # create pointer type and set __pointer_type__ for cls
-    return type(f'LP_{cls.__name__}', (_Pointer,), {'_type_': cls})
-
-def pointer(obj):
-    """Create a new pointer instance, pointing to 'obj'.
-
-    The returned object is of the type POINTER(type(obj)). Note that if you
-    just want to pass a pointer to an object to a foreign function call, you
-    should use byref(obj) which is much faster.
-    """
-    typ = POINTER(type(obj))
-    return typ(obj)
-
-class _PointerTypeCache:
-    def __setitem__(self, cls, pointer_type):
-        import warnings
-        warnings._deprecated("ctypes._pointer_type_cache", remove=(3, 19))
-        try:
-            cls.__pointer_type__ = pointer_type
-        except AttributeError:
-            _pointer_type_cache_fallback[cls] = pointer_type
-
-    def __getitem__(self, cls):
-        import warnings
-        warnings._deprecated("ctypes._pointer_type_cache", remove=(3, 19))
-        try:
-            return cls.__pointer_type__
-        except AttributeError:
-            return _pointer_type_cache_fallback[cls]
-
-    def get(self, cls, default=None):
-        import warnings
-        warnings._deprecated("ctypes._pointer_type_cache", remove=(3, 19))
-        try:
-            return cls.__pointer_type__
-        except AttributeError:
-            return _pointer_type_cache_fallback.get(cls, default)
-
-    def __contains__(self, cls):
-        return hasattr(cls, '__pointer_type__')
-
-_pointer_type_cache_fallback = {}
-_pointer_type_cache = _PointerTypeCache()
+from _ctypes import POINTER, pointer, _pointer_type_cache
 
 class c_wchar_p(_SimpleCData):
     _type_ = "Z"
@@ -345,7 +265,7 @@ class c_wchar(_SimpleCData):
     _type_ = "u"
 
 def _reset_cache():
-    _pointer_type_cache_fallback.clear()
+    _pointer_type_cache.clear()
     _c_functype_cache.clear()
     if _os.name == "nt":
         _win_functype_cache.clear()
@@ -353,6 +273,7 @@ def _reset_cache():
     POINTER(c_wchar).from_param = c_wchar_p.from_param
     # _SimpleCData.c_char_p_from_param
     POINTER(c_char).from_param = c_char_p.from_param
+    _pointer_type_cache[None] = c_void_p
 
 def create_unicode_buffer(init, size=None):
     """create_unicode_buffer(aString) -> character array
@@ -381,6 +302,18 @@ def create_unicode_buffer(init, size=None):
         buf = buftype()
         return buf
     raise TypeError(init)
+
+
+def SetPointerType(pointer, cls):
+    import warnings
+    warnings._deprecated("ctypes.SetPointerType", remove=(3, 15))
+    if _pointer_type_cache.get(cls, None) is not None:
+        raise RuntimeError("This type already exists in the cache")
+    if id(pointer) not in _pointer_type_cache:
+        raise RuntimeError("What's this???")
+    pointer.set_type(cls)
+    _pointer_type_cache[cls] = pointer
+    del _pointer_type_cache[id(pointer)]
 
 def ARRAY(typ, len):
     return typ * len
@@ -447,9 +380,9 @@ class CDLL(object):
 
     else:
         def _load_library(self, name, mode, handle, winmode):
-            # If the filename that has been provided is an iOS, tvOS, visionOS
-            # or watchOS .fwork file, dereference the location to the true
-            # origin of the binary.
+            # If the filename that has been provided is an iOS/tvOS/watchOS
+            # .fwork file, dereference the location to the true origin of the
+            # binary.
             if name and name.endswith(".fwork"):
                 with open(name) as f:
                     name = _os.path.join(
@@ -555,11 +488,9 @@ pydll = LibraryLoader(PyDLL)
 
 if _os.name == "nt":
     pythonapi = PyDLL("python dll", None, _sys.dllhandle)
-elif _sys.platform == "android":
+elif _sys.platform in ["android", "cygwin"]:
     # These are Unix-like platforms which use a dynamically-linked libpython.
     pythonapi = PyDLL(_sysconfig.get_config_var("LDLIBRARY"))
-elif _sys.platform == "cygwin":
-    pythonapi = PyDLL(_sysconfig.get_config_var("DLLLIBRARY"))
 else:
     try:
         pythonapi = PyDLL(None)
@@ -594,7 +525,6 @@ elif sizeof(c_ulonglong) == sizeof(c_void_p):
 # functions
 
 from _ctypes import _memmove_addr, _memset_addr, _string_at_addr, _cast_addr
-from _ctypes import _memoryview_at_addr
 
 ## void *memmove(void *, const void *, size_t);
 memmove = CFUNCTYPE(c_void_p, c_void_p, c_void_p, c_size_t)(_memmove_addr)
@@ -619,14 +549,6 @@ def string_at(ptr, size=-1):
 
     Return the byte string at void *ptr."""
     return _string_at(ptr, size)
-
-_memoryview_at = PYFUNCTYPE(
-    py_object, c_void_p, c_ssize_t, c_int)(_memoryview_at_addr)
-def memoryview_at(ptr, size, readonly=False):
-    """memoryview_at(ptr, size[, readonly]) -> memoryview
-
-    Return a memoryview representing the memory at void *ptr."""
-    return _memoryview_at(ptr, size, bool(readonly))
 
 try:
     from _ctypes import _wstring_at_addr
@@ -681,12 +603,3 @@ else:
     raise SystemError(f"Unexpected sizeof(time_t): {SIZEOF_TIME_T=}")
 
 _reset_cache()
-
-
-def __getattr__(name):
-    if name == "__version__":
-        from warnings import _deprecated
-
-        _deprecated("__version__", remove=(3, 20))
-        return "1.1.0"  # Do not change
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

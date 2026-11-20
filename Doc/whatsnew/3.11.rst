@@ -361,7 +361,7 @@ providing protection against injection attacks.
 
 For example, a SQL query function could be annotated as follows::
 
-   def run_query(sql: LiteralString) -> ...:
+   def run_query(sql: LiteralString) -> ...
        ...
 
    def caller(
@@ -522,7 +522,7 @@ Other CPython Implementation Changes
   have been removed, as they can be derived from ``exc_value``.
   (Contributed by Irit Katriel in :issue:`45711`.)
 
-* A new command line option, ``AppendPath``,
+* A new :ref:`command line option <install-quiet-option>`, ``AppendPath``,
   has been added for the Windows installer.
   It behaves similarly to ``PrependPath``,
   but appends the install and scripts directories instead of prepending them.
@@ -740,8 +740,8 @@ fractions
 functools
 ---------
 
-* :deco:`functools.singledispatch` now supports :class:`types.UnionType`
-  and :class:`typing.Union` as annotations to the dispatch argument.::
+* :deco:`functools.singledispatch` now supports :data:`types.UnionType`
+  and :data:`typing.Union` as annotations to the dispatch argument.::
 
     >>> from functools import singledispatch
     >>> @singledispatch
@@ -1670,7 +1670,7 @@ Replaced opcodes
 |                                    |                                    | for each direction                      |
 |                                    |                                    |                                         |
 +------------------------------------+------------------------------------+-----------------------------------------+
-| | :opcode:`!SETUP_WITH`            | :opcode:`!BEFORE_WITH`             | :keyword:`with` block setup             |
+| | :opcode:`!SETUP_WITH`            | :opcode:`BEFORE_WITH`              | :keyword:`with` block setup             |
 | | :opcode:`!SETUP_ASYNC_WITH`      |                                    |                                         |
 +------------------------------------+------------------------------------+-----------------------------------------+
 
@@ -1904,16 +1904,16 @@ C APIs pending removal are
 * :meth:`!importlib.abc.PathEntryFinder.find_loader`
 * :meth:`!importlib.abc.PathEntryFinder.find_module`
 * :meth:`!importlib.machinery.BuiltinImporter.find_module`
-* :meth:`!importlib.machinery.BuiltinImporter.module_repr`
+* :meth:`!importlib.machinery.BuiltinLoader.module_repr`
 * :meth:`!importlib.machinery.FileFinder.find_loader`
 * :meth:`!importlib.machinery.FileFinder.find_module`
 * :meth:`!importlib.machinery.FrozenImporter.find_module`
-* :meth:`!importlib.machinery.FrozenImporter.module_repr`
+* :meth:`!importlib.machinery.FrozenLoader.module_repr`
 * :meth:`!importlib.machinery.PathFinder.find_module`
 * :meth:`!importlib.machinery.WindowsRegistryFinder.find_module`
 * :func:`!importlib.util.module_for_loader`
-* :func:`!importlib.util.set_loader`
-* :func:`!importlib.util.set_package`
+* :func:`!importlib.util.set_loader_wrapper`
+* :func:`!importlib.util.set_package_wrapper`
 * :class:`!pkgutil.ImpImporter`
 * :class:`!pkgutil.ImpLoader`
 * :meth:`!pathlib.Path.link_to`
@@ -2168,7 +2168,7 @@ Build Changes
   (Contributed by Donghee Na and Brett Holman in :issue:`44340`.)
 
 * Freelists for object structs can now be disabled. A new :program:`configure`
-  option ``--without-freelists`` can be used to disable all freelists
+  option :option:`--without-freelists` can be used to disable all freelists
   except empty tuple singleton.
   (Contributed by Christian Heimes in :issue:`45522`.)
 
@@ -2335,7 +2335,7 @@ Porting to Python 3.11
         PyObject_GC_UnTrack(p);
         Py_TRASHCAN_SAFE_BEGIN(p);
         ...
-        Py_TRASHCAN_SAFE_END(p)
+        Py_TRASHCAN_SAFE_END
     }
 
   should migrate to the new macros as follows::
@@ -2673,7 +2673,7 @@ Removed
 
   (Contributed by Victor Stinner in :issue:`45474`.)
 
-* Exclude :c:func:`!PyWeakref_GET_OBJECT` from the limited C API. It never
+* Exclude :c:func:`PyWeakref_GET_OBJECT` from the limited C API. It never
   worked since the :c:type:`!PyWeakReference` structure is opaque in the
   limited C API.
   (Contributed by Victor Stinner in :issue:`35134`.)

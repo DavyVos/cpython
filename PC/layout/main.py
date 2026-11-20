@@ -22,7 +22,6 @@ if __name__ == "__main__":
     __path__ = [str(Path(__file__).resolve().parent)]
 
 from .support.appxmanifest import *
-from .support.builddetails import *
 from .support.catalog import *
 from .support.constants import *
 from .support.filesets import *
@@ -33,8 +32,7 @@ from .support.props import *
 from .support.pymanager import *
 from .support.nuspec import *
 
-TEST_PYDS_ONLY = FileStemSet("xxlimited",  "xxlimited_3_13", "xxlimited_35",
-                             "_ctypes_test", "_test*")
+TEST_PYDS_ONLY = FileStemSet("xxlimited", "xxlimited_35", "_ctypes_test", "_test*")
 TEST_DLLS_ONLY = set()
 TEST_DIRS_ONLY = FileNameSet("test", "tests")
 
@@ -129,10 +127,7 @@ def get_tcltk_lib(ns):
 def get_layout(ns):
     def in_build(f, dest="", new_name=None, no_lib=False):
         n, _, x = f.rpartition(".")
-        if new_name and new_name.endswith(f".{x}"):
-            n = new_name.rpartition(".")[0]
-        else:
-            n = new_name or n
+        n = new_name or n
         src = ns.build / f
         if ns.debug and src not in REQUIRED_DLLS:
             if not "_d." in src.name:
@@ -166,12 +161,11 @@ def get_layout(ns):
         source = "python_uwp.exe"
         sourcew = "pythonw_uwp.exe"
     elif ns.include_freethreaded:
+        source = "python{}t.exe".format(VER_DOT)
+        sourcew = "pythonw{}t.exe".format(VER_DOT)
         if not ns.include_alias:
             alias = []
             aliasw = []
-        if (VER_MAJOR, VER_MINOR, VER_MICRO, VER_FIELD4) < (3, 15, 0, 0xB0):
-            source = "python{}t.exe".format(VER_DOT)
-            sourcew = "pythonw{}t.exe".format(VER_DOT)
         alias.extend([
             "python{}t".format(VER_DOT),
             "python{}t".format(VER_MAJOR) if ns.include_alias3 else None,
@@ -202,8 +196,6 @@ def get_layout(ns):
             yield from in_build(FREETHREADED_PYTHON_STABLE_DLL_NAME)
         else:
             yield from in_build(PYTHON_STABLE_DLL_NAME)
-            if (VER_MAJOR, VER_MINOR, VER_MICRO, VER_FIELD4) >= (3, 15, 0, 0xB0):
-                yield from in_build(FREETHREADED_PYTHON_STABLE_DLL_NAME)
 
     found_any = False
     for dest, src in rglob(ns.build, "vcruntime*.dll"):
@@ -316,9 +308,6 @@ def get_layout(ns):
             yield dest, src
 
     for dest, src in get_appx_layout(ns):
-        yield dest, src
-
-    for dest, src in get_builddetails(ns):
         yield dest, src
 
     if ns.include_cat:

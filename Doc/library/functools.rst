@@ -4,6 +4,13 @@
 .. module:: functools
    :synopsis: Higher-order functions and operations on callable objects.
 
+.. moduleauthor:: Peter Harris <scav@blueyonder.co.uk>
+.. moduleauthor:: Raymond Hettinger <python@rcn.com>
+.. moduleauthor:: Nick Coghlan <ncoghlan@gmail.com>
+.. moduleauthor:: Łukasz Langa <lukasz@langa.pl>
+.. moduleauthor:: Pablo Galindo <pablogsal@gmail.com>
+.. sectionauthor:: Peter Harris <scav@blueyonder.co.uk>
+
 **Source code:** :source:`Lib/functools.py`
 
 .. testsetup:: default
@@ -13,11 +20,11 @@
 
 --------------
 
-The :mod:`!functools` module is for higher-order functions: functions that act on
+The :mod:`functools` module is for higher-order functions: functions that act on
 or return other functions. In general, any callable object can be treated as a
 function for the purposes of this module.
 
-The :mod:`!functools` module defines the following functions:
+The :mod:`functools` module defines the following functions:
 
 .. decorator:: cache(user_function)
 
@@ -49,10 +56,6 @@ The :mod:`!functools` module defines the following functions:
    It is possible for the wrapped function to be called more than once if
    another thread makes an additional call before the initial call has been
    completed and cached.
-
-   Call-once behavior is not guaranteed because locks are not held during the
-   function call. Potentially another call with the same arguments could
-   occur while the first call is still running.
 
    .. versionadded:: 3.9
 
@@ -173,8 +176,8 @@ The :mod:`!functools` module defines the following functions:
    the *maxsize* at its default value of 128::
 
        @lru_cache
-       def count_vowels(word):
-           return sum(word.count(vowel) for vowel in 'AEIOUaeiou')
+       def count_vowels(sentence):
+           return sum(sentence.count(vowel) for vowel in 'AEIOUaeiou')
 
    If *maxsize* is set to ``None``, the LRU feature is disabled and the cache can
    grow without bound.
@@ -331,17 +334,6 @@ The :mod:`!functools` module defines the following functions:
       Returning ``NotImplemented`` from the underlying comparison function for
       unrecognised types is now supported.
 
-.. data:: Placeholder
-
-   A singleton object used as a sentinel to reserve a place
-   for positional arguments when calling :func:`partial`
-   and :func:`partialmethod`.
-
-   .. versionadded:: 3.14
-
-   .. versionchanged:: 3.16
-      ``Placeholder`` is now a :class:`sentinel`.
-
 .. function:: partial(func, /, *args, **keywords)
 
    Return a new :ref:`partial object<partial-objects>` which when called
@@ -352,67 +344,26 @@ The :mod:`!functools` module defines the following functions:
    Roughly equivalent to::
 
       def partial(func, /, *args, **keywords):
-          def newfunc(*more_args, **more_keywords):
-              return func(*args, *more_args, **(keywords | more_keywords))
+          def newfunc(*fargs, **fkeywords):
+              newkeywords = {**keywords, **fkeywords}
+              return func(*args, *fargs, **newkeywords)
           newfunc.func = func
           newfunc.args = args
           newfunc.keywords = keywords
           return newfunc
 
-   The :func:`!partial` function is used for partial function application which "freezes"
+   The :func:`partial` is used for partial function application which "freezes"
    some portion of a function's arguments and/or keywords resulting in a new object
    with a simplified signature.  For example, :func:`partial` can be used to create
    a callable that behaves like the :func:`int` function where the *base* argument
-   defaults to ``2``:
+   defaults to two:
 
-   .. doctest::
-
+      >>> from functools import partial
       >>> basetwo = partial(int, base=2)
       >>> basetwo.__doc__ = 'Convert base 2 string to an int.'
       >>> basetwo('10010')
       18
 
-   If :data:`Placeholder` sentinels are present in *args*, they will be filled first
-   when :func:`!partial` is called. This makes it possible to pre-fill any positional
-   argument with a call to :func:`!partial`; without :data:`!Placeholder`,
-   only the chosen number of leading positional arguments can be pre-filled.
-
-   If any :data:`!Placeholder` sentinels are present, all must be filled at call time:
-
-   .. doctest::
-
-      >>> say_to_world = partial(print, Placeholder, Placeholder, "world!")
-      >>> say_to_world('Hello', 'dear')
-      Hello dear world!
-
-   Calling ``say_to_world('Hello')`` raises a :exc:`TypeError`, because
-   only one positional argument is provided, but there are two placeholders
-   that must be filled in.
-
-   If :func:`!partial` is applied to an existing
-   :ref:`partial object <partial-objects>`, :data:`!Placeholder` sentinels of the
-   input object are filled in with new positional arguments.
-   A placeholder can be retained by inserting a new
-   :data:`!Placeholder` sentinel to the place held by a previous :data:`!Placeholder`:
-
-   .. doctest::
-
-      >>> from functools import partial, Placeholder as _
-      >>> remove = partial(str.replace, _, _, '')
-      >>> message = 'Hello, dear dear world!'
-      >>> remove(message, ' dear')
-      'Hello, world!'
-      >>> remove_dear = partial(remove, _, ' dear')
-      >>> remove_dear(message)
-      'Hello, world!'
-      >>> remove_first_dear = partial(remove_dear, _, 1)
-      >>> remove_first_dear(message)
-      'Hello, dear world!'
-
-   :data:`!Placeholder` cannot be passed to :func:`!partial` as a keyword argument.
-
-   .. versionchanged:: 3.14
-      Added support for :data:`Placeholder` in positional arguments.
 
 .. class:: partialmethod(func, /, *args, **keywords)
 
@@ -458,7 +409,7 @@ The :mod:`!functools` module defines the following functions:
    .. versionadded:: 3.4
 
 
-.. function:: reduce(function, iterable, /[, initial])
+.. function:: reduce(function, iterable[, initial], /)
 
    Apply *function* of two arguments cumulatively to the items of *iterable*, from
    left to right, so as to reduce the iterable to a single value.  For example,
@@ -471,9 +422,9 @@ The :mod:`!functools` module defines the following functions:
 
    Roughly equivalent to::
 
-      initial_missing = sentinel('initial_missing')
+      initial_missing = object()
 
-      def reduce(function, iterable, /, initial=initial_missing):
+      def reduce(function, iterable, initial=initial_missing, /):
           it = iter(iterable)
           if initial is initial_missing:
               value = next(it)
@@ -485,9 +436,6 @@ The :mod:`!functools` module defines the following functions:
 
    See :func:`itertools.accumulate` for an iterator that yields all intermediate
    values.
-
-   .. versionchanged:: 3.14
-      *initial* is now supported as a keyword argument.
 
 .. decorator:: singledispatch
 
@@ -509,24 +457,9 @@ The :mod:`!functools` module defines the following functions:
       :no-typesetting:
 
    To add overloaded implementations to the function, use the :func:`!register`
-   attribute of the generic function, which can be used as a decorator.
-   Pass the dispatch type to the decorator::
-
-     >>> @fun.register(int)
-     ... def _(arg, verbose=False):
-     ...     if verbose:
-     ...         print("Strength in numbers, eh?", end=" ")
-     ...     print(arg)
-     ...
-     >>> @fun.register(list)
-     ... def _(arg, verbose=False):
-     ...     if verbose:
-     ...         print("Enumerate this:")
-     ...     for i, elem in enumerate(arg):
-     ...         print(i, elem)
-
-   As a shortcut, for functions annotated with types, the decorator can infer
-   the dispatch type without an explicit type argument::
+   attribute of the generic function, which can be used as a decorator.  For
+   functions annotated with types, the decorator will infer the type of the
+   first argument automatically::
 
      >>> @fun.register
      ... def _(arg: int, verbose=False):
@@ -534,12 +467,14 @@ The :mod:`!functools` module defines the following functions:
      ...         print("Strength in numbers, eh?", end=" ")
      ...     print(arg)
      ...
+     >>> @fun.register
+     ... def _(arg: list, verbose=False):
+     ...     if verbose:
+     ...         print("Enumerate this:")
+     ...     for i, elem in enumerate(arg):
+     ...         print(i, elem)
 
-   This shortcut uses the first annotation, even if it belongs to another
-   parameter or the return value. Annotate the dispatch parameter, or pass the
-   dispatch type explicitly if its annotation is not first.
-
-   :class:`typing.Union` can also be used with this shortcut::
+   :data:`types.UnionType` and :data:`typing.Union` can also be used::
 
     >>> @fun.register
     ... def _(arg: int | float, verbose=False):
@@ -555,6 +490,16 @@ The :mod:`!functools` module defines the following functions:
     ...     for i, elem in enumerate(arg):
     ...         print(i, elem)
     ...
+
+   For code which doesn't use type annotations, the appropriate type
+   argument can be passed explicitly to the decorator itself::
+
+     >>> @fun.register(complex)
+     ... def _(arg, verbose=False):
+     ...     if verbose:
+     ...         print("Better than complicated.", end=" ")
+     ...     print(arg.real, arg.imag)
+     ...
 
    For code that dispatches on a collections type (e.g., ``list``), but wants
    to typehint the items of the collection (e.g., ``list[int]``), the
@@ -665,14 +610,8 @@ The :mod:`!functools` module defines the following functions:
       The :func:`~singledispatch.register` attribute now supports using type annotations.
 
    .. versionchanged:: 3.11
-      The :func:`~singledispatch.register` attribute now supports
-      :class:`typing.Union` as a type annotation.
-
-   .. deprecated:: 3.16
-      Using a return annotation to infer the dispatch type is deprecated and
-      will raise :exc:`TypeError` in Python 3.21. Annotate the dispatch
-      parameter or pass the dispatch type explicitly to :func:`!register`
-      instead.
+      The :func:`~singledispatch.register` attribute now supports :data:`types.UnionType`
+      and :data:`typing.Union` as type annotations.
 
 
 .. class:: singledispatchmethod(func)
@@ -697,20 +636,6 @@ The :mod:`!functools` module defines the following functions:
         @neg.register
         def _(self, arg: bool):
             return not arg
-
-   When *self* or *cls* is annotated, pass the dispatch type explicitly rather
-   than relying on annotation inference::
-
-    from typing import Self
-
-    class Negator:
-        @singledispatchmethod
-        def neg(self, arg):
-            raise NotImplementedError("Cannot negate a")
-
-        @neg.register(int)
-        def _(self: Self, arg: int):
-            return -arg
 
    ``@singledispatchmethod`` supports nesting with other decorators such as
    :deco:`classmethod`. Note that to allow for
@@ -738,9 +663,6 @@ The :mod:`!functools` module defines the following functions:
    :deco:`staticmethod`, :deco:`~abc.abstractmethod`, and others.
 
    .. versionadded:: 3.8
-
-   .. versionchanged:: 3.15
-      Added support of non-:term:`descriptor` callables.
 
 
 .. function:: update_wrapper(wrapper, wrapped, assigned=WRAPPER_ASSIGNMENTS, updated=WRAPPER_UPDATES)
@@ -847,7 +769,10 @@ have three read-only attributes:
    The keyword arguments that will be supplied when the :class:`partial` object is
    called.
 
-:class:`partial` objects are like :ref:`function objects <user-defined-funcs>` in that they are
-callable, weak referenceable, and can have attributes.  There are some important
-differences.  For instance, the :attr:`~definition.__name__` and :attr:`~definition.__doc__` attributes
-are not created automatically.
+:class:`partial` objects are like :ref:`function objects <user-defined-funcs>`
+in that they are callable, weak referenceable, and can have attributes.
+There are some important differences.  For instance, the
+:attr:`~function.__name__` and :attr:`function.__doc__` attributes
+are not created automatically.  Also, :class:`partial` objects defined in
+classes behave like static methods and do not transform into bound methods
+during instance attribute look-up.

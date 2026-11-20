@@ -2,7 +2,6 @@
 
 import random
 import string
-import sys
 import unittest
 from test.support import import_helper
 
@@ -36,15 +35,7 @@ class GroupDatabaseTestCase(unittest.TestCase):
             self.skipTest('huge group file, extended test skipped')
 
         for e in entries:
-            try:
-                e2 = grp.getgrgid(e.gr_gid)
-            except KeyError:
-                # On Cygwin, some groups returned by getgrall() cannot be
-                # retrieved by getgrgid()
-                if sys.platform == 'cygwin':
-                    continue
-                raise
-
+            e2 = grp.getgrgid(e.gr_gid)
             self.check_value(e2)
             self.assertEqual(e2.gr_gid, e.gr_gid)
             name = e.gr_name

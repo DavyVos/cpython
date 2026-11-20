@@ -11,12 +11,13 @@ __all__ = [ 'Client', 'Listener', 'Pipe', 'wait' ]
 
 import errno
 import io
-import itertools
 import os
 import sys
 import socket
 import struct
 import time
+import tempfile
+import itertools
 
 
 from . import util
@@ -38,9 +39,7 @@ except ImportError:
 #
 #
 
-# 64 KiB is the default PIPE buffer size of most POSIX platforms.
-BUFSIZE = 64 * 1024
-
+BUFSIZE = 8192
 # A very generous timeout when it comes to local connections...
 CONNECTION_TIMEOUT = 20.
 
@@ -50,7 +49,7 @@ _MAX_PIPE_ATTEMPTS = 100
 default_family = 'AF_INET'
 families = ['AF_INET']
 
-if hasattr(socket, 'AF_UNIX') and sys.platform != 'cygwin':
+if hasattr(socket, 'AF_UNIX'):
     default_family = 'AF_UNIX'
     families += ['AF_UNIX']
 
@@ -76,12 +75,11 @@ def arbitrary_address(family):
     if family == 'AF_INET':
         return ('localhost', 0)
     elif family == 'AF_UNIX':
-        # NOTE: util.get_temp_dir() is a 0o700 per-process directory.
-        # A mktemp-style ToC vs ToU concern is not important as bind()
-        # surfaces the extremely unlikely collision as EADDRINUSE.
-        suffix = os.urandom(util._TMPSOCK_SUFFIXLEN // 2).hex()
+        # NOTE: util.get_temp_dir() is a 0o700 per-process directory. A
+        # mktemp-style ToC vs ToU concern is not important; bind() surfaces
+        # the extremely unlikely collision as EADDRINUSE.
         return os.path.join(util.get_temp_dir(),
-                            f"{util._TMPSOCK_PREFIX}{suffix}")
+                            f'sock-{os.urandom(6).hex()}')
     elif family == 'AF_PIPE':
         return (r'\\.\pipe\pyc-%d-%d-%s' %
                 (os.getpid(), next(_mmap_counter), os.urandom(8).hex()))
@@ -185,10 +183,6 @@ class _ConnectionBase:
                 self._close()
             finally:
                 self._handle = None
-
-    def _detach(self):
-        """Stop managing the underlying file descriptor or handle."""
-        self._handle = None
 
     def send_bytes(self, buf, offset=0, size=None):
         """Send the bytes data from a bytes-like object"""
@@ -327,32 +321,22 @@ if _winapi:
                 try:
                     ov, err = _winapi.ReadFile(self._handle, bsize,
                                                 overlapped=True)
-
-                    sentinel = object()
-                    return_value = sentinel
                     try:
-                        try:
-                            if err == _winapi.ERROR_IO_PENDING:
-                                waitres = _winapi.WaitForMultipleObjects(
-                                    [ov.event], False, INFINITE)
-                                assert waitres == WAIT_OBJECT_0
-                        except:
-                            ov.cancel()
-                            raise
-                        finally:
-                            nread, err = ov.GetOverlappedResult(True)
-                            if err == 0:
-                                f = io.BytesIO()
-                                f.write(ov.getbuffer())
-                                return_value = f
-                            elif err == _winapi.ERROR_MORE_DATA:
-                                return_value = self._get_more_data(ov, maxsize)
+                        if err == _winapi.ERROR_IO_PENDING:
+                            waitres = _winapi.WaitForMultipleObjects(
+                                [ov.event], False, INFINITE)
+                            assert waitres == WAIT_OBJECT_0
                     except:
-                        if return_value is sentinel:
-                            raise
-
-                    if return_value is not sentinel:
-                        return return_value
+                        ov.cancel()
+                        raise
+                    finally:
+                        nread, err = ov.GetOverlappedResult(True)
+                        if err == 0:
+                            f = io.BytesIO()
+                            f.write(ov.getbuffer())
+                            return f
+                        elif err == _winapi.ERROR_MORE_DATA:
+                            return self._get_more_data(ov, maxsize)
                 except OSError as e:
                     if e.winerror == _winapi.ERROR_BROKEN_PIPE:
                         raise EOFError
@@ -413,8 +397,7 @@ class Connection(_ConnectionBase):
         handle = self._handle
         remaining = size
         while remaining > 0:
-            to_read = min(BUFSIZE, remaining)
-            chunk = read(handle, to_read)
+            chunk = read(handle, remaining)
             n = len(chunk)
             if n == 0:
                 if remaining == size:
@@ -735,7 +718,8 @@ if sys.platform == 'win32':
                 # written data and then disconnected -- see Issue 14725.
             else:
                 try:
-                    _winapi.WaitForMultipleObjects([ov.event], False, INFINITE)
+                    res = _winapi.WaitForMultipleObjects(
+                        [ov.event], False, INFINITE)
                 except:
                     ov.cancel()
                     _winapi.CloseHandle(handle)
@@ -1089,22 +1073,14 @@ if sys.platform == 'win32':
 
         Returns list of those objects in object_list which are ready/readable.
         '''
-        object_list = list(object_list)
-
-        if not object_list:
-            if timeout is None:
-                while True:
-                    time.sleep(1e6)
-            elif timeout > 0:
-                time.sleep(timeout)
-            return []
-
         if timeout is None:
             timeout = INFINITE
         elif timeout < 0:
             timeout = 0
         else:
             timeout = int(timeout * 1000 + 0.5)
+
+        object_list = list(object_list)
         waithandle_to_obj = {}
         ov_list = []
         ready_objects = set()

@@ -5,21 +5,18 @@
 #  error "this header requires Py_BUILD_CORE define"
 #endif
 
-struct _PyOS_GetOpt {
-    int error;                    // generate error messages
-    Py_ssize_t index;             // index into argv array
-    const wchar_t *arg;           // optional argument
-    const wchar_t *ptr;
-    Py_ssize_t argc;
-    wchar_t * const *argv;
-};
+extern int _PyOS_opterr;
+extern Py_ssize_t _PyOS_optind;
+extern const wchar_t *_PyOS_optarg;
 
-extern void _PyOS_GetOpt_Init(
-    struct _PyOS_GetOpt *getopt,
-    Py_ssize_t argc,
-    wchar_t * const *argv);
+extern void _PyOS_ResetGetOpt(void);
 
-extern int _PyOS_GetOpt(
-    struct _PyOS_GetOpt *getopt);
+typedef struct {
+    const wchar_t *name;
+    int has_arg;
+    int val;
+} _PyOS_LongOption;
+
+extern int _PyOS_GetOpt(Py_ssize_t argc, wchar_t * const *argv, int *longindex);
 
 #endif /* !Py_INTERNAL_PYGETOPT_H */

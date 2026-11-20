@@ -17,9 +17,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\Modules\_openssl_mem.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\Modules\_ssl\distrusted_spki.h">
       <Filter>Header Files</Filter>
     </ClInclude>

@@ -66,15 +66,12 @@ SOFT_KEYWORD = 58
 FSTRING_START = 59
 FSTRING_MIDDLE = 60
 FSTRING_END = 61
-TSTRING_START = 62
-TSTRING_MIDDLE = 63
-TSTRING_END = 64
-COMMENT = 65
-NL = 66
+COMMENT = 62
+NL = 63
 # These aren't used by the C tokenizer but are needed for tokenize.py
-ERRORTOKEN = 67
-ENCODING = 68
-N_TOKENS = 69
+ERRORTOKEN = 64
+ENCODING = 65
+N_TOKENS = 66
 # Special definitions for cooperation with parser
 NT_OFFSET = 256
 
@@ -134,11 +131,11 @@ EXACT_TOKEN_TYPES = {
     '~': TILDE,
 }
 
-def ISTERMINAL(x: int) -> bool:
+def ISTERMINAL(x):
     return x < NT_OFFSET
 
-def ISNONTERMINAL(x: int) -> bool:
+def ISNONTERMINAL(x):
     return x >= NT_OFFSET
 
-def ISEOF(x: int) -> bool:
+def ISEOF(x):
     return x == ENDMARKER

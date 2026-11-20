@@ -4,11 +4,13 @@
 .. module:: tkinter.scrolledtext
    :synopsis: Text widget with a vertical scroll bar.
 
+.. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
+
 **Source code:** :source:`Lib/tkinter/scrolledtext.py`
 
 --------------
 
-The :mod:`!tkinter.scrolledtext` module provides a class of the same name which
+The :mod:`tkinter.scrolledtext` module provides a class of the same name which
 implements a basic text widget which has a vertical scroll bar configured to do
 the "right thing."  Using the :class:`ScrolledText` class is a lot easier than
 setting up a text widget and scroll bar directly.
@@ -23,16 +25,7 @@ most normal geometry management behavior.
 Should more specific control be necessary, the following attributes are
 available:
 
-.. class:: ScrolledText(master=None, *, use_ttk=False, **kw)
-
-   The keyword arguments are passed to the :class:`~tkinter.Text` widget.
-
-   When *use_ttk* is true, the surrounding frame and the scroll bar are the
-   themed :mod:`tkinter.ttk` widgets;
-   the default is the classic :mod:`tkinter` widgets.
-
-   .. versionchanged:: 3.16
-      Added the *use_ttk* parameter.
+.. class:: ScrolledText(master=None, **kw)
 
 
    .. attribute:: frame

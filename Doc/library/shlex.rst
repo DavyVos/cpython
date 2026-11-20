@@ -4,6 +4,11 @@
 .. module:: shlex
    :synopsis: Simple lexical analysis for Unix shell-like languages.
 
+.. moduleauthor:: Eric S. Raymond <esr@snark.thyrsus.com>
+.. moduleauthor:: Gustavo Niemeyer <niemeyer@conectiva.com>
+.. sectionauthor:: Eric S. Raymond <esr@snark.thyrsus.com>
+.. sectionauthor:: Gustavo Niemeyer <niemeyer@conectiva.com>
+
 **Source code:** :source:`Lib/shlex.py`
 
 --------------
@@ -13,7 +18,7 @@ simple syntaxes resembling that of the Unix shell.  This will often be useful
 for writing minilanguages, (for example, in run control files for Python
 applications) or for parsing quoted strings.
 
-The :mod:`!shlex` module defines the following functions:
+The :mod:`shlex` module defines the following functions:
 
 
 .. function:: split(s, comments=False, posix=True)
@@ -44,14 +49,11 @@ The :mod:`!shlex` module defines the following functions:
    .. versionadded:: 3.8
 
 
-.. function:: quote(s, *, force=False)
+.. function:: quote(s)
 
    Return a shell-escaped version of the string *s*.  The returned value is a
    string that can safely be used as one token in a shell command line, for
    cases where you cannot use a list.
-
-   If *force* is :const:`True`, then *s* is unconditionally quoted,
-   even if it is already safe for a shell without being quoted.
 
    .. _shlex-quote-warning:
 
@@ -94,24 +96,9 @@ The :mod:`!shlex` module defines the following functions:
       >>> command
       ['ls', '-l', 'somefile; rm -rf ~']
 
-   The *force* keyword can be used to produce consistent behavior when
-   escaping multiple strings:
-
-      >>> from shlex import quote
-      >>> filenames = ['my first file', 'file2', 'file 3']
-      >>> filenames_some_escaped = [quote(f) for f in filenames]
-      >>> filenames_some_escaped
-      ["'my first file'", 'file2', "'file 3'"]
-      >>> filenames_all_escaped = [quote(f, force=True) for f in filenames]
-      >>> filenames_all_escaped
-      ["'my first file'", "'file2'", "'file 3'"]
-
    .. versionadded:: 3.3
 
-   .. versionchanged:: 3.16
-      The *force* keyword was added.
-
-The :mod:`!shlex` module defines the following class:
+The :mod:`shlex` module defines the following class:
 
 
 .. class:: shlex(instream=None, infile=None, posix=False, punctuation_chars=False)
@@ -227,7 +214,7 @@ A :class:`~shlex.shlex` instance has the following methods:
    with the name of the current source file and the ``%d`` with the current input
    line number (the optional arguments can be used to override these).
 
-   This convenience is provided to encourage :mod:`!shlex` users to generate error
+   This convenience is provided to encourage :mod:`shlex` users to generate error
    messages in the standard, parseable format understood by Emacs and other Unix
    tools.
 
@@ -411,16 +398,16 @@ Improved Compatibility with Shells
 
 .. versionadded:: 3.6
 
-The :class:`~shlex.shlex` class provides compatibility with the parsing
-performed by common Unix shells like ``bash``, ``dash``, and ``sh``.  To take
-advantage of this compatibility, specify the ``punctuation_chars`` argument in
-the constructor.  This defaults to ``False``, which preserves pre-3.6 behaviour.
-However, if it is set to ``True``, then parsing of the characters ``();<>|&`` is
-changed: any run of these characters is returned as a single token.  While this
-is short of a full parser for shells (which would be out of scope for the
-standard library, given the multiplicity of shells out there), it does allow you
-to perform processing of command lines more easily than you could otherwise.  To
-illustrate, you can see the difference in the following snippet:
+The :class:`shlex` class provides compatibility with the parsing performed by
+common Unix shells like ``bash``, ``dash``, and ``sh``.  To take advantage of
+this compatibility, specify the ``punctuation_chars`` argument in the
+constructor.  This defaults to ``False``, which preserves pre-3.6 behaviour.
+However, if it is set to ``True``, then parsing of the characters ``();<>|&``
+is changed: any run of these characters is returned as a single token.  While
+this is short of a full parser for shells (which would be out of scope for the
+standard library, given the multiplicity of shells out there), it does allow
+you to perform processing of command lines more easily than you could
+otherwise.  To illustrate, you can see the difference in the following snippet:
 
 .. doctest::
    :options: +NORMALIZE_WHITESPACE

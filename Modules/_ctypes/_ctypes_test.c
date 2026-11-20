@@ -13,10 +13,6 @@
 
 #include <Python.h>
 
-#if defined(_Py_FFI_SUPPORT_C_COMPLEX)
-#  include <complex.h>            // csqrt()
-#  undef I                        // for _ctypes_test_generated.c.h
-#endif
 #include <stdio.h>                // printf()
 #include <stdlib.h>               // qsort()
 #include <string.h>               // memset()
@@ -25,8 +21,6 @@
 #endif
 
 #define EXPORT(x) Py_EXPORTED_SYMBOL x
-
-#include "_ctypes_test_generated.c.h"
 
 /* some functions handy for testing */
 
@@ -63,79 +57,6 @@ _testfunc_cbk_large_struct(Test in, void (*func)(Test))
 }
 
 /*
- * gh-49960: callbacks returning structs and unions by value.
- *
- * Each of these exercises a different ABI return class, since struct
- * return conventions are highly platform-specific:
- *   - SmallRet:  small integer struct, returned in registers
- *   - Test:      >8 bytes (reused from above), returned via hidden pointer
- *   - FloatRet:  all-float struct, SSE class on x86-64 / HFA on AArch64
- *   - UnionRet:  union
- *   - PtrRet:    struct containing a pointer
- */
-
-typedef struct {
-    int a;
-    int b;
-} SmallRet;
-
-EXPORT(SmallRet)
-_testfunc_cbk_ret_small_struct(SmallRet (*func)(void))
-{
-    return func();
-}
-
-/* Returns a scalar derived from the struct, so a test can prove the bytes
-   actually reached the C caller rather than only round-tripping in Python. */
-EXPORT(long)
-_testfunc_cbk_ret_small_struct_sum(SmallRet (*func)(void))
-{
-    SmallRet s = func();
-    return (long)s.a + (long)s.b;
-}
-
-EXPORT(Test)
-_testfunc_cbk_ret_large_struct(Test (*func)(void))
-{
-    return func();
-}
-
-typedef struct {
-    double x;
-    double y;
-} FloatRet;
-
-EXPORT(FloatRet)
-_testfunc_cbk_ret_float_struct(FloatRet (*func)(void))
-{
-    return func();
-}
-
-typedef union {
-    int i;
-    float f;
-} UnionRet;
-
-EXPORT(UnionRet)
-_testfunc_cbk_ret_union(UnionRet (*func)(void))
-{
-    return func();
-}
-
-/* Struct containing a pointer, for the documented pointer-lifetime contract:
-   the struct is copied by value, so the pointed-to memory must outlive the
-   callback. */
-typedef struct {
-    const char *s;
-} PtrRet;
-
-EXPORT(PtrRet)
-_testfunc_cbk_ret_ptr_struct(PtrRet (*func)(void))
-{
-    return func();
-}
-
-/*
  * See issue 29565. Update a structure passed by value;
  * the caller should not see any change.
  */
@@ -154,7 +75,7 @@ typedef struct {
 } TestReg;
 
 
-_Py_thread_local TestReg last_tfrsuv_arg = {0};
+EXPORT(TestReg) last_tfrsuv_arg = {0};
 
 
 EXPORT(void)
@@ -258,8 +179,8 @@ _testfunc_array_in_struct3B_set_defaults(void)
 /*
  * Test3C struct tests the MAX_STRUCT_SIZE 32. Structs containing arrays of up
  * to four floating-point types are passed in registers on Arm platforms.
- * This struct is used for within-bounds tests on Arm platforms and for an
- * out-of-bounds test for platforms where MAX_STRUCT_SIZE is less than 32.
+ * This struct is used for within bounds test on Arm platfroms and for an
+ * out-of-bounds tests for platfroms where MAX_STRUCT_SIZE is less than 32.
  * See gh-110190.
  */
 typedef struct {
@@ -282,8 +203,8 @@ _testfunc_array_in_struct3C_set_defaults(void)
 /*
  * Test3D struct tests the MAX_STRUCT_SIZE 64. Structs containing arrays of up
  * to eight floating-point types are passed in registers on PPC64LE platforms.
- * This struct is used for within bounds test on PPC64LE platforms and for an
- * out-of-bounds tests for platforms where MAX_STRUCT_SIZE is less than 64.
+ * This struct is used for within bounds test on PPC64LE platfroms and for an
+ * out-of-bounds tests for platfroms where MAX_STRUCT_SIZE is less than 64.
  * See gh-110190.
  */
 typedef struct {
@@ -422,31 +343,6 @@ _testfunc_bitfield_by_reference2(Test7 *in) {
     return result;
 }
 
-typedef struct{
-    uint16_t A ;
-    uint16_t B : 9;
-    uint16_t C : 1;
-    uint16_t D : 1;
-    uint16_t E : 1;
-    uint16_t F : 1;
-    uint16_t G : 3;
-    uint32_t H : 10;
-    uint32_t I : 20;
-    uint32_t J : 2;
-} Test9;
-
-EXPORT(long)
-_testfunc_bitfield_by_reference3(Test9 *in, long pos) {
-    long data[] = {in->A , in->B , in->C , in->D , in->E , in->F , in->G , in->H , in->I , in->J};
-    long data_length = (long) (sizeof(data)/sizeof(data[0]));
-    if(pos < 0)
-        return -1;
-    if(pos >= data_length)
-        return -1;
-
-    return data[pos];
-}
-
 typedef union {
     signed int A: 1, B:2, C:3, D:2;
 } Test8;
@@ -519,23 +415,6 @@ EXPORT(double) my_sqrt(double a)
 {
     return sqrt(a);
 }
-
-#if defined(_Py_FFI_SUPPORT_C_COMPLEX)
-EXPORT(double complex) my_csqrt(double complex a)
-{
-    return csqrt(a);
-}
-
-EXPORT(float complex) my_csqrtf(float complex a)
-{
-    return csqrtf(a);
-}
-
-EXPORT(long double complex) my_csqrtl(long double complex a)
-{
-    return csqrtl(a);
-}
-#endif
 
 EXPORT(void) my_qsort(void *base, size_t num, size_t width, int(*compare)(const void*, const void*))
 {
@@ -819,8 +698,8 @@ EXPORT(void) _py_func(void)
 {
 }
 
-_Py_thread_local long long last_tf_arg_s = 0;
-_Py_thread_local unsigned long long last_tf_arg_u = 0;
+EXPORT(long long) last_tf_arg_s = 0;
+EXPORT(unsigned long long) last_tf_arg_u = 0;
 
 struct BITS {
     signed int A: 1, B:2, C:3, D:4, E: 5, F: 6, G: 7, H: 8, I: 9;
@@ -830,7 +709,7 @@ struct BITS {
  */
 #ifndef __xlc__
 #define SIGNED_SHORT_BITFIELDS
-    signed short M: 1, N: 2, O: 3, P: 4, Q: 5, R: 6, S: 7;
+     short M: 1, N: 2, O: 3, P: 4, Q: 5, R: 6, S: 7;
 #endif
 };
 
@@ -860,72 +739,12 @@ EXPORT(int) unpack_bitfields(struct BITS *bits, char name)
     return 999;
 }
 
-#if (defined(MS_WIN32) || ((defined(__x86_64__) || defined(__i386__) || defined(__ppc64__)) && (defined(__GNUC__) || defined(__clang__))))
-struct
-#ifndef MS_WIN32
-__attribute__ ((ms_struct))
-#endif
-BITS_msvc
-{
-    signed int A: 1, B:2, C:3, D:4, E: 5, F: 6, G: 7, H: 8, I: 9;
-/*
- * The test case needs/uses "signed short" bitfields, but the
- * IBM XLC compiler does not support this
- */
-#ifndef __xlc__
-#define SIGNED_SHORT_BITFIELDS
-    signed short M: 1, N: 2, O: 3, P: 4, Q: 5, R: 6, S: 7;
-#endif
-};
-
-EXPORT(int) unpack_bitfields_msvc(struct BITS_msvc *bits, char name)
-{
-    switch (name) {
-    case 'A': return bits->A;
-    case 'B': return bits->B;
-    case 'C': return bits->C;
-    case 'D': return bits->D;
-    case 'E': return bits->E;
-    case 'F': return bits->F;
-    case 'G': return bits->G;
-    case 'H': return bits->H;
-    case 'I': return bits->I;
-
-#ifdef SIGNED_SHORT_BITFIELDS
-    case 'M': return bits->M;
-    case 'N': return bits->N;
-    case 'O': return bits->O;
-    case 'P': return bits->P;
-    case 'Q': return bits->Q;
-    case 'R': return bits->R;
-    case 'S': return bits->S;
-#endif
-    }
-    return 999;
-}
-#endif
-
-PyObject *get_last_tf_arg_s(PyObject *self, PyObject *noargs)
-{
-    return PyLong_FromLongLong(last_tf_arg_s);
-}
-
-PyObject *get_last_tf_arg_u(PyObject *self, PyObject *noargs)
-{
-    return PyLong_FromUnsignedLongLong(last_tf_arg_u);
-}
-
-EXPORT(TestReg) get_last_tfrsuv_arg(void)
-{
-    return last_tfrsuv_arg;
-}
-
 static PyMethodDef module_methods[] = {
-    {"get_last_tf_arg_s", get_last_tf_arg_s, METH_NOARGS},
+/*      {"get_last_tf_arg_s", get_last_tf_arg_s, METH_NOARGS},
     {"get_last_tf_arg_u", get_last_tf_arg_u, METH_NOARGS},
+*/
     {"func_si", py_func_si, METH_VARARGS},
     {"func", py_func, METH_NOARGS},
-    {"get_generated_test_data", get_generated_test_data, METH_O},
     { NULL, NULL, 0, NULL},
 };
 

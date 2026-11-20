@@ -5,6 +5,7 @@ import sys
 import sysconfig
 import os
 import pathlib
+import shutil
 from test import support
 from test.support.script_helper import (
     make_script,
@@ -17,13 +18,20 @@ from test.support.os_helper import temp_dir
 if not support.has_subprocess_support:
     raise unittest.SkipTest("test module requires subprocess")
 
-if support.check_sanitizer(address=True, memory=True, function=False):
+if support.check_sanitizer(address=True, memory=True, ub=True):
     # gh-109580: Skip the test because it does crash randomly if Python is
     # built with ASAN.
-    raise unittest.SkipTest("test crash randomly on ASAN/MSAN build")
+    raise unittest.SkipTest("test crash randomly on ASAN/MSAN/UBSAN build")
 
 
-if not support.supports_perf_trampoline_profiling():
+def supports_trampoline_profiling():
+    perf_trampoline = sysconfig.get_config_var("PY_HAVE_PERF_TRAMPOLINE")
+    if not perf_trampoline:
+        return False
+    return int(perf_trampoline) == 1
+
+
+if not supports_trampoline_profiling():
     raise unittest.SkipTest("perf trampoline profiling not supported")
 
 
@@ -99,12 +107,15 @@ class TestPerfTrampoline(unittest.TestCase):
                 perf_line, f"Could not find {expected_symbol} in perf file"
             )
             perf_addr = perf_line.split(" ")[0]
-            self.assertNotStartsWith(perf_addr, "0x")
+            self.assertFalse(
+                perf_addr.startswith("0x"), "Address should not be prefixed with 0x"
+            )
             self.assertTrue(
                 set(perf_addr).issubset(string.hexdigits),
                 "Address should contain only hex characters",
             )
 
+    @unittest.skipIf(support.check_bolt_optimized(), "fails on BOLT instrumented binaries")
     def test_trampoline_with_unencodable_name(self):
         code = """if 1:
                 import sys
@@ -183,6 +194,7 @@ class TestPerfTrampoline(unittest.TestCase):
         self.assertNotIn(f"py::bar:{script}", child_perf_file_contents)
         self.assertNotIn(f"py::baz:{script}", child_perf_file_contents)
 
+    @unittest.skipIf(support.check_bolt_optimized(), "fails on BOLT instrumented binaries")
     def test_trampoline_works_after_fork_with_many_code_objects(self):
         code = """if 1:
                 import gc, os, sys, signal
@@ -222,55 +234,49 @@ class TestPerfTrampoline(unittest.TestCase):
         self.assertEqual(process.returncode, 0, stderr)
         self.assertEqual(stderr, "")
 
+    @unittest.skipIf(support.check_bolt_optimized(), "fails on BOLT instrumented binaries")
     def test_sys_api(self):
-        for define_eval_hook in (False, True):
-            code = """if 1:
-                    import sys
-                    def foo():
-                        pass
+        code = """if 1:
+                import sys
+                def foo():
+                    pass
 
-                    def spam():
-                        pass
+                def spam():
+                    pass
 
-                    def bar():
-                        sys.deactivate_stack_trampoline()
-                        foo()
-                        sys.activate_stack_trampoline("perf")
-                        spam()
-
-                    def baz():
-                        bar()
-
+                def bar():
+                    sys.deactivate_stack_trampoline()
+                    foo()
                     sys.activate_stack_trampoline("perf")
-                    baz()
-                    """
-            if define_eval_hook:
-                set_eval_hook = """if 1:
-                                import _testinternalcapi
-                                _testinternalcapi.set_eval_frame_record([])
-"""
-                code = set_eval_hook + code
-            with temp_dir() as script_dir:
-                script = make_script(script_dir, "perftest", code)
-                with subprocess.Popen(
-                    [sys.executable, script],
-                    text=True,
-                    stderr=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    env=_perf_env(),
-                ) as process:
-                    stdout, stderr = process.communicate()
+                    spam()
 
-            self.assertEqual(stderr, "")
-            self.assertEqual(stdout, "")
+                def baz():
+                    bar()
 
-            perf_file = pathlib.Path(f"/tmp/perf-{process.pid}.map")
-            self.assertTrue(perf_file.exists())
-            perf_file_contents = perf_file.read_text()
-            self.assertNotIn(f"py::foo:{script}", perf_file_contents)
-            self.assertIn(f"py::spam:{script}", perf_file_contents)
-            self.assertIn(f"py::bar:{script}", perf_file_contents)
-            self.assertIn(f"py::baz:{script}", perf_file_contents)
+                sys.activate_stack_trampoline("perf")
+                baz()
+                """
+        with temp_dir() as script_dir:
+            script = make_script(script_dir, "perftest", code)
+            with subprocess.Popen(
+                [sys.executable, script],
+                text=True,
+                stderr=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                env=_perf_env(),
+            ) as process:
+                stdout, stderr = process.communicate()
+
+        self.assertEqual(stderr, "")
+        self.assertEqual(stdout, "")
+
+        perf_file = pathlib.Path(f"/tmp/perf-{process.pid}.map")
+        self.assertTrue(perf_file.exists())
+        perf_file_contents = perf_file.read_text()
+        self.assertNotIn(f"py::foo:{script}", perf_file_contents)
+        self.assertIn(f"py::spam:{script}", perf_file_contents)
+        self.assertIn(f"py::bar:{script}", perf_file_contents)
+        self.assertIn(f"py::baz:{script}", perf_file_contents)
 
     def test_sys_api_with_existing_trampoline(self):
         code = """if 1:
@@ -278,14 +284,14 @@ class TestPerfTrampoline(unittest.TestCase):
                 sys.activate_stack_trampoline("perf")
                 sys.activate_stack_trampoline("perf")
                 """
-        assert_python_ok("-c", code, PYTHON_JIT="0")
+        assert_python_ok("-c", code)
 
     def test_sys_api_with_invalid_trampoline(self):
         code = """if 1:
                 import sys
                 sys.activate_stack_trampoline("invalid")
                 """
-        rc, out, err = assert_python_failure("-c", code, PYTHON_JIT="0")
+        rc, out, err = assert_python_failure("-c", code)
         self.assertIn("invalid backend: invalid", err.decode())
 
     def test_sys_api_get_status(self):
@@ -296,7 +302,7 @@ class TestPerfTrampoline(unittest.TestCase):
                 sys.deactivate_stack_trampoline()
                 assert sys.is_stack_trampoline_active() is False
                 """
-        assert_python_ok("-c", code, PYTHON_JIT="0")
+        assert_python_ok("-c", code)
 
     def test_sys_api_perf_jit_backend(self):
         code = """if 1:
@@ -316,33 +322,12 @@ class TestPerfTrampoline(unittest.TestCase):
                 """
         assert_python_ok("-c", code, PYTHON_JIT="0")
 
-    @unittest.skipUnless(
-        "-D_Py_JIT" in (sysconfig.get_config_var("PY_CORE_CFLAGS") or "").split(),
-        "requires a real JIT (_Py_JIT)",
-    )
-    def test_sys_api_perf_jit_backend_in_subinterpreter(self):
-        # gh-157247: a subinterpreter must not bypass the JIT/perf exclusion.
-        code = """if 1:
-                import sys
-                from contextlib import closing
-                from concurrent import interpreters
-
-                assert sys._jit.is_enabled(), "expected the JIT to be enabled"
-
-                with closing(interpreters.create()) as interp:
-                    interp.exec(
-                        "import sys; sys.activate_stack_trampoline('perf_jit')")
-                """
-        rc, out, err = assert_python_failure("-c", code, PYTHON_JIT="1")
-        self.assertIn(
-            b"Cannot activate the perf trampoline if the JIT is active", err)
-
 
 def is_unwinding_reliable_with_frame_pointers():
     cflags = sysconfig.get_config_var("PY_CORE_CFLAGS")
     if not cflags:
         return False
-    return "no-omit-frame-pointer" in cflags
+    return "no-omit-frame-pointer" in cflags and "_Py_JIT" not in cflags
 
 
 def perf_command_works():
@@ -540,7 +525,6 @@ class TestPerfProfilerMixin:
             self.assertNotIn(f"py::bar:{script}", stdout)
             self.assertNotIn(f"py::baz:{script}", stdout)
 
-
 @unittest.skipUnless(perf_command_works(), "perf command doesn't work")
 @unittest.skipUnless(
     is_unwinding_reliable_with_frame_pointers(),
@@ -639,7 +623,7 @@ class TestPerfProfiler(unittest.TestCase, TestPerfProfilerMixin):
                 self.assertIn(line, child_perf_file_contents)
 
 
-def _is_perf_version_at_least(major, minor):
+def _is_perf_vesion_at_least(major, minor):
     # The output of perf --version looks like "perf version 6.7-3" but
     # it can also be perf version "perf version 5.15.143", or even include
     # a commit hash in the version string, like "6.12.9.g242e6068fd5c"
@@ -658,9 +642,7 @@ def _is_perf_version_at_least(major, minor):
 
 
 @unittest.skipUnless(perf_command_works(), "perf command doesn't work")
-@unittest.skipUnless(
-    _is_perf_version_at_least(6, 6), "perf command may not work due to a perf bug"
-)
+@unittest.skipUnless(_is_perf_vesion_at_least(6, 6), "perf command may not work due to a perf bug")
 class TestPerfProfilerWithDwarf(unittest.TestCase, TestPerfProfilerMixin):
     def run_perf(self, script_dir, script, activate_trampoline=True):
         if activate_trampoline:

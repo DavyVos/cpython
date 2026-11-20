@@ -1,1 +1,0 @@
-Updated bundled version of ``zlib-ng`` to v2.2.5.

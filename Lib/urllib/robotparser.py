@@ -55,16 +55,9 @@ class RobotFileParser:
         self.last_checked = time.time()
 
     def set_url(self, url):
-        """Sets the URL referring to a robots.txt file.
-        can be a string or a Request object.
-        """
+        """Sets the URL referring to a robots.txt file."""
         self.url = url
-
-        if isinstance(url, urllib.request.Request):
-            url = url.full_url
-        parts = urllib.parse.urlsplit(url)
-        self.host = parts.netloc
-        self.path = parts.path
+        self.host, self.path = urllib.parse.urlsplit(url)[1:3]
 
     def read(self):
         """Reads the robots.txt URL and feeds it to the parser."""
@@ -191,10 +184,10 @@ class RobotFileParser:
         # calls can_fetch() before calling read().
         if not self.last_checked:
             return False
-        # TODO: The private API is used in order to preserve an empty query.
-        # This is temporary until the public API starts supporting this feature.
-        parsed_url = urllib.parse._urlsplit(url, '')
-        url = urllib.parse._urlunsplit(None, None, *parsed_url[2:])
+        # search for given user agent matches
+        # the first match counts
+        parsed_url = urllib.parse.urlsplit(url)
+        url = urllib.parse.urlunsplit(('', '', *parsed_url[2:]))
         url = normalize_uri(url)
         if not url:
             url = "/"

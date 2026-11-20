@@ -6,6 +6,9 @@
 
 .. currentmodule:: curses
 
+:Author: A.M. Kuchling, Eric S. Raymond
+:Release: 2.04
+
 
 .. topic:: Abstract
 
@@ -158,8 +161,6 @@ your terminal won't be left in a funny state on exception and you'll be
 able to read the exception's message and traceback.
 
 
-.. _windows-and-pads:
-
 Windows and Pads
 ================
 
@@ -295,17 +296,16 @@ underline, reverse code, or in color.  They'll be explained in more detail in
 the next subsection.
 
 
-The :meth:`~curses.window.addstr` method takes a Python string, bytestring
-or :class:`~curses.complexstr` as the value to be displayed.  The contents
-of bytestrings are sent to the terminal as-is.
+The :meth:`~curses.window.addstr` method takes a Python string or
+bytestring as the value to be displayed.  The contents of bytestrings
+are sent to the terminal as-is.
 On a build without wide-character support strings are encoded
 using the value of the window's :attr:`~window.encoding` attribute;
 this defaults to the default system encoding
 as returned by :func:`locale.getencoding`.
 
 The :meth:`~curses.window.addch` methods take a character, which can be
-either a string of length 1, a bytestring of length 1, an integer, or a
-:class:`~curses.complexchar`.
+either a string of length 1, a bytestring of length 1, or an integer.
 
 Constants are provided for the characters of the terminal's alternate
 character set.
@@ -367,14 +367,6 @@ could code::
    stdscr.addstr(0, 0, "Current mode: Typing mode",
                  curses.A_REVERSE)
    stdscr.refresh()
-
-A :class:`~curses.complexchar` carries its attributes and color pair
-together with the text of one character cell,
-and a :class:`~curses.complexstr` is a run of such cells.
-They are what :meth:`~curses.window.in_wch` and
-:meth:`~curses.window.in_wchstr` return,
-so a part of the screen can be read and written back
-with its appearance intact.
 
 The curses library also supports color on those terminals that provide it. The
 most common such terminal is probably the Linux console, followed by color
@@ -495,16 +487,16 @@ and return the same type.  For example, :func:`curses.ascii.ctrl` returns the
 control character corresponding to its argument.
 
 There's also a method to retrieve an entire line,
-:meth:`~curses.window.get_wstr`.  It isn't used very often, because its
+:meth:`~curses.window.getstr`.  It isn't used very often, because its
 functionality is quite limited; the only editing keys available are
 the erase and kill characters, and the Enter key, which terminates the line.
-It can optionally be limited to a fixed number of characters;
-:meth:`~curses.window.getstr` returns a bytes object instead. ::
+It returns a bytes object,
+and can optionally be limited to a fixed number of bytes. ::
 
    curses.echo()            # Enable echoing of characters
 
-   # Get a line of at most 15 characters, with the cursor on the top line
-   s = stdscr.get_wstr(0,0, 15)
+   # Get a line of at most 15 bytes, with the cursor on the top line
+   s = stdscr.getstr(0,0, 15)
 
 The :mod:`curses.textpad` module supplies a text box that supports an
 Emacs-like set of keybindings.  Various methods of the

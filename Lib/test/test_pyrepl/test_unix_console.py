@@ -7,15 +7,14 @@ import sys
 import threading
 import unittest
 from functools import partial
-from _colorize import ANSIColors
-from test.support import force_color, os_helper, force_not_colorized_test_class
-from test.support import is_android, is_apple_mobile, is_wasm32
+from test.support import os_helper
+from test.support import is_android, is_apple_mobile, is_emscripten, is_wasi
 from test.support import threading_helper
 
 from unittest import TestCase
 from unittest.mock import MagicMock, call, patch, ANY, Mock
 
-from .support import handle_all_events, code_to_events, more_lines
+from .support import handle_all_events, code_to_events, reader_no_colors
 
 try:
     from _pyrepl.console import Event
@@ -23,20 +22,14 @@ try:
 except ImportError:
     pass
 
-from _pyrepl.terminfo import _TERMINAL_CAPABILITIES
-
-TERM_CAPABILITIES = _TERMINAL_CAPABILITIES["ansi"]
-
 
 def unix_console(events, **kwargs):
-    console = UnixConsole(term="xterm")
+    console = UnixConsole()
     console.get_event = MagicMock(side_effect=events)
-    console.getpending = MagicMock(return_value=Event("key", ""))
 
     height = kwargs.get("height", 25)
     width = kwargs.get("width", 80)
     console.getheightwidth = MagicMock(side_effect=lambda: (height, width))
-    console.wait = MagicMock()
 
     console.prepare()
     for key, val in kwargs.items():
@@ -46,7 +39,7 @@ def unix_console(events, **kwargs):
 
 handle_events_unix_console = partial(
     handle_all_events,
-    prepare_console=unix_console,
+    prepare_console=partial(unix_console),
 )
 handle_events_narrow_unix_console = partial(
     handle_all_events,
@@ -61,11 +54,41 @@ handle_events_unix_console_height_3 = partial(
 )
 
 
+TERM_CAPABILITIES = {
+    "bel": b"\x07",
+    "civis": b"\x1b[?25l",
+    "clear": b"\x1b[H\x1b[2J",
+    "cnorm": b"\x1b[?12l\x1b[?25h",
+    "cub": b"\x1b[%p1%dD",
+    "cub1": b"\x08",
+    "cud": b"\x1b[%p1%dB",
+    "cud1": b"\n",
+    "cuf": b"\x1b[%p1%dC",
+    "cuf1": b"\x1b[C",
+    "cup": b"\x1b[%i%p1%d;%p2%dH",
+    "cuu": b"\x1b[%p1%dA",
+    "cuu1": b"\x1b[A",
+    "dch1": b"\x1b[P",
+    "dch": b"\x1b[%p1%dP",
+    "el": b"\x1b[K",
+    "hpa": b"\x1b[%i%p1%dG",
+    "ich": b"\x1b[%p1%d@",
+    "ich1": None,
+    "ind": b"\n",
+    "pad": None,
+    "ri": b"\x1bM",
+    "rmkx": b"\x1b[?1l\x1b>",
+    "smkx": b"\x1b[?1h\x1b=",
+}
+
+
 @unittest.skipIf(sys.platform == "win32", "No Unix event queue on Windows")
+@patch("_pyrepl.curses.tigetstr", lambda s: TERM_CAPABILITIES.get(s))
 @patch(
-    "_pyrepl.terminfo.tparm",
+    "_pyrepl.curses.tparm",
     lambda s, *args: s + b":" + b",".join(str(i).encode() for i in args),
 )
+@patch("_pyrepl.curses.setupterm", lambda a, b: None)
 @patch(
     "termios.tcgetattr",
     lambda _: [
@@ -101,72 +124,13 @@ handle_events_unix_console_height_3 = partial(
 )
 @patch("termios.tcsetattr", lambda a, b, c: None)
 @patch("os.write")
-@force_not_colorized_test_class
 class TestConsole(TestCase):
-    @staticmethod
-    def _prepare_reader_with_prompts(console, **kwargs):
-        from _pyrepl.readline import ReadlineAlikeReader, ReadlineConfig
-
-        config = ReadlineConfig(
-            readline_completer=kwargs.pop("readline_completer", None)
-        )
-        reader = ReadlineAlikeReader(console=console, config=config)
-        reader.paste_mode = False
-        for key, val in kwargs.items():
-            setattr(reader, key, val)
-        return reader
-
-    def test_colorized_multiline_typing_does_not_redraw_previous_line(self, _os_write):
-        def prepare_reader_with_prompts(console, **kwargs):
-            reader = self._prepare_reader_with_prompts(console, **kwargs)
-            reader.more_lines = partial(more_lines, namespace=None)
-            return reader
-
-        with force_color(True):
-            events = itertools.chain(
-                code_to_events("def foo():"),
-                [Event(evt="key", data="\n", raw=bytearray(b"\n"))],
-                code_to_events("x = 1"),
-                [Event(evt="key", data="\n", raw=bytearray(b"\n"))],
-                code_to_events("y"),
-            )
-            _, con = handle_all_events(
-                events,
-                prepare_console=unix_console,
-                prepare_reader=prepare_reader_with_prompts,
-            )
-            con.restore()
-
-        self.assertNotIn(
-            call(ANY, b" \x1b[0m    x \x1b[0m=\x1b[0m "),
-            _os_write.mock_calls,
-        )
-        self.assertIn(call(ANY, b"y"), _os_write.mock_calls)
-
     def test_no_newline(self, _os_write):
         code = "1"
         events = code_to_events(code)
         _, con = handle_events_unix_console(events)
         self.assertNotIn(call(ANY, b'\n'), _os_write.mock_calls)
         con.restore()
-
-    def test_reset_on_finish(self, _os_write):
-        # gh-152068: finish() must emit the ANSI reset sequence so any
-        # active color does not leak past the prompt.
-        code = "1"
-        events = code_to_events(code)
-        _, con = handle_events_unix_console(events)
-        con.finish()
-        _os_write.assert_any_call(ANY, ANSIColors.RESET.encode(con.encoding))
-        con.restore()
-
-    def test_reset_on_restore(self, _os_write):
-        # gh-152068: restore() must emit the ANSI reset sequence.
-        code = "1"
-        events = code_to_events(code)
-        _, con = handle_events_unix_console(events)
-        con.restore()
-        _os_write.assert_any_call(ANY, ANSIColors.RESET.encode(con.encoding))
 
     def test_newline(self, _os_write):
         code = "\n"
@@ -309,9 +273,12 @@ class TestConsole(TestCase):
         # fmt: on
 
         events = itertools.chain(code_to_events(code))
-        reader, console = handle_events_short_unix_console(events)
+        reader, console = handle_events_short_unix_console(
+            events, prepare_reader=reader_no_colors
+        )
 
-        console.getheightwidth = MagicMock(side_effect=lambda: (2, 80))
+        console.height = 2
+        console.getheightwidth = MagicMock(lambda _: (2, 80))
 
         def same_reader(_):
             return reader
@@ -346,7 +313,8 @@ class TestConsole(TestCase):
         events = itertools.chain(code_to_events(code))
         reader, console = handle_events_unix_console_height_3(events)
 
-        console.getheightwidth = MagicMock(side_effect=lambda: (1, 80))
+        console.height = 1
+        console.getheightwidth = MagicMock(lambda _: (1, 80))
 
         def same_reader(_):
             return reader
@@ -372,7 +340,7 @@ class TestConsole(TestCase):
 
     def test_getheightwidth_with_invalid_environ(self, _os_write):
         # gh-128636
-        console = UnixConsole(term="xterm")
+        console = UnixConsole()
         with os_helper.EnvironmentVarGuard() as env:
             env["LINES"] = ""
             self.assertIsInstance(console.getheightwidth(), tuple)
@@ -437,7 +405,7 @@ except ImportError:
 
 @unittest.skipIf(sys.platform == "win32", "No Unix console on Windows")
 @unittest.skipUnless(pty, "requires pty")
-@unittest.skipIf(is_android or is_apple_mobile or is_wasm32,
+@unittest.skipIf(is_android or is_apple_mobile or is_emscripten or is_wasi,
                  "pty is not available on this platform")
 class TestUnixConsoleInputHook(TestCase):
     # gh-152907: the console must restore cooked output (OPOST) around
@@ -481,9 +449,8 @@ class TestUnixConsoleInputHook(TestCase):
                 observed["output"] = drain()
                 return 0
 
-            with patch("_pyrepl.unix_console.posix") as mock_posix:
-                mock_posix._is_inputhook_installed.return_value = True
-                mock_posix._inputhook.side_effect = fake_hook
+            with (patch("posix._is_inputhook_installed", return_value=True),
+                  patch("posix._inputhook", side_effect=fake_hook)):
                 hook = console.input_hook
                 self.assertIsNotNone(hook)
                 self.assertEqual(hook(), 0)

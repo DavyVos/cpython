@@ -8,14 +8,8 @@ extern "C" {
 #  error "this header requires Py_BUILD_CORE define"
 #endif
 
-#include "pycore_code.h"          // EVAL_CALL_STAT_INC_IF_FUNCTION()
+#include "pycore_identifier.h"    // _Py_Identifier
 #include "pycore_pystate.h"       // _PyThreadState_GET()
-#include "pycore_stats.h"
-
-/* Flags that determine the C calling convention. */
-#define _Py_METH_CALL_FLAGS \
-    (METH_VARARGS | METH_FASTCALL | METH_NOARGS | METH_O | \
-     METH_KEYWORDS | METH_METHOD)
 
 /* Suggested size (number of positional arguments) for arrays of PyObject*
    allocated on a C stack to avoid allocating memory on the heap memory. Such
@@ -57,20 +51,51 @@ extern PyObject* _PyObject_Call(
     PyObject *args,
     PyObject *kwargs);
 
+extern PyObject * _PyObject_CallMethodFormat(
+    PyThreadState *tstate,
+    PyObject *callable,
+    const char *format,
+    ...);
+
 // Export for 'array' shared extension
 PyAPI_FUNC(PyObject*) _PyObject_CallMethod(
     PyObject *obj,
     PyObject *name,
     const char *format, ...);
 
+extern PyObject* _PyObject_CallMethodIdObjArgs(
+    PyObject *obj,
+    _Py_Identifier *name,
+    ...);
 
-extern PyObject *_PyObject_VectorcallPrepend(
-    PyThreadState *tstate,
-    PyObject *callable,
-    PyObject *arg,
-    PyObject *const *args,
-    size_t nargsf,
-    PyObject *kwnames);
+static inline PyObject *
+_PyObject_VectorcallMethodId(
+    _Py_Identifier *name, PyObject *const *args,
+    size_t nargsf, PyObject *kwnames)
+{
+    PyObject *oname = _PyUnicode_FromId(name); /* borrowed */
+    if (!oname) {
+        return _Py_NULL;
+    }
+    return PyObject_VectorcallMethod(oname, args, nargsf, kwnames);
+}
+
+static inline PyObject *
+_PyObject_CallMethodIdNoArgs(PyObject *self, _Py_Identifier *name)
+{
+    size_t nargsf = 1 | PY_VECTORCALL_ARGUMENTS_OFFSET;
+    return _PyObject_VectorcallMethodId(name, &self, nargsf, _Py_NULL);
+}
+
+static inline PyObject *
+_PyObject_CallMethodIdOneArg(PyObject *self, _Py_Identifier *name, PyObject *arg)
+{
+    PyObject *args[2] = {self, arg};
+    size_t nargsf = 2 | PY_VECTORCALL_ARGUMENTS_OFFSET;
+    assert(arg != NULL);
+    return _PyObject_VectorcallMethodId(name, args, nargsf, _Py_NULL);
+}
+
 
 /* === Vectorcall protocol (PEP 590) ============================= */
 
@@ -160,18 +185,17 @@ _PyObject_CallNoArgs(PyObject *func) {
 }
 
 
-PyAPI_FUNC(PyObject *const *)
+extern PyObject *const *
 _PyStack_UnpackDict(PyThreadState *tstate,
     PyObject *const *args, Py_ssize_t nargs,
     PyObject *kwargs, PyObject **p_kwnames);
 
-// Exported for external JIT support
-PyAPI_FUNC(void) _PyStack_UnpackDict_Free(
+extern void _PyStack_UnpackDict_Free(
     PyObject *const *stack,
     Py_ssize_t nargs,
     PyObject *kwnames);
 
-PyAPI_FUNC(void) _PyStack_UnpackDict_FreeNoDecRef(
+extern void _PyStack_UnpackDict_FreeNoDecRef(
     PyObject *const *stack,
     PyObject *kwnames);
 

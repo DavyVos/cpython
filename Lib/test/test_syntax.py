@@ -59,18 +59,6 @@ SyntaxError: cannot assign to __debug__
 Traceback (most recent call last):
 SyntaxError: cannot assign to __debug__
 
->>> def __debug__(): pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
-
->>> async def __debug__(): pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
-
->>> class __debug__: pass
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
-
 >>> del __debug__
 Traceback (most recent call last):
 SyntaxError: cannot delete __debug__
@@ -167,18 +155,6 @@ SyntaxError: expected 'else' after 'if' expression
 >>> a = [1, 42 if True, 4]
 Traceback (most recent call last):
 SyntaxError: expected 'else' after 'if' expression
-
->>> x = 1 if 1 else pass
-Traceback (most recent call last):
-SyntaxError: expected expression after 'else', but statement is given
-
->>> x = pass if 1 else 1
-Traceback (most recent call last):
-SyntaxError: expected expression before 'if', but statement is given
-
->>> x = pass if 1 else pass
-Traceback (most recent call last):
-SyntaxError: expected expression before 'if', but statement is given
 
 >>> if True:
 ...     print("Hello"
@@ -324,12 +300,6 @@ SyntaxError: did you forget parentheses around the comprehension target?
 Traceback (most recent call last):
 SyntaxError: did you forget parentheses around the comprehension target?
 
-# Incorrectly closed strings
-
->>> "The interesting object "The important object" is very important"
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Is this intended to be part of the string?
-
 # Missing commas in literals collections should not
 # produce special error messages regarding missing
 # parentheses, but about missing commas instead
@@ -371,46 +341,16 @@ Traceback (most recent call last):
 SyntaxError: invalid syntax
 
 >>> match ...:
-...     case {**_}:
+...     case {**rest, "key": value}:
 ...        ...
 Traceback (most recent call last):
 SyntaxError: invalid syntax
 
-# Check incorrect "case" placement with specialized error messages
-
->>> case "pattern": ...
+>>> match ...:
+...     case {**_}:
+...        ...
 Traceback (most recent call last):
-SyntaxError: case statement must be inside match statement
-
->>> case 1 | 2: ...
-Traceback (most recent call last):
-SyntaxError: case statement must be inside match statement
-
->>> case klass(attr=1) | {}: ...
-Traceback (most recent call last):
-SyntaxError: case statement must be inside match statement
-
->>> case [] if x > 1: ...
-Traceback (most recent call last):
-SyntaxError: case statement must be inside match statement
-
->>> case match: ...
-Traceback (most recent call last):
-SyntaxError: case statement must be inside match statement
-
->>> case case: ...
-Traceback (most recent call last):
-SyntaxError: case statement must be inside match statement
-
->>> if some:
-...     case 1: ...
-Traceback (most recent call last):
-SyntaxError: case statement must be inside match statement
-
->>> case some:
-...     case 1: ...
-Traceback (most recent call last):
-SyntaxError: case statement must be inside match statement
+SyntaxError: invalid syntax
 
 # But prefixes of soft keywords should
 # still raise specialized errors
@@ -456,7 +396,7 @@ SyntaxError: invalid syntax
 >>> def foo(/,a,b=,c):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: at least one parameter must precede /
+SyntaxError: at least one argument must precede /
 
 >>> def foo(a,/,/,b,c):
 ...    pass
@@ -491,67 +431,67 @@ SyntaxError: / must be ahead of *
 >>> def foo(a,*b=3,c):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: var-positional parameter cannot have default value
+SyntaxError: var-positional argument cannot have default value
 
 >>> def foo(a,*b: int=,c):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: var-positional parameter cannot have default value
+SyntaxError: var-positional argument cannot have default value
 
 >>> def foo(a,**b=3):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: var-keyword parameter cannot have default value
+SyntaxError: var-keyword argument cannot have default value
 
 >>> def foo(a,**b: int=3):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: var-keyword parameter cannot have default value
+SyntaxError: var-keyword argument cannot have default value
 
 >>> def foo(a,*a, b, **c, d):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: parameters cannot follow var-keyword parameter
+SyntaxError: arguments cannot follow var-keyword argument
 
 >>> def foo(a,*a, b, **c, d=4):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: parameters cannot follow var-keyword parameter
+SyntaxError: arguments cannot follow var-keyword argument
 
 >>> def foo(a,*a, b, **c, *d):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: parameters cannot follow var-keyword parameter
+SyntaxError: arguments cannot follow var-keyword argument
 
 >>> def foo(a,*a, b, **c, **d):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: parameters cannot follow var-keyword parameter
+SyntaxError: arguments cannot follow var-keyword argument
 
 >>> def foo(a=1,/,**b,/,c):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: parameters cannot follow var-keyword parameter
+SyntaxError: arguments cannot follow var-keyword argument
 
 >>> def foo(*b,*d):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: * may appear only once
+SyntaxError: * argument may appear only once
 
 >>> def foo(a,*b,c,*d,*e,c):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: * may appear only once
+SyntaxError: * argument may appear only once
 
 >>> def foo(a,b,/,c,*b,c,*d,*e,c):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: * may appear only once
+SyntaxError: * argument may appear only once
 
 >>> def foo(a,b,/,c,*b,c,*d,**e):
 ...    pass
 Traceback (most recent call last):
-SyntaxError: * may appear only once
+SyntaxError: * argument may appear only once
 
 >>> def foo(a=1,/*,b,c):
 ...    pass
@@ -575,7 +515,7 @@ SyntaxError: expected default value expression
 
 >>> lambda /,a,b,c: None
 Traceback (most recent call last):
-SyntaxError: at least one parameter must precede /
+SyntaxError: at least one argument must precede /
 
 >>> lambda a,/,/,b,c: None
 Traceback (most recent call last):
@@ -607,47 +547,47 @@ SyntaxError: expected comma between / and *
 
 >>> lambda a,*b=3,c: None
 Traceback (most recent call last):
-SyntaxError: var-positional parameter cannot have default value
+SyntaxError: var-positional argument cannot have default value
 
 >>> lambda a,**b=3: None
 Traceback (most recent call last):
-SyntaxError: var-keyword parameter cannot have default value
+SyntaxError: var-keyword argument cannot have default value
 
 >>> lambda a, *a, b, **c, d: None
 Traceback (most recent call last):
-SyntaxError: parameters cannot follow var-keyword parameter
+SyntaxError: arguments cannot follow var-keyword argument
 
 >>> lambda a,*a, b, **c, d=4: None
 Traceback (most recent call last):
-SyntaxError: parameters cannot follow var-keyword parameter
+SyntaxError: arguments cannot follow var-keyword argument
 
 >>> lambda a,*a, b, **c, *d: None
 Traceback (most recent call last):
-SyntaxError: parameters cannot follow var-keyword parameter
+SyntaxError: arguments cannot follow var-keyword argument
 
 >>> lambda a,*a, b, **c, **d: None
 Traceback (most recent call last):
-SyntaxError: parameters cannot follow var-keyword parameter
+SyntaxError: arguments cannot follow var-keyword argument
 
 >>> lambda a=1,/,**b,/,c: None
 Traceback (most recent call last):
-SyntaxError: parameters cannot follow var-keyword parameter
+SyntaxError: arguments cannot follow var-keyword argument
 
 >>> lambda *b,*d: None
 Traceback (most recent call last):
-SyntaxError: * may appear only once
+SyntaxError: * argument may appear only once
 
 >>> lambda a,*b,c,*d,*e,c: None
 Traceback (most recent call last):
-SyntaxError: * may appear only once
+SyntaxError: * argument may appear only once
 
 >>> lambda a,b,/,c,*b,c,*d,*e,c: None
 Traceback (most recent call last):
-SyntaxError: * may appear only once
+SyntaxError: * argument may appear only once
 
 >>> lambda a,b,/,c,*b,c,*d,**e: None
 Traceback (most recent call last):
-SyntaxError: * may appear only once
+SyntaxError: * argument may appear only once
 
 >>> lambda a=1,d=,c: None
 Traceback (most recent call last):
@@ -853,9 +793,6 @@ SyntaxError: cannot assign to __debug__
 >>> __debug__: int
 Traceback (most recent call last):
 SyntaxError: cannot assign to __debug__
->>> x.__debug__: int
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
 >>> f(a=)
 Traceback (most recent call last):
 SyntaxError: expected argument value expression
@@ -895,7 +832,7 @@ Traceback (most recent call last):
 SyntaxError: 'function call' is an illegal expression for augmented assignment
 
 
-Test control flow in finally
+Test continue in finally in weird combinations.
 
 continue in for loop under finally should be ok.
 
@@ -909,63 +846,51 @@ continue in for loop under finally should be ok.
     >>> test()
     9
 
-break in for loop under finally should be ok.
+continue in a finally should be ok.
 
     >>> def test():
-    ...     try:
-    ...         pass
-    ...     finally:
-    ...         for abc in range(10):
-    ...             break
-    ...     print(abc)
+    ...    for abc in range(10):
+    ...        try:
+    ...            pass
+    ...        finally:
+    ...            continue
+    ...    print(abc)
     >>> test()
-    0
-
-return in function under finally should be ok.
+    9
 
     >>> def test():
-    ...     try:
-    ...         pass
-    ...     finally:
-    ...         def f():
-    ...             return 42
-    ...     print(f())
+    ...    for abc in range(10):
+    ...        try:
+    ...            pass
+    ...        finally:
+    ...            try:
+    ...                continue
+    ...            except:
+    ...                pass
+    ...    print(abc)
     >>> test()
-    42
-
-combine for loop and function def
-
-return in function under finally should be ok.
+    9
 
     >>> def test():
-    ...     try:
-    ...         pass
-    ...     finally:
-    ...         for i in range(10):
-    ...             def f():
-    ...                 return 42
-    ...     print(f())
+    ...    for abc in range(10):
+    ...        try:
+    ...            pass
+    ...        finally:
+    ...            try:
+    ...                pass
+    ...            except:
+    ...                continue
+    ...    print(abc)
     >>> test()
-    42
-
-    >>> def test():
-    ...     try:
-    ...         pass
-    ...     finally:
-    ...         def f():
-    ...             for i in range(10):
-    ...                 return 42
-    ...     print(f())
-    >>> test()
-    42
+    9
 
 A continue outside loop should not be allowed.
 
     >>> def foo():
     ...     try:
-    ...         continue
-    ...     finally:
     ...         pass
+    ...     finally:
+    ...         continue
     Traceback (most recent call last):
       ...
     SyntaxError: 'continue' not properly in loop
@@ -984,18 +909,6 @@ isn't, there should be a syntax error.
    Traceback (most recent call last):
      ...
    SyntaxError: 'break' outside loop
-
-elif can't come after an else.
-
-    >>> if a % 2 == 0:
-    ...     pass
-    ... else:
-    ...     pass
-    ... elif a % 2 == 1:
-    ...     pass
-    Traceback (most recent call last):
-      ...
-    SyntaxError: 'elif' block follows an 'else' block
 
 Misuse of the nonlocal and global statement can lead to a few unique syntax errors.
 
@@ -1238,7 +1151,7 @@ Missing ':' before suites:
    >>> with block ad something:
    ...   pass
    Traceback (most recent call last):
-   SyntaxError: invalid syntax. Did you mean 'and'?
+   SyntaxError: invalid syntax
 
    >>> try
    ...   pass
@@ -1275,24 +1188,6 @@ Missing ':' before suites:
    ...       pass
    Traceback (most recent call last):
    SyntaxError: expected ':'
-
-   >>> match x:
-   ...   case a, __debug__, b:
-   ...       pass
-   Traceback (most recent call last):
-   SyntaxError: cannot assign to __debug__
-
-   >>> match x:
-   ...   case a, b, *__debug__:
-   ...       pass
-   Traceback (most recent call last):
-   SyntaxError: cannot assign to __debug__
-
-   >>> match x:
-   ...   case Foo(a, __debug__=1, b=2):
-   ...       pass
-   Traceback (most recent call last):
-   SyntaxError: cannot assign to __debug__
 
    >>> if x = 3:
    ...    pass
@@ -1341,7 +1236,7 @@ Missing parens after function definition
    Traceback (most recent call last):
    SyntaxError: expected '('
 
-Parenthesized parameters in function definitions
+Parenthesized arguments in function definitions
 
    >>> def f(x, (y, z), w):
    ...    pass
@@ -1387,15 +1282,6 @@ Custom error messages for try blocks that are not followed by except/finally
    Traceback (most recent call last):
    SyntaxError: expected 'except' or 'finally' block
 
-Custom error message for __debug__ as exception variable
-
-   >>> try:
-   ...    pass
-   ... except TypeError as __debug__:
-   ...    pass
-   Traceback (most recent call last):
-   SyntaxError: cannot assign to __debug__
-
 Custom error message for try block mixing except and except*
 
    >>> try:
@@ -1438,53 +1324,6 @@ Custom error message for try block mixing except and except*
    Traceback (most recent call last):
    SyntaxError: cannot have both 'except' and 'except*' on the same 'try'
 
-Better error message for using `except as` with not a name:
-
-   >>> try:
-   ...    pass
-   ... except TypeError as obj.attr:
-   ...    pass
-   Traceback (most recent call last):
-   SyntaxError: cannot use except statement with attribute
-
-   >>> try:
-   ...    pass
-   ... except TypeError as obj[1]:
-   ...    pass
-   Traceback (most recent call last):
-   SyntaxError: cannot use except statement with subscript
-
-   >>> try:
-   ...    pass
-   ... except* TypeError as (obj, name):
-   ...    pass
-   Traceback (most recent call last):
-   SyntaxError: cannot use except* statement with tuple
-
-   >>> try:
-   ...    pass
-   ... except* TypeError as 1:
-   ...    pass
-   Traceback (most recent call last):
-   SyntaxError: cannot use except* statement with literal
-
-Regression tests for gh-133999:
-
-   >>> try: pass
-   ... except TypeError as name: raise from None
-   Traceback (most recent call last):
-   SyntaxError: did you forget an expression between 'raise' and 'from'?
-
-   >>> try: pass
-   ... except* TypeError as name: raise from None
-   Traceback (most recent call last):
-   SyntaxError: did you forget an expression between 'raise' and 'from'?
-
-   >>> match 1:
-   ...     case 1 | 2 as abc: raise from None
-   Traceback (most recent call last):
-   SyntaxError: did you forget an expression between 'raise' and 'from'?
-
 Ensure that early = are not matched by the parser as invalid comparisons
    >>> f(2, 4, x=34); 1 $ 2
    Traceback (most recent call last):
@@ -1501,50 +1340,6 @@ Ensure that early = are not matched by the parser as invalid comparisons
    >>> dict(x=34, x=1, y=2); x $ y
    Traceback (most recent call last):
    SyntaxError: invalid syntax
-
-Ensure that alternative patterns bind the same names (when there is
-a single capture in the first pattern that is not uniformly captured,
-the error message is sightly different).
-
-   >>> match 1:
-   ...     case x | 1: pass
-   Traceback (most recent call last):
-   SyntaxError: name capture 'x' makes remaining patterns unreachable
-
-   >>> match 1:
-   ...     case x | y: pass
-   Traceback (most recent call last):
-   SyntaxError: name capture 'x' makes remaining patterns unreachable
-
-   >>> match 1:
-   ...     case 1 | x: pass
-   Traceback (most recent call last):
-   SyntaxError: alternative patterns bind different names (pattern 1 binds nothing, pattern 2 binds ['x'])
-
-   >>> match 1:
-   ...     case (x, y) | 1: pass
-   Traceback (most recent call last):
-   SyntaxError: alternative patterns bind different names (pattern 1 binds ['x', 'y'], pattern 2 binds nothing)
-
-   >>> match 1:
-   ...     case 1 | ("point", {"x": x, "y": y}): pass
-   Traceback (most recent call last):
-   SyntaxError: alternative patterns bind different names (pattern 1 binds nothing, pattern 2 binds ['x', 'y'])
-
-   >>> match 1:
-   ...     case ("point", {"x": x, "y": y}) | 1: pass
-   Traceback (most recent call last):
-   SyntaxError: alternative patterns bind different names (pattern 1 binds ['x', 'y'], pattern 2 binds nothing)
-
-   >>> match 1:
-   ...     case ("user", {"id": id}) | ("admin", {"name": name}): pass
-   Traceback (most recent call last):
-   SyntaxError: alternative patterns bind different names (pattern 1 binds ['id'], pattern 2 binds ['name'])
-
-   >>> match 1:
-   ...     case ("user", {"id": id}) | ("admin", {"id": id}) | ("other", {"ip": ip}): pass
-   Traceback (most recent call last):
-   SyntaxError: alternative patterns bind different names (pattern 1 binds ['id'], pattern 3 binds ['ip'])
 
 Incomplete dictionary literals
 
@@ -1734,19 +1529,6 @@ Specialized indentation errors:
    Traceback (most recent call last):
    IndentationError: expected an indented block after class definition on line 1
 
-   >>> class C(__debug__=42): ...
-   Traceback (most recent call last):
-   SyntaxError: cannot assign to __debug__
-
-   >>> class Meta(type):
-   ...     def __new__(*args, **kwargs):
-   ...         pass
-
-   >>> class C(metaclass=Meta, __debug__=42):
-   ...     pass
-   Traceback (most recent call last):
-   SyntaxError: cannot assign to __debug__
-
    >>> match something:
    ... pass
    Traceback (most recent call last):
@@ -1776,37 +1558,29 @@ Make sure that the old "raise X, Y[, Z]" form is gone:
      ...
    SyntaxError: invalid syntax
 
-Better errors for `raise` statement:
-
-    >>> raise ValueError from
-    Traceback (most recent call last):
-    SyntaxError: did you forget an expression after 'from'?
-
-    >>> raise mod.ValueError() from
-    Traceback (most recent call last):
-    SyntaxError: did you forget an expression after 'from'?
-
-    >>> raise from exc
-    Traceback (most recent call last):
-    SyntaxError: did you forget an expression between 'raise' and 'from'?
-
-    >>> raise from None
-    Traceback (most recent call last):
-    SyntaxError: did you forget an expression between 'raise' and 'from'?
-
-    >>> raise from
-    Traceback (most recent call last):
-    SyntaxError: did you forget an expression between 'raise' and 'from'?
-
 Check that an multiple exception types with missing parentheses
-raise a custom exception only when using 'as'
+raise a custom exception
+
+   >>> try:
+   ...   pass
+   ... except A, B:
+   ...   pass
+   Traceback (most recent call last):
+   SyntaxError: multiple exception types must be parenthesized
+
+   >>> try:
+   ...   pass
+   ... except A, B, C:
+   ...   pass
+   Traceback (most recent call last):
+   SyntaxError: multiple exception types must be parenthesized
 
    >>> try:
    ...   pass
    ... except A, B, C as blech:
    ...   pass
    Traceback (most recent call last):
-   SyntaxError: multiple exception types must be parenthesized when using 'as'
+   SyntaxError: multiple exception types must be parenthesized
 
    >>> try:
    ...   pass
@@ -1815,15 +1589,29 @@ raise a custom exception only when using 'as'
    ... finally:
    ...   pass
    Traceback (most recent call last):
-   SyntaxError: multiple exception types must be parenthesized when using 'as'
+   SyntaxError: multiple exception types must be parenthesized
 
+
+   >>> try:
+   ...   pass
+   ... except* A, B:
+   ...   pass
+   Traceback (most recent call last):
+   SyntaxError: multiple exception types must be parenthesized
+
+   >>> try:
+   ...   pass
+   ... except* A, B, C:
+   ...   pass
+   Traceback (most recent call last):
+   SyntaxError: multiple exception types must be parenthesized
 
    >>> try:
    ...   pass
    ... except* A, B, C as blech:
    ...   pass
    Traceback (most recent call last):
-   SyntaxError: multiple exception types must be parenthesized when using 'as'
+   SyntaxError: multiple exception types must be parenthesized
 
    >>> try:
    ...   pass
@@ -1832,7 +1620,7 @@ raise a custom exception only when using 'as'
    ... finally:
    ...   pass
    Traceback (most recent call last):
-   SyntaxError: multiple exception types must be parenthesized when using 'as'
+   SyntaxError: multiple exception types must be parenthesized
 
 Custom exception for 'except*' without an exception type
 
@@ -1845,136 +1633,6 @@ Custom exception for 'except*' without an exception type
    Traceback (most recent call last):
    SyntaxError: expected one or more exception types
 
-Check custom exceptions for keywords with typos
-
->>> fur a in b:
-...   pass
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'for'?
-
->>> for a in b:
-...   pass
-... elso:
-...   pass
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'else'?
-
->>> whille True:
-...   pass
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'while'?
-
->>> while True:
-...   pass
-... elso:
-...   pass
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'else'?
-
->>> iff x > 5:
-...   pass
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'if'?
-
->>> if x:
-...   pass
-... elseif y:
-...   pass
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'elif'?
-
->>> if x:
-...   pass
-... elif y:
-...   pass
-... elso:
-...   pass
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'else'?
-
->>> tyo:
-...   pass
-... except y:
-...   pass
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'try'?
-
->>> classe MyClass:
-...   pass
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'class'?
-
->>> impor math
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'import'?
-
->>> form x import y
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'from'?
-
->>> defn calculate_sum(a, b):
-...   return a + b
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'def'?
-
->>> def foo():
-...   returm result
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'return'?
-
->>> lamda x: x ** 2
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'lambda'?
-
->>> def foo():
-...   yeld i
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'yield'?
-
->>> def foo():
-...   globel counter
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'global'?
-
->>> frum math import sqrt
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'from'?
-
->>> asynch def fetch_data():
-...   pass
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'async'?
-
->>> async def foo():
-...   awaid fetch_data()
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'await'?
-
->>> raisee ValueError("Error")
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'raise'?
-
->>> [
-... x for x
-... in range(3)
-... of x
-... ]
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'if'?
-
->>> [
-... 123 fur x
-... in range(3)
-... if x
-... ]
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'for'?
-
-
->>> for x im n:
-...     pass
-Traceback (most recent call last):
-SyntaxError: invalid syntax. Did you mean 'in'?
 
 >>> f(a=23, a=234)
 Traceback (most recent call last):
@@ -1996,86 +1654,6 @@ SyntaxError: cannot assign to f-string expression here. Maybe you meant '==' ins
 >>> f'{x}-{y}' = 42
 Traceback (most recent call last):
 SyntaxError: cannot assign to f-string expression here. Maybe you meant '==' instead of '='?
-
->>> ub''
-Traceback (most recent call last):
-SyntaxError: 'u' and 'b' prefixes are incompatible
-
->>> bu"привет"
-Traceback (most recent call last):
-SyntaxError: 'u' and 'b' prefixes are incompatible
-
->>> ur''
-Traceback (most recent call last):
-SyntaxError: 'u' and 'r' prefixes are incompatible
-
->>> ru"\t"
-Traceback (most recent call last):
-SyntaxError: 'u' and 'r' prefixes are incompatible
-
->>> uf'{1 + 1}'
-Traceback (most recent call last):
-SyntaxError: 'u' and 'f' prefixes are incompatible
-
->>> fu""
-Traceback (most recent call last):
-SyntaxError: 'u' and 'f' prefixes are incompatible
-
->>> ut'{1}'
-Traceback (most recent call last):
-SyntaxError: 'u' and 't' prefixes are incompatible
-
->>> tu"234"
-Traceback (most recent call last):
-SyntaxError: 'u' and 't' prefixes are incompatible
-
->>> bf'{x!r}'
-Traceback (most recent call last):
-SyntaxError: 'b' and 'f' prefixes are incompatible
-
->>> fb"text"
-Traceback (most recent call last):
-SyntaxError: 'b' and 'f' prefixes are incompatible
-
->>> bt"text"
-Traceback (most recent call last):
-SyntaxError: 'b' and 't' prefixes are incompatible
-
->>> tb''
-Traceback (most recent call last):
-SyntaxError: 'b' and 't' prefixes are incompatible
-
->>> tf"{0.3:.02f}"
-Traceback (most recent call last):
-SyntaxError: 'f' and 't' prefixes are incompatible
-
->>> ft'{x=}'
-Traceback (most recent call last):
-SyntaxError: 'f' and 't' prefixes are incompatible
-
->>> tfu"{x=}"
-Traceback (most recent call last):
-SyntaxError: 'u' and 'f' prefixes are incompatible
-
->>> turf"{x=}"
-Traceback (most recent call last):
-SyntaxError: 'u' and 'r' prefixes are incompatible
-
->>> burft"{x=}"
-Traceback (most recent call last):
-SyntaxError: 'u' and 'b' prefixes are incompatible
-
->>> brft"{x=}"
-Traceback (most recent call last):
-SyntaxError: 'b' and 'f' prefixes are incompatible
-
->>> t'{x}' = 42
-Traceback (most recent call last):
-SyntaxError: cannot assign to t-string expression here. Maybe you meant '==' instead of '='?
-
->>> t'{x}-{y}' = 42
-Traceback (most recent call last):
-SyntaxError: cannot assign to t-string expression here. Maybe you meant '==' instead of '='?
 
 >>> (x, y, z=3, d, e)
 Traceback (most recent call last):
@@ -2104,30 +1682,6 @@ SyntaxError: trailing comma not allowed without surrounding parentheses
 >>> from t import x,y,
 Traceback (most recent call last):
 SyntaxError: trailing comma not allowed without surrounding parentheses
-
->>> with item,: pass
-Traceback (most recent call last):
-SyntaxError: the last 'with' item has a trailing comma
-
->>> with item as x,: pass
-Traceback (most recent call last):
-SyntaxError: the last 'with' item has a trailing comma
-
->>> with item1, item2,: pass
-Traceback (most recent call last):
-SyntaxError: the last 'with' item has a trailing comma
-
->>> with item1 as x, item2,: pass
-Traceback (most recent call last):
-SyntaxError: the last 'with' item has a trailing comma
-
->>> with item1 as x, item2 as y,: pass
-Traceback (most recent call last):
-SyntaxError: the last 'with' item has a trailing comma
-
->>> with item1, item2 as y,: pass
-Traceback (most recent call last):
-SyntaxError: the last 'with' item has a trailing comma
 
 >>> import a from b
 Traceback (most recent call last):
@@ -2161,95 +1715,6 @@ SyntaxError: Did you mean to use 'from ... import ...' instead?
 Traceback (most recent call last):
 SyntaxError: Did you mean to use 'from ... import ...' instead?
 
->>> import __debug__
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
-
->>> import a as __debug__
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
-
->>> import a.b.c as __debug__
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
-
->>> from a import __debug__
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
-
->>> from a import b as __debug__
-Traceback (most recent call last):
-SyntaxError: cannot assign to __debug__
-
->>> import a as b.c
-Traceback (most recent call last):
-SyntaxError: cannot use attribute as import target
-
->>> import a.b as (a, b)
-Traceback (most recent call last):
-SyntaxError: cannot use tuple as import target
-
->>> import a, a.b as 1
-Traceback (most recent call last):
-SyntaxError: cannot use literal as import target
-
->>> import a.b as 'a', a
-Traceback (most recent call last):
-SyntaxError: cannot use literal as import target
-
->>> from a import (b as c.d)
-Traceback (most recent call last):
-SyntaxError: cannot use attribute as import target
-
->>> from a import b as 1
-Traceback (most recent call last):
-SyntaxError: cannot use literal as import target
-
->>> from a import (
-...   b as f())
-Traceback (most recent call last):
-SyntaxError: cannot use function call as import target
-
->>> from a import (
-...   b as [],
-... )
-Traceback (most recent call last):
-SyntaxError: cannot use list as import target
-
->>> from a import (
-...   b,
-...   c as ()
-... )
-Traceback (most recent call last):
-SyntaxError: cannot use tuple as import target
-
->>> from a import b, с as d[e]
-Traceback (most recent call last):
-SyntaxError: cannot use subscript as import target
-
->>> from a import с as d[e], b
-Traceback (most recent call last):
-SyntaxError: cannot use subscript as import target
-
-# Check that we don't raise a "cannot use name as import target" error
-# if there is an error in an unrelated statement after ';'
-
->>> import a as b; None = 1
-Traceback (most recent call last):
-SyntaxError: cannot assign to None
-
->>> import a, b as c; d = 1; None = 1
-Traceback (most recent call last):
-SyntaxError: cannot assign to None
-
->>> from a import b as c; None = 1
-Traceback (most recent call last):
-SyntaxError: cannot assign to None
-
->>> from a import b, c as d; e = 1; None = 1
-Traceback (most recent call last):
-SyntaxError: cannot assign to None
-
 # Check that we dont raise the "trailing comma" error if there is more
 # input to the left of the valid part that we parsed.
 
@@ -2282,16 +1747,6 @@ SyntaxError: only single target (not tuple) can be annotated
 Traceback (most recent call last):
 SyntaxError: only single target (not list) can be annotated
 
->>> 1: int
-Traceback (most recent call last):
-SyntaxError: illegal target for annotation
->>> -x: int = 1
-Traceback (most recent call last):
-SyntaxError: illegal target for annotation
->>> (x for x in y): int
-Traceback (most recent call last):
-SyntaxError: illegal target for annotation
-
 # 'not' after operators:
 
 >>> 3 + not 3
@@ -2319,22 +1774,6 @@ Traceback (most recent call last):
 SyntaxError: 'not' after an operator must be parenthesized
 
 >>> 3 + not -1
-Traceback (most recent call last):
-SyntaxError: 'not' after an operator must be parenthesized
-
->>> 1 << 2 + not 3
-Traceback (most recent call last):
-SyntaxError: 'not' after an operator must be parenthesized
-
->>> 1 >> 2 * not 3
-Traceback (most recent call last):
-SyntaxError: 'not' after an operator must be parenthesized
-
->>> 3 * + not 3
-Traceback (most recent call last):
-SyntaxError: 'not' after an operator must be parenthesized
-
->>> 3 ** - not 3
 Traceback (most recent call last):
 SyntaxError: 'not' after an operator must be parenthesized
 
@@ -2367,7 +1806,7 @@ Corner-cases that used to fail to raise the correct error:
 
     >>> with (lambda *:0): pass
     Traceback (most recent call last):
-    SyntaxError: named parameters must follow bare *
+    SyntaxError: named arguments must follow bare *
 
 Corner-cases that used to crash:
 
@@ -2383,7 +1822,7 @@ Corner-cases that used to crash:
     Traceback (most recent call last):
     SyntaxError: invalid character '£' (U+00A3)
 
-Invalid pattern matching constructs:
+  Invalid pattern matching constructs:
 
     >>> match ...:
     ...   case 42 as _:
@@ -2395,31 +1834,7 @@ Invalid pattern matching constructs:
     ...   case 42 as 1+2+4:
     ...     ...
     Traceback (most recent call last):
-    SyntaxError: cannot use expression as pattern target
-
-    >>> match ...:
-    ...   case 42 as a.b:
-    ...     ...
-    Traceback (most recent call last):
-    SyntaxError: cannot use attribute as pattern target
-
-    >>> match ...:
-    ...   case 42 as (a, b):
-    ...     ...
-    Traceback (most recent call last):
-    SyntaxError: cannot use tuple as pattern target
-
-    >>> match ...:
-    ...   case 42 as (a + 1):
-    ...     ...
-    Traceback (most recent call last):
-    SyntaxError: cannot use expression as pattern target
-
-    >>> match ...:
-    ...   case (32 as x) | (42 as a()):
-    ...     ...
-    Traceback (most recent call last):
-    SyntaxError: cannot use function call as pattern target
+    SyntaxError: invalid pattern target
 
     >>> match ...:
     ...   case Foo(z=1, y=2, x):
@@ -2440,34 +1855,10 @@ Invalid pattern matching constructs:
     SyntaxError: positional patterns follow keyword patterns
 
     >>> match ...:
-    ...   case Foo(y=1, x=2, y=3):
-    ...     ...
-    Traceback (most recent call last):
-    SyntaxError: attribute name repeated in class pattern: y
-
-    >>> match ...:
     ...   case C(a=b, c, d=e, f, g=h, i, j=k, ...):
     ...     ...
     Traceback (most recent call last):
     SyntaxError: positional patterns follow keyword patterns
-
-    >>> match ...:
-    ...   case {**double_star, "spam": "eggs"}:
-    ...     ...
-    Traceback (most recent call last):
-    SyntaxError: double star pattern must be the last (right-most) subpattern in the mapping pattern
-
-    >>> match ...:
-    ...   case {"foo": 1, **double_star, "spam": "eggs"}:
-    ...     ...
-    Traceback (most recent call last):
-    SyntaxError: double star pattern must be the last (right-most) subpattern in the mapping pattern
-
-    >>> match ...:
-    ...   case {"spam": "eggs", "b": {**d, "ham": "bacon"}}:
-    ...     ...
-    Traceback (most recent call last):
-    SyntaxError: double star pattern must be the last (right-most) subpattern in the mapping pattern
 
 Uses of the star operator which should fail:
 
@@ -2802,14 +2193,6 @@ Invalid expressions in type scopes:
       ...
    SyntaxError: yield expression cannot be used within a type alias
 
-   >>> type __debug__ = int
-   Traceback (most recent call last):
-   SyntaxError: cannot assign to __debug__
-
-   >>> class A[__debug__]: pass
-   Traceback (most recent call last):
-   SyntaxError: cannot assign to __debug__
-
    >>> class A[T]((x := 3)): ...
    Traceback (most recent call last):
       ...
@@ -2853,76 +2236,6 @@ Invalid expressions in type scopes:
     >>> f(x = 5, *:)
     Traceback (most recent call last):
     SyntaxError: Invalid star expression
-
-Asserts:
-
-    >>> assert (a := 1)  # ok
-    >>> assert 1, (a := 1)  # ok
-
-    >>> assert a := 1
-    Traceback (most recent call last):
-    SyntaxError: cannot use named expression without parentheses here
-
-    >>> assert 1, a := 1
-    Traceback (most recent call last):
-    SyntaxError: cannot use named expression without parentheses here
-
-    >>> assert 1 = 2 = 3
-    Traceback (most recent call last):
-    SyntaxError: cannot assign to literal here. Maybe you meant '==' instead of '='?
-
-    >>> assert 1 = 2
-    Traceback (most recent call last):
-    SyntaxError: cannot assign to literal here. Maybe you meant '==' instead of '='?
-
-    >>> assert (1 = 2)
-    Traceback (most recent call last):
-    SyntaxError: cannot assign to literal here. Maybe you meant '==' instead of '='?
-
-    >>> assert 'a' = a
-    Traceback (most recent call last):
-    SyntaxError: cannot assign to literal here. Maybe you meant '==' instead of '='?
-
-    >>> assert x[0] = 1
-    Traceback (most recent call last):
-    SyntaxError: cannot assign to subscript here. Maybe you meant '==' instead of '='?
-
-    >>> assert (yield a) = 2
-    Traceback (most recent call last):
-    SyntaxError: cannot assign to yield expression here. Maybe you meant '==' instead of '='?
-
-    >>> assert a = 2
-    Traceback (most recent call last):
-    SyntaxError: cannot assign to name here. Maybe you meant '==' instead of '='?
-
-    >>> assert (a = 2)
-    Traceback (most recent call last):
-    SyntaxError: invalid syntax. Maybe you meant '==' or ':=' instead of '='?
-
-    >>> assert a = b
-    Traceback (most recent call last):
-    SyntaxError: cannot assign to name here. Maybe you meant '==' instead of '='?
-
-    >>> assert 1, 1 = b
-    Traceback (most recent call last):
-    SyntaxError: cannot assign to literal here. Maybe you meant '==' instead of '='?
-
-    >>> assert 1, (1 = b)
-    Traceback (most recent call last):
-    SyntaxError: cannot assign to literal here. Maybe you meant '==' instead of '='?
-
-    >>> assert 1, a = 1
-    Traceback (most recent call last):
-    SyntaxError: cannot assign to name here. Maybe you meant '==' instead of '='?
-
-    >>> assert 1, (a = 1)
-    Traceback (most recent call last):
-    SyntaxError: invalid syntax. Maybe you meant '==' or ':=' instead of '='?
-
-    >>> assert 1 = a, a = 1
-    Traceback (most recent call last):
-    SyntaxError: cannot assign to literal here. Maybe you meant '==' instead of '='?
-
 """
 
 import re
@@ -2932,165 +2245,7 @@ import unittest
 
 from test import support
 
-class SyntaxWarningTest(unittest.TestCase):
-    def check_warning(self, code, errtext, filename="<testcase>", mode="exec"):
-        """Check that compiling code raises SyntaxWarning with errtext.
-
-        errtest is a regular expression that must be present in the
-        text of the warning raised.
-        """
-        with self.assertWarnsRegex(SyntaxWarning, errtext):
-            compile(code, filename, mode)
-
-    def check_no_warning(self, code, filename="<testcase>", mode="exec"):
-        """Check that compiling code does not raise any warnings."""
-        import warnings
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            compile(code, filename, mode)
-        self.assertEqual(caught, [])
-
-    def test_return_in_finally(self):
-        source = textwrap.dedent("""
-            def f():
-                try:
-                    pass
-                finally:
-                    return 42
-            """)
-        self.check_warning(source, "'return' in a 'finally' block")
-
-        source = textwrap.dedent("""
-            def f():
-                try:
-                    pass
-                finally:
-                    try:
-                        return 42
-                    except:
-                        pass
-            """)
-        self.check_warning(source, "'return' in a 'finally' block")
-
-        source = textwrap.dedent("""
-            def f():
-                try:
-                    pass
-                finally:
-                    try:
-                        pass
-                    except:
-                        return 42
-            """)
-        self.check_warning(source, "'return' in a 'finally' block")
-
-    def test_break_and_continue_in_finally(self):
-        for kw in ('break', 'continue'):
-
-            source = textwrap.dedent(f"""
-                for abc in range(10):
-                    try:
-                        pass
-                    finally:
-                        {kw}
-                """)
-            self.check_warning(source, f"'{kw}' in a 'finally' block")
-
-            source = textwrap.dedent(f"""
-                for abc in range(10):
-                    try:
-                        pass
-                    finally:
-                        try:
-                            {kw}
-                        except:
-                            pass
-                """)
-            self.check_warning(source, f"'{kw}' in a 'finally' block")
-
-            source = textwrap.dedent(f"""
-                for abc in range(10):
-                    try:
-                        pass
-                    finally:
-                        try:
-                            pass
-                        except:
-                            {kw}
-                """)
-            self.check_warning(source, f"'{kw}' in a 'finally' block")
-
-    def test_from_lazy_imports(self):
-        # gh-150459
-        self.check_warning(
-            "from . lazy import x",
-            "did you mean 'lazy from . import'?",
-        )
-        self.check_warning(
-            "from . lazy import x as y",
-            "did you mean 'lazy from . import'?",
-        )
-        self.check_warning(
-            "from . lazy import *",
-            "did you mean 'lazy from . import'?",
-        )
-        self.check_warning(
-            "from .. lazy import x",
-            "did you mean 'lazy from .. import'?",
-        )
-        self.check_warning(
-            "from ... lazy import x",
-            "did you mean 'lazy from ... import'?",
-        )
-        self.check_warning(
-            "from .... lazy import x",
-            "did you mean 'lazy from .... import'?",
-        )
-        self.check_warning(
-            "from . \\\n    lazy import x",
-            "did you mean 'lazy from . import'?",
-        )
-        self.check_warning(
-            "from .\\\nlazy import x",
-            "did you mean 'lazy from . import'?",
-        )
-        self.check_warning(
-            "from .\tlazy import x",
-            "did you mean 'lazy from . import'?",
-        )
-
-    def test_not_from_lazy_imports(self):
-        self.check_no_warning("from .lazy import x")
-        self.check_no_warning("from .lazy import *")
-        self.check_no_warning("from ..lazy import x")
-        self.check_no_warning("from ...lazy import x")
-        self.check_no_warning("from .lazy.sub import x")
-        self.check_no_warning("from ..lazy.sub import x")
-        self.check_no_warning("from ...lazy.sub import x")
-        self.check_no_warning("from . lazier import x")
-        self.check_no_warning("from . lazy_module import x")
-        self.check_no_warning("from . lazy.sub import x")
-        self.check_no_warning("from . sub.lazy import x")
-        self.check_no_warning("from lazy import x")
-        self.check_no_warning("from lazy.sub import x")
-        self.check_no_warning("lazy from . lazy import x")
-        self.check_no_warning("from . import lazy")
-
-    def test_from_lazy_imports_as_error(self):
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", SyntaxWarning)
-            with self.assertRaisesRegex(
-                SyntaxError,
-                re.escape("did you mean 'lazy from . import'?"),
-            ) as cm:
-                compile("from . lazy import x", "<test>", "exec")
-        self.assertEqual(cm.exception.lineno, 1)
-        self.assertEqual(cm.exception.offset, 8)
-        self.assertEqual(cm.exception.end_offset, 12)
-
-
-class SyntaxErrorTestCase(unittest.TestCase):
+class SyntaxTestCase(unittest.TestCase):
 
     def _check_error(self, code, errtext,
                      filename="<testcase>", mode="exec", subclass=None,
@@ -3098,7 +2253,7 @@ class SyntaxErrorTestCase(unittest.TestCase):
         """Check that compiling code raises SyntaxError with errtext.
 
         errtest is a regular expression that must be present in the
-        text of the exception raised.  If subclass is specified it
+        test of the exception raised.  If subclass is specified it
         is the expected subclass of SyntaxError (e.g. IndentationError).
         """
         try:
@@ -3185,13 +2340,6 @@ class SyntaxErrorTestCase(unittest.TestCase):
                 global b  # SyntaxError
             """
         self._check_error(source, "parameter and nonlocal", lineno=3)
-
-    def test_raise_from_error_message(self):
-        source = """if 1:
-        raise AssertionError() from None
-        print(1,,2)
-        """
-        self._check_error(source, "invalid syntax", lineno=3)
 
     def test_yield_outside_function(self):
         self._check_error("if 0: yield",                "outside function")
@@ -3437,14 +2585,10 @@ def func2():
         self._check_error('\nfgdfgf\n1,\\#\n2\n',
                           "unexpected character after line continuation character",
                           lineno=3, offset=4)
-        for prefix in ("f", "t"):
-            self._check_error(f'{prefix}"""{{\n\\ x}}"""',
-                              "unexpected character after line continuation character",
-                              lineno=2, offset=2)
 
     def test_invalid_line_continuation_left_recursive(self):
         # Check bpo-42218: SyntaxErrors following left-recursive rules
-        # (primary_raw in this case) need to be tested explicitly
+        # (t_primary_raw in this case) need to be tested explicitly
         self._check_error("A.\u018a\\ ",
                           "unexpected character after line continuation character")
         self._check_error("A.\u03bc\\\n",
@@ -3517,20 +2661,6 @@ case(34)
             lineno=3
         )
 
-    def test_multiline_string_concat_missing_comma_points_to_last_string(self):
-        # gh-142236: For multi-line string concatenations with a missing comma,
-        # the error should point to the last string, not the first.
-        self._check_error(
-            "print(\n"
-            '    "line1"\n'
-            '    "line2"\n'
-            '    "line3"\n'
-            "    x=1\n"
-            ")",
-            "Perhaps you forgot a comma",
-            lineno=4,  # Points to "line3", the last string
-        )
-
     @support.cpython_only
     def test_syntax_error_on_deeply_nested_blocks(self):
         # This raises a SyntaxError, it used to raise a SystemError. Context
@@ -3582,23 +2712,6 @@ while 1:
         self._check_error(src(CO_MAXBLOCKS + 1),
                           "too many statically nested blocks")
 
-    def test_invalid_starred_for_target_in_async_comprehension(self):
-        sources = [
-            "async def f():\n    {a async for b in d for *(b,) in e}",
-            "async def f():\n    [a async for b in d for *(b,) in e]",
-            "async def f():\n    {a: a async for b in d for *(b,) in e}",
-        ]
-        for src in sources:
-            with self.subTest(src=src):
-                self._check_error(
-                    src, "starred assignment target must be in a list or tuple")
-
-    def test_syntax_error_in_nested_inlined_async_comprehension(self):
-        self._check_error(
-            "async def f(it):\n"
-            "    return [[f(a=1, a=2) for y in z] async for x in it]\n",
-            "keyword argument repeated")
-
     @support.cpython_only
     def test_error_on_parser_stack_overflow(self):
         source = "-" * 100000 + "4"
@@ -3608,85 +2721,12 @@ while 1:
                     compile(source, "<string>", mode)
 
     @support.cpython_only
-    @support.skip_wasi_stack_overflow()
     def test_deep_invalid_rule(self):
         # Check that a very deep invalid rule in the PEG
         # parser doesn't have exponential backtracking.
         source = "d{{{{{{{{{{{{{{{{{{{{{{{{{```{{{{{{{ef f():y"
         with self.assertRaises(SyntaxError):
             compile(source, "<string>", "exec")
-
-    def test_except_stmt_invalid_as_expr(self):
-        self._check_error(
-            textwrap.dedent(
-                """
-                try:
-                    pass
-                except ValueError as obj.attr:
-                    pass
-                """
-            ),
-            errtext="cannot use except statement with attribute",
-            lineno=4,
-            end_lineno=4,
-            offset=22,
-            end_offset=22 + len("obj.attr"),
-        )
-
-    def test_match_stmt_invalid_as_expr(self):
-        self._check_error(
-            textwrap.dedent(
-                """
-                match 1:
-                    case x as obj.attr:
-                        ...
-                """
-            ),
-            errtext="cannot use attribute as pattern target",
-            lineno=3,
-            end_lineno=3,
-            offset=15,
-            end_offset=15 + len("obj.attr"),
-        )
-
-    def test_ifexp_else_stmt(self):
-        msg = "expected expression after 'else', but statement is given"
-
-        for stmt in [
-            "pass",
-            "return",
-            "return 2",
-            "raise Exception('a')",
-            "del a",
-            "yield 2",
-            "assert False",
-            "break",
-            "continue",
-            "import",
-            "import ast",
-            "from",
-            "from ast import *"
-        ]:
-            self._check_error(f"x = 1 if 1 else {stmt}", msg)
-
-    def test_ifexp_body_stmt_else_expression(self):
-        msg = "expected expression before 'if', but statement is given"
-
-        for stmt in [
-            "pass",
-            "break",
-            "continue"
-        ]:
-            self._check_error(f"x = {stmt} if 1 else 1", msg)
-
-    def test_ifexp_body_stmt_else_stmt(self):
-        msg = "expected expression before 'if', but statement is given"
-        for lhs_stmt, rhs_stmt in [
-            ("pass", "pass"),
-            ("break", "pass"),
-            ("continue", "import ast")
-        ]:
-            self._check_error(f"x = {lhs_stmt} if 1 else {rhs_stmt}", msg)
 
     def test_diamond_operator(self):
         self._check_error(
@@ -3699,7 +2739,6 @@ while 1:
         )
 
     def test_diamond_operator_barry_as_flufl(self):
-        # Under barry_as_FLUFL, '<>' is the valid "not equal" operator
         compile(
             "from __future__ import barry_as_FLUFL\n1<>2",
             "<test>", "exec",
@@ -3712,187 +2751,6 @@ while 1:
             offset=3,
             end_offset=5,
         )
-
-    def test_double_ampersand(self):
-        self._check_error(
-            "a && b",
-            r"Maybe you meant 'and' or '&' instead of '&&'\?",
-            lineno=1,
-            end_lineno=1,
-            offset=3,
-            end_offset=5,
-        )
-        self._check_error(
-            "a & & b",
-            "invalid syntax",
-            lineno=1,
-            end_lineno=1,
-            offset=5,
-            end_offset=6,
-        )
-        self._check_error(
-            "(a &\n    & b)",
-            "invalid syntax",
-            lineno=2,
-            end_lineno=2,
-            offset=5,
-            end_offset=6,
-        )
-
-    def test_double_pipe(self):
-        self._check_error(
-            "a || b",
-            r"Maybe you meant 'or' or '|' instead of '||'\?",
-            lineno=1,
-            end_lineno=1,
-            offset=3,
-            end_offset=5,
-        )
-        self._check_error(
-            "a | | b",
-            "invalid syntax",
-            lineno=1,
-            end_lineno=1,
-            offset=5,
-            end_offset=6,
-        )
-
-
-class LazyImportRestrictionTestCase(SyntaxErrorTestCase):
-    """Test syntax restrictions for lazy imports."""
-
-    def test_lazy_import_in_try_block(self):
-        """Test that lazy imports are not allowed inside try blocks."""
-        self._check_error("""\
-try:
-    lazy import os
-except:
-    pass
-""", "lazy import not allowed inside try/except blocks")
-
-        self._check_error("""\
-try:
-    lazy from sys import path
-except ImportError:
-    pass
-""", "lazy from ... import not allowed inside try/except blocks")
-
-    def test_lazy_import_in_trystar_block(self):
-        """Test that lazy imports are not allowed inside try* blocks."""
-        self._check_error("""\
-try:
-    lazy import json
-except* Exception:
-    pass
-""", "lazy import not allowed inside try/except blocks")
-
-        self._check_error("""\
-try:
-    lazy from collections import defaultdict
-except* ImportError:
-    pass
-""", "lazy from ... import not allowed inside try/except blocks")
-
-    def test_lazy_import_in_except_block(self):
-        """Test that lazy imports are not allowed inside except blocks."""
-        self._check_error("""\
-try:
-    sys.modules # trigger the except block
-except* Exception:
-   lazy import sys
-""", "lazy import not allowed inside try/except blocks")
-
-    def test_lazy_import_in_function(self):
-        """Test that lazy imports are not allowed inside functions."""
-        self._check_error("""\
-def func():
-    lazy import math
-""", "lazy import not allowed inside functions")
-
-        self._check_error("""\
-def func():
-    lazy from datetime import datetime
-""", "lazy from ... import not allowed inside functions")
-
-    def test_lazy_import_in_async_function(self):
-        """Test that lazy imports are not allowed inside async functions."""
-        self._check_error("""\
-async def async_func():
-    lazy import asyncio
-""", "lazy import not allowed inside functions")
-
-        self._check_error("""\
-async def async_func():
-    lazy from json import loads
-""", "lazy from ... import not allowed inside functions")
-
-    def test_lazy_import_in_class(self):
-        """Test that lazy imports are not allowed inside classes."""
-        self._check_error("""\
-class MyClass:
-    lazy import typing
-""", "lazy import not allowed inside classes")
-
-        self._check_error("""\
-class MyClass:
-    lazy from abc import ABC
-""", "lazy from ... import not allowed inside classes")
-
-    def test_lazy_import_star_forbidden(self):
-        """Test that 'lazy from ... import *' is forbidden everywhere."""
-        # At module level should also be forbidden
-        self._check_error("lazy from os import *",
-                         "lazy from ... import \\* is not allowed")
-
-        # Inside function should give lazy function error first
-        self._check_error("""\
-def func():
-    lazy from sys import *
-""", "lazy from ... import not allowed inside functions")
-
-    def test_lazy_import_nested_scopes(self):
-        """Test lazy imports in nested scopes."""
-        self._check_error("""\
-class Outer:
-    def method(self):
-        lazy import sys
-""", "lazy import not allowed inside functions")
-
-        self._check_error("""\
-def outer():
-    class Inner:
-        lazy import json
-""", "lazy import not allowed inside classes")
-
-        self._check_error("""\
-def outer():
-    def inner():
-        lazy from collections import deque
-""", "lazy from ... import not allowed inside functions")
-
-        self._check_error("""\
-from os lazy import path
-""", "use 'lazy from ... ' instead of 'from ... lazy import'")
-        self._check_error("""\
-from os.path lazy import join
-""", "use 'lazy from ... ' instead of 'from ... lazy import'")
-        self._check_error("""\
-from .mod lazy import join
-""", "use 'lazy from ... ' instead of 'from ... lazy import'")
-        self._check_error("""\
-from ..mod lazy import join
-""", "use 'lazy from ... ' instead of 'from ... lazy import'")
-        self._check_error("""\
-from ...mod lazy import join
-""", "use 'lazy from ... ' instead of 'from ... lazy import'")
-
-    def test_lazy_import_valid_cases(self):
-        """Test that lazy imports work at module level."""
-        # These should compile without errors
-        compile("lazy import os", "<test>", "exec")
-        compile("lazy from sys import path", "<test>", "exec")
-        compile("lazy import json as j", "<test>", "exec")
-        compile("lazy from datetime import datetime as dt", "<test>", "exec")
 
 
 def load_tests(loader, tests, pattern):

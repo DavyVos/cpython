@@ -117,7 +117,7 @@ enum special_types {
 static enum special_types
 special_type(double d)
 {
-    if (isfinite(d)) {
+    if (Py_IS_FINITE(d)) {
         if (d != 0) {
             if (copysign(1., d) == 1.)
                 return ST_POS;
@@ -131,7 +131,7 @@ special_type(double d)
                 return ST_NZERO;
         }
     }
-    if (isnan(d))
+    if (Py_IS_NAN(d))
         return ST_NAN;
     if (copysign(1., d) == 1.)
         return ST_PINF;
@@ -139,18 +139,18 @@ special_type(double d)
         return ST_NINF;
 }
 
-#define SPECIAL_VALUE(z, table)                       \
-    if (!isfinite((z).real) || !isfinite((z).imag)) { \
-        errno = 0;                                    \
-        return table[special_type((z).real)]          \
-                    [special_type((z).imag)];         \
+#define SPECIAL_VALUE(z, table)                                         \
+    if (!Py_IS_FINITE((z).real) || !Py_IS_FINITE((z).imag)) {           \
+        errno = 0;                                              \
+        return table[special_type((z).real)]                            \
+                    [special_type((z).imag)];                           \
     }
 
 #define P Py_MATH_PI
 #define P14 0.25*Py_MATH_PI
 #define P12 0.5*Py_MATH_PI
 #define P34 0.75*Py_MATH_PI
-#define INF INFINITY
+#define INF Py_HUGE_VAL
 #define N Py_NAN
 #define U -9.5426319407711027e33 /* unlikely value, used as placeholder */
 
@@ -163,15 +163,8 @@ special_type(double d)
    raised.
 */
 
-static Py_complex acos_special_values[7][7] = {
-  { {P34,INF}, {P,INF},  {P,INF},  {P,-INF},  {P,-INF},  {P34,-INF}, {N,INF} },
-  { {P12,INF}, {U,U},    {U,U},    {U,U},     {U,U},     {P12,-INF}, {N,N} },
-  { {P12,INF}, {U,U},    {P12,0.}, {P12,-0.}, {U,U},     {P12,-INF}, {P12,N} },
-  { {P12,INF}, {U,U},    {P12,0.}, {P12,-0.}, {U,U},     {P12,-INF}, {P12,N} },
-  { {P12,INF}, {U,U},    {U,U},    {U,U},     {U,U},     {P12,-INF}, {N,N} },
-  { {P14,INF}, {0.,INF}, {0.,INF}, {0.,-INF}, {0.,-INF}, {P14,-INF}, {N,INF} },
-  { {N,INF},   {N,N},    {N,N},    {N,N},     {N,N},     {N,-INF},   {N,N} }
-};
+static Py_complex acos_special_values[7][7];
+
 /*[clinic input]
 cmath.acos -> Py_complex_protected
 
@@ -192,8 +185,15 @@ cmath_acos_impl(PyObject *module, Py_complex z)
     if (fabs(z.real) > CM_LARGE_DOUBLE || fabs(z.imag) > CM_LARGE_DOUBLE) {
         /* avoid unnecessary overflow for large arguments */
         r.real = atan2(fabs(z.imag), z.real);
-        r.imag = -copysign(log(hypot(z.real/2., z.imag/2.)) +
-                           M_LN2*2., z.imag);
+        /* split into cases to make sure that the branch cut has the
+           correct continuity on systems with unsigned zeros */
+        if (z.real < 0.) {
+            r.imag = -copysign(log(hypot(z.real/2., z.imag/2.)) +
+                               M_LN2*2., z.imag);
+        } else {
+            r.imag = copysign(log(hypot(z.real/2., z.imag/2.)) +
+                              M_LN2*2., -z.imag);
+        }
     } else {
         s1.real = 1.-z.real;
         s1.imag = -z.imag;
@@ -209,15 +209,7 @@ cmath_acos_impl(PyObject *module, Py_complex z)
 }
 
 
-static Py_complex acosh_special_values[7][7] = {
-  { {INF,-P34}, {INF,-P},  {INF,-P},  {INF,P},  {INF,P},  {INF,P34}, {INF,N} },
-  { {INF,-P12}, {U,U},     {U,U},     {U,U},    {U,U},    {INF,P12}, {N,N} },
-  { {INF,-P12}, {U,U},     {0.,-P12}, {0.,P12}, {U,U},    {INF,P12}, {N,P12} },
-  { {INF,-P12}, {U,U},     {0.,-P12}, {0.,P12}, {U,U},    {INF,P12}, {N,P12} },
-  { {INF,-P12}, {U,U},     {U,U},     {U,U},    {U,U},    {INF,P12}, {N,N} },
-  { {INF,-P14}, {INF,-0.}, {INF,-0.}, {INF,0.}, {INF,0.}, {INF,P14}, {INF,N} },
-  { {INF,N},    {N,N},     {N,N},     {N,N},    {N,N},    {INF,N},   {N,N} }
-};
+static Py_complex acosh_special_values[7][7];
 
 /*[clinic input]
 cmath.acosh = cmath.acos
@@ -272,15 +264,7 @@ cmath_asin_impl(PyObject *module, Py_complex z)
 }
 
 
-static Py_complex asinh_special_values[7][7] = {
-  { {-INF,-P14}, {-INF,-0.}, {-INF,-0.}, {-INF,0.}, {-INF,0.}, {-INF,P14}, {-INF,N} },
-  { {-INF,-P12}, {U,U},      {U,U},      {U,U},     {U,U},     {-INF,P12}, {N,N} },
-  { {-INF,-P12}, {U,U},      {-0.,-0.},  {-0.,0.},  {U,U},     {-INF,P12}, {N,N} },
-  { {INF,-P12},  {U,U},      {0.,-0.},   {0.,0.},   {U,U},     {INF,P12},  {N,N} },
-  { {INF,-P12},  {U,U},      {U,U},      {U,U},     {U,U},     {INF,P12},  {N,N} },
-  { {INF,-P14},  {INF,-0.},  {INF,-0.},  {INF,0.},  {INF,0.},  {INF,P14},  {INF,N} },
-  { {INF,N},     {N,N},      {N,-0.},    {N,0.},    {N,N},     {INF,N},    {N,N} }
-};
+static Py_complex asinh_special_values[7][7];
 
 /*[clinic input]
 cmath.asinh = cmath.acos
@@ -340,16 +324,38 @@ cmath_atan_impl(PyObject *module, Py_complex z)
     return r;
 }
 
+/* Windows screws up atan2 for inf and nan, and alpha Tru64 5.1 doesn't follow
+   C99 for atan2(0., 0.). */
+static double
+c_atan2(Py_complex z)
+{
+    if (Py_IS_NAN(z.real) || Py_IS_NAN(z.imag))
+        return Py_NAN;
+    if (Py_IS_INFINITY(z.imag)) {
+        if (Py_IS_INFINITY(z.real)) {
+            if (copysign(1., z.real) == 1.)
+                /* atan2(+-inf, +inf) == +-pi/4 */
+                return copysign(0.25*Py_MATH_PI, z.imag);
+            else
+                /* atan2(+-inf, -inf) == +-pi*3/4 */
+                return copysign(0.75*Py_MATH_PI, z.imag);
+        }
+        /* atan2(+-inf, x) == +-pi/2 for finite x */
+        return copysign(0.5*Py_MATH_PI, z.imag);
+    }
+    if (Py_IS_INFINITY(z.real) || z.imag == 0.) {
+        if (copysign(1., z.real) == 1.)
+            /* atan2(+-y, +inf) = atan2(+-0, +x) = +-0. */
+            return copysign(0., z.imag);
+        else
+            /* atan2(+-y, -inf) = atan2(+-0., -x) = +-pi. */
+            return copysign(Py_MATH_PI, z.imag);
+    }
+    return atan2(z.imag, z.real);
+}
 
-static Py_complex atanh_special_values[7][7] = {
-  { {-0.,-P12}, {-0.,-P12}, {-0.,-P12}, {-0.,P12}, {-0.,P12}, {-0.,P12}, {-0.,N} },
-  { {-0.,-P12}, {U,U},      {U,U},      {U,U},     {U,U},     {-0.,P12}, {N,N} },
-  { {-0.,-P12}, {U,U},      {-0.,-0.},  {-0.,0.},  {U,U},     {-0.,P12}, {-0.,N} },
-  { {0.,-P12},  {U,U},      {0.,-0.},   {0.,0.},   {U,U},     {0.,P12},  {0.,N} },
-  { {0.,-P12},  {U,U},      {U,U},      {U,U},     {U,U},     {0.,P12},  {N,N} },
-  { {0.,-P12},  {0.,-P12},  {0.,-P12},  {0.,P12},  {0.,P12},  {0.,P12},  {0.,N} },
-  { {0.,-P12},  {N,N},      {N,N},      {N,N},     {N,N},     {0.,P12},  {N,N} }
-};
+
+static Py_complex atanh_special_values[7][7];
 
 /*[clinic input]
 cmath.atanh = cmath.acos
@@ -380,7 +386,11 @@ cmath_atanh_impl(PyObject *module, Py_complex z)
         */
         h = hypot(z.real/2., z.imag/2.);  /* safe from overflow */
         r.real = z.real/4./h/h;
-        r.imag = copysign(Py_MATH_PI/2., z.imag);
+        /* the two negations in the next line cancel each other out
+           except when working with unsigned zeros: they're there to
+           ensure that the branch cut has the correct continuity on
+           systems that don't support signed zeros */
+        r.imag = -copysign(Py_MATH_PI/2., -z.imag);
         errno = 0;
     } else if (z.real == 1. && ay < CM_SQRT_DBL_MIN) {
         /* C99 standard says:  atanh(1+/-0.) should be inf +/- 0i */
@@ -422,15 +432,7 @@ cmath_cos_impl(PyObject *module, Py_complex z)
 
 
 /* cosh(infinity + i*y) needs to be dealt with specially */
-static Py_complex cosh_special_values[7][7] = {
-  { {INF,N}, {U,U}, {INF,0.},  {INF,-0.}, {U,U}, {INF,N}, {INF,N} },
-  { {N,N},   {U,U}, {U,U},     {U,U},     {U,U}, {N,N},   {N,N} },
-  { {N,0.},  {U,U}, {1.,0.},   {1.,-0.},  {U,U}, {N,0.},  {N,0.} },
-  { {N,0.},  {U,U}, {1.,-0.},  {1.,0.},   {U,U}, {N,0.},  {N,0.} },
-  { {N,N},   {U,U}, {U,U},     {U,U},     {U,U}, {N,N},   {N,N} },
-  { {INF,N}, {U,U}, {INF,-0.}, {INF,0.},  {U,U}, {INF,N}, {INF,N} },
-  { {N,N},   {N,N}, {N,0.},    {N,0.},    {N,N}, {N,N},   {N,N} }
-};
+static Py_complex cosh_special_values[7][7];
 
 /*[clinic input]
 cmath.cosh = cmath.acos
@@ -446,8 +448,8 @@ cmath_cosh_impl(PyObject *module, Py_complex z)
     double x_minus_one;
 
     /* special treatment for cosh(+/-inf + iy) if y is not a NaN */
-    if (!isfinite(z.real) || !isfinite(z.imag)) {
-        if (isinf(z.real) && isfinite(z.imag) &&
+    if (!Py_IS_FINITE(z.real) || !Py_IS_FINITE(z.imag)) {
+        if (Py_IS_INFINITY(z.real) && Py_IS_FINITE(z.imag) &&
             (z.imag != 0.)) {
             if (z.real > 0) {
                 r.real = copysign(INF, cos(z.imag));
@@ -464,7 +466,7 @@ cmath_cosh_impl(PyObject *module, Py_complex z)
         }
         /* need to set errno = EDOM if y is +/- infinity and x is not
            a NaN */
-        if (isinf(z.imag) && !isnan(z.real))
+        if (Py_IS_INFINITY(z.imag) && !Py_IS_NAN(z.real))
             errno = EDOM;
         else
             errno = 0;
@@ -482,7 +484,7 @@ cmath_cosh_impl(PyObject *module, Py_complex z)
         r.imag = sin(z.imag) * sinh(z.real);
     }
     /* detect overflow, and set errno accordingly */
-    if (isinf(r.real) || isinf(r.imag))
+    if (Py_IS_INFINITY(r.real) || Py_IS_INFINITY(r.imag))
         errno = ERANGE;
     else
         errno = 0;
@@ -492,15 +494,7 @@ cmath_cosh_impl(PyObject *module, Py_complex z)
 
 /* exp(infinity + i*y) and exp(-infinity + i*y) need special treatment for
    finite y */
-static Py_complex exp_special_values[7][7] = {
-  { {0.,0.}, {U,U}, {0.,-0.},  {0.,0.},  {U,U}, {0.,0.}, {0.,0.} },
-  { {N,N},   {U,U}, {U,U},     {U,U},    {U,U}, {N,N},   {N,N} },
-  { {N,N},   {U,U}, {1.,-0.},  {1.,0.},  {U,U}, {N,N},   {N,N} },
-  { {N,N},   {U,U}, {1.,-0.},  {1.,0.},  {U,U}, {N,N},   {N,N} },
-  { {N,N},   {U,U}, {U,U},     {U,U},    {U,U}, {N,N},   {N,N} },
-  { {INF,N}, {U,U}, {INF,-0.}, {INF,0.}, {U,U}, {INF,N}, {INF,N} },
-  { {N,N},   {N,N}, {N,-0.},   {N,0.},   {N,N}, {N,N},   {N,N} }
-};
+static Py_complex exp_special_values[7][7];
 
 /*[clinic input]
 cmath.exp = cmath.acos
@@ -515,8 +509,8 @@ cmath_exp_impl(PyObject *module, Py_complex z)
     Py_complex r;
     double l;
 
-    if (!isfinite(z.real) || !isfinite(z.imag)) {
-        if (isinf(z.real) && isfinite(z.imag)
+    if (!Py_IS_FINITE(z.real) || !Py_IS_FINITE(z.imag)) {
+        if (Py_IS_INFINITY(z.real) && Py_IS_FINITE(z.imag)
             && (z.imag != 0.)) {
             if (z.real > 0) {
                 r.real = copysign(INF, cos(z.imag));
@@ -533,9 +527,9 @@ cmath_exp_impl(PyObject *module, Py_complex z)
         }
         /* need to set errno = EDOM if y is +/- infinity and x is not
            a NaN and not -infinity */
-        if (isinf(z.imag) &&
-            (isfinite(z.real) ||
-             (isinf(z.real) && z.real > 0)))
+        if (Py_IS_INFINITY(z.imag) &&
+            (Py_IS_FINITE(z.real) ||
+             (Py_IS_INFINITY(z.real) && z.real > 0)))
             errno = EDOM;
         else
             errno = 0;
@@ -552,22 +546,14 @@ cmath_exp_impl(PyObject *module, Py_complex z)
         r.imag = l*sin(z.imag);
     }
     /* detect overflow, and set errno accordingly */
-    if (isinf(r.real) || isinf(r.imag))
+    if (Py_IS_INFINITY(r.real) || Py_IS_INFINITY(r.imag))
         errno = ERANGE;
     else
         errno = 0;
     return r;
 }
 
-static Py_complex log_special_values[7][7] = {
-  { {INF,-P34}, {INF,-P},  {INF,-P},   {INF,P},   {INF,P},  {INF,P34},  {INF,N} },
-  { {INF,-P12}, {U,U},     {U,U},      {U,U},     {U,U},    {INF,P12},  {N,N} },
-  { {INF,-P12}, {U,U},     {-INF,-P},  {-INF,P},  {U,U},    {INF,P12},  {N,N} },
-  { {INF,-P12}, {U,U},     {-INF,-0.}, {-INF,0.}, {U,U},    {INF,P12},  {N,N} },
-  { {INF,-P12}, {U,U},     {U,U},      {U,U},     {U,U},    {INF,P12},  {N,N} },
-  { {INF,-P14}, {INF,-0.}, {INF,-0.},  {INF,0.},  {INF,0.}, {INF,P14},  {INF,N} },
-  { {INF,N},    {N,N},     {N,N},      {N,N},     {N,N},    {INF,N},    {N,N} }
-};
+static Py_complex log_special_values[7][7];
 
 static Py_complex
 c_log(Py_complex z)
@@ -683,15 +669,7 @@ cmath_sin_impl(PyObject *module, Py_complex z)
 
 
 /* sinh(infinity + i*y) needs to be dealt with specially */
-static Py_complex sinh_special_values[7][7] = {
-  { {INF,N}, {U,U}, {-INF,-0.}, {-INF,0.}, {U,U}, {INF,N}, {INF,N} },
-  { {N,N},   {U,U}, {U,U},      {U,U},     {U,U}, {N,N},   {N,N} },
-  { {0.,N},  {U,U}, {-0.,-0.},  {-0.,0.},  {U,U}, {0.,N},  {0.,N} },
-  { {0.,N},  {U,U}, {0.,-0.},   {0.,0.},   {U,U}, {0.,N},  {0.,N} },
-  { {N,N},   {U,U}, {U,U},      {U,U},     {U,U}, {N,N},   {N,N} },
-  { {INF,N}, {U,U}, {INF,-0.},  {INF,0.},  {U,U}, {INF,N}, {INF,N} },
-  { {N,N},   {N,N}, {N,-0.},    {N,0.},    {N,N}, {N,N},   {N,N} }
-};
+static Py_complex sinh_special_values[7][7];
 
 /*[clinic input]
 cmath.sinh = cmath.acos
@@ -708,8 +686,8 @@ cmath_sinh_impl(PyObject *module, Py_complex z)
 
     /* special treatment for sinh(+/-inf + iy) if y is finite and
        nonzero */
-    if (!isfinite(z.real) || !isfinite(z.imag)) {
-        if (isinf(z.real) && isfinite(z.imag)
+    if (!Py_IS_FINITE(z.real) || !Py_IS_FINITE(z.imag)) {
+        if (Py_IS_INFINITY(z.real) && Py_IS_FINITE(z.imag)
             && (z.imag != 0.)) {
             if (z.real > 0) {
                 r.real = copysign(INF, cos(z.imag));
@@ -726,7 +704,7 @@ cmath_sinh_impl(PyObject *module, Py_complex z)
         }
         /* need to set errno = EDOM if y is +/- infinity and x is not
            a NaN */
-        if (isinf(z.imag) && !isnan(z.real))
+        if (Py_IS_INFINITY(z.imag) && !Py_IS_NAN(z.real))
             errno = EDOM;
         else
             errno = 0;
@@ -742,7 +720,7 @@ cmath_sinh_impl(PyObject *module, Py_complex z)
         r.imag = sin(z.imag) * cosh(z.real);
     }
     /* detect overflow, and set errno accordingly */
-    if (isinf(r.real) || isinf(r.imag))
+    if (Py_IS_INFINITY(r.real) || Py_IS_INFINITY(r.imag))
         errno = ERANGE;
     else
         errno = 0;
@@ -750,15 +728,7 @@ cmath_sinh_impl(PyObject *module, Py_complex z)
 }
 
 
-static Py_complex sqrt_special_values[7][7] = {
-  { {INF,-INF}, {0.,-INF}, {0.,-INF}, {0.,INF}, {0.,INF}, {INF,INF}, {N,INF} },
-  { {INF,-INF}, {U,U},     {U,U},     {U,U},    {U,U},    {INF,INF}, {N,N} },
-  { {INF,-INF}, {U,U},     {0.,-0.},  {0.,0.},  {U,U},    {INF,INF}, {N,N} },
-  { {INF,-INF}, {U,U},     {0.,-0.},  {0.,0.},  {U,U},    {INF,INF}, {N,N} },
-  { {INF,-INF}, {U,U},     {U,U},     {U,U},    {U,U},    {INF,INF}, {N,N} },
-  { {INF,-INF}, {INF,-0.}, {INF,-0.}, {INF,0.}, {INF,0.}, {INF,INF}, {INF,N} },
-  { {INF,-INF}, {N,N},     {N,N},     {N,N},    {N,N},    {INF,INF}, {N,N} }
-};
+static Py_complex sqrt_special_values[7][7];
 
 /*[clinic input]
 cmath.sqrt = cmath.acos
@@ -857,15 +827,7 @@ cmath_tan_impl(PyObject *module, Py_complex z)
 
 
 /* tanh(infinity + i*y) needs to be dealt with specially */
-static Py_complex tanh_special_values[7][7] = {
-  { {-1.,0.}, {U,U}, {-1.,-0.}, {-1.,0.}, {U,U}, {-1.,0.}, {-1.,0.} },
-  { {N,N},    {U,U}, {U,U},     {U,U},    {U,U}, {N,N},    {N,N} },
-  { {-0.0,N}, {U,U}, {-0.,-0.}, {-0.,0.}, {U,U}, {-0.0,N}, {-0.,N} },
-  { {0.0,N},  {U,U}, {0.,-0.},  {0.,0.},  {U,U}, {0.0,N},  {0.,N} },
-  { {N,N},    {U,U}, {U,U},     {U,U},    {U,U}, {N,N},    {N,N} },
-  { {1.,0.},  {U,U}, {1.,-0.},  {1.,0.},  {U,U}, {1.,0.},  {1.,0.} },
-  { {N,N},    {N,N}, {N,-0.},   {N,0.},   {N,N}, {N,N},    {N,N} }
-};
+static Py_complex tanh_special_values[7][7];
 
 /*[clinic input]
 cmath.tanh = cmath.acos
@@ -894,8 +856,8 @@ cmath_tanh_impl(PyObject *module, Py_complex z)
 
     /* special treatment for tanh(+/-inf + iy) if y is finite and
        nonzero */
-    if (!isfinite(z.real) || !isfinite(z.imag)) {
-        if (isinf(z.real) && isfinite(z.imag)
+    if (!Py_IS_FINITE(z.real) || !Py_IS_FINITE(z.imag)) {
+        if (Py_IS_INFINITY(z.real) && Py_IS_FINITE(z.imag)
             && (z.imag != 0.)) {
             if (z.real > 0) {
                 r.real = 1.0;
@@ -914,7 +876,7 @@ cmath_tanh_impl(PyObject *module, Py_complex z)
         }
         /* need to set errno = EDOM if z.imag is +/-infinity and
            z.real is finite */
-        if (isinf(z.imag) && isfinite(z.real))
+        if (Py_IS_INFINITY(z.imag) && Py_IS_FINITE(z.real))
             errno = EDOM;
         else
             errno = 0;
@@ -1005,7 +967,7 @@ cmath_phase_impl(PyObject *module, Py_complex z)
     double phi;
 
     errno = 0;
-    phi = atan2(z.imag, z.real); /* should not cause any exception */
+    phi = c_atan2(z); /* should not cause any exception */
     if (errno != 0)
         return math_error();
     else
@@ -1029,7 +991,7 @@ cmath_polar_impl(PyObject *module, Py_complex z)
 {
     double r, phi;
 
-    phi = atan2(z.imag, z.real); /* should not cause any exception */
+    phi = c_atan2(z); /* should not cause any exception */
     errno = 0;
     r = _Py_c_abs(z); /* sets errno to ERANGE on overflow */
     if (errno != 0)
@@ -1049,18 +1011,10 @@ cmath_polar_impl(PyObject *module, Py_complex z)
 
 */
 
-static Py_complex rect_special_values[7][7] = {
-  { {INF,N}, {U,U}, {-INF,0.}, {-INF,-0.}, {U,U}, {INF,N}, {INF,N} },
-  { {N,N},   {U,U}, {U,U},     {U,U},      {U,U}, {N,N},   {N,N} },
-  { {0.,0.}, {U,U}, {-0.,0.},  {-0.,-0.},  {U,U}, {0.,0.}, {0.,0.} },
-  { {0.,0.}, {U,U}, {0.,-0.},  {0.,0.},    {U,U}, {0.,0.}, {0.,0.} },
-  { {N,N},   {U,U}, {U,U},     {U,U},      {U,U}, {N,N},   {N,N} },
-  { {INF,N}, {U,U}, {INF,-0.}, {INF,0.},   {U,U}, {INF,N}, {INF,N} },
-  { {N,N},   {N,N}, {N,0.},    {N,0.},     {N,N}, {N,N},   {N,N} }
-};
+static Py_complex rect_special_values[7][7];
 
 /*[clinic input]
-cmath.rect -> Py_complex_protected
+cmath.rect
 
     r: double
     phi: double
@@ -1069,19 +1023,19 @@ cmath.rect -> Py_complex_protected
 Convert from polar coordinates to rectangular coordinates.
 [clinic start generated code]*/
 
-static Py_complex
+static PyObject *
 cmath_rect_impl(PyObject *module, double r, double phi)
-/*[clinic end generated code: output=74ff3d17585f3388 input=50e60c5d28c834e6]*/
+/*[clinic end generated code: output=385a0690925df2d5 input=24c5646d147efd69]*/
 {
     Py_complex z;
     errno = 0;
 
     /* deal with special values */
-    if (!isfinite(r) || !isfinite(phi)) {
+    if (!Py_IS_FINITE(r) || !Py_IS_FINITE(phi)) {
         /* if r is +/-infinity and phi is finite but nonzero then
            result is (+-INF +-INF i), but we need to compute cos(phi)
            and sin(phi) to figure out the signs. */
-        if (isinf(r) && (isfinite(phi)
+        if (Py_IS_INFINITY(r) && (Py_IS_FINITE(phi)
                                   && (phi != 0.))) {
             if (r > 0) {
                 z.real = copysign(INF, cos(phi));
@@ -1098,7 +1052,7 @@ cmath_rect_impl(PyObject *module, double r, double phi)
         }
         /* need to set errno = EDOM if r is a nonzero number and phi
            is infinite */
-        if (r != 0. && !isnan(r) && isinf(phi))
+        if (r != 0. && !Py_IS_NAN(r) && Py_IS_INFINITY(phi))
             errno = EDOM;
         else
             errno = 0;
@@ -1115,11 +1069,14 @@ cmath_rect_impl(PyObject *module, double r, double phi)
         z.imag = r * sin(phi);
         errno = 0;
     }
-    return z;
+
+    if (errno != 0)
+        return math_error();
+    else
+        return PyComplex_FromCComplex(z);
 }
 
 /*[clinic input]
-@permit_long_summary
 cmath.isfinite = cmath.polar
 
 Return True if both the real and imaginary parts of z are finite, else False.
@@ -1127,9 +1084,9 @@ Return True if both the real and imaginary parts of z are finite, else False.
 
 static PyObject *
 cmath_isfinite_impl(PyObject *module, Py_complex z)
-/*[clinic end generated code: output=ac76611e2c774a36 input=e224f5c36d94f5da]*/
+/*[clinic end generated code: output=ac76611e2c774a36 input=848e7ee701895815]*/
 {
-    return PyBool_FromLong(isfinite(z.real) && isfinite(z.imag));
+    return PyBool_FromLong(Py_IS_FINITE(z.real) && Py_IS_FINITE(z.imag));
 }
 
 /*[clinic input]
@@ -1142,7 +1099,7 @@ static PyObject *
 cmath_isnan_impl(PyObject *module, Py_complex z)
 /*[clinic end generated code: output=e7abf6e0b28beab7 input=71799f5d284c9baf]*/
 {
-    return PyBool_FromLong(isnan(z.real) || isnan(z.imag));
+    return PyBool_FromLong(Py_IS_NAN(z.real) || Py_IS_NAN(z.imag));
 }
 
 /*[clinic input]
@@ -1155,7 +1112,8 @@ static PyObject *
 cmath_isinf_impl(PyObject *module, Py_complex z)
 /*[clinic end generated code: output=502a75a79c773469 input=363df155c7181329]*/
 {
-    return PyBool_FromLong(isinf(z.real) || isinf(z.imag));
+    return PyBool_FromLong(Py_IS_INFINITY(z.real) ||
+                           Py_IS_INFINITY(z.imag));
 }
 
 /*[clinic input]
@@ -1211,7 +1169,8 @@ cmath_isclose_impl(PyObject *module, Py_complex a, Py_complex b,
        above.
     */
 
-    if (isinf(a.real) || isinf(a.imag) || isinf(b.real) || isinf(b.imag)) {
+    if (Py_IS_INFINITY(a.real) || Py_IS_INFINITY(a.imag) ||
+        Py_IS_INFINITY(b.real) || Py_IS_INFINITY(b.imag)) {
         return 0;
     }
 
@@ -1270,11 +1229,11 @@ cmath_exec(PyObject *mod)
     if (PyModule_Add(mod, "tau", PyFloat_FromDouble(Py_MATH_TAU)) < 0) {
         return -1;
     }
-    if (PyModule_Add(mod, "inf", PyFloat_FromDouble(INFINITY)) < 0) {
+    if (PyModule_Add(mod, "inf", PyFloat_FromDouble(Py_INFINITY)) < 0) {
         return -1;
     }
 
-    Py_complex infj = {0.0, INFINITY};
+    Py_complex infj = {0.0, Py_INFINITY};
     if (PyModule_Add(mod, "infj", PyComplex_FromCComplex(infj)) < 0) {
         return -1;
     }
@@ -1286,11 +1245,124 @@ cmath_exec(PyObject *mod)
         return -1;
     }
 
+    /* initialize special value tables */
+
+#define INIT_SPECIAL_VALUES(NAME, BODY) { Py_complex* p = (Py_complex*)NAME; BODY }
+#define C(REAL, IMAG) p->real = REAL; p->imag = IMAG; ++p;
+
+    INIT_SPECIAL_VALUES(acos_special_values, {
+      C(P34,INF) C(P,INF)  C(P,INF)  C(P,-INF)  C(P,-INF)  C(P34,-INF) C(N,INF)
+      C(P12,INF) C(U,U)    C(U,U)    C(U,U)     C(U,U)     C(P12,-INF) C(N,N)
+      C(P12,INF) C(U,U)    C(P12,0.) C(P12,-0.) C(U,U)     C(P12,-INF) C(P12,N)
+      C(P12,INF) C(U,U)    C(P12,0.) C(P12,-0.) C(U,U)     C(P12,-INF) C(P12,N)
+      C(P12,INF) C(U,U)    C(U,U)    C(U,U)     C(U,U)     C(P12,-INF) C(N,N)
+      C(P14,INF) C(0.,INF) C(0.,INF) C(0.,-INF) C(0.,-INF) C(P14,-INF) C(N,INF)
+      C(N,INF)   C(N,N)    C(N,N)    C(N,N)     C(N,N)     C(N,-INF)   C(N,N)
+    })
+
+    INIT_SPECIAL_VALUES(acosh_special_values, {
+      C(INF,-P34) C(INF,-P)  C(INF,-P)  C(INF,P)  C(INF,P)  C(INF,P34) C(INF,N)
+      C(INF,-P12) C(U,U)     C(U,U)     C(U,U)    C(U,U)    C(INF,P12) C(N,N)
+      C(INF,-P12) C(U,U)     C(0.,-P12) C(0.,P12) C(U,U)    C(INF,P12) C(N,N)
+      C(INF,-P12) C(U,U)     C(0.,-P12) C(0.,P12) C(U,U)    C(INF,P12) C(N,N)
+      C(INF,-P12) C(U,U)     C(U,U)     C(U,U)    C(U,U)    C(INF,P12) C(N,N)
+      C(INF,-P14) C(INF,-0.) C(INF,-0.) C(INF,0.) C(INF,0.) C(INF,P14) C(INF,N)
+      C(INF,N)    C(N,N)     C(N,N)     C(N,N)    C(N,N)    C(INF,N)   C(N,N)
+    })
+
+    INIT_SPECIAL_VALUES(asinh_special_values, {
+      C(-INF,-P14) C(-INF,-0.) C(-INF,-0.) C(-INF,0.) C(-INF,0.) C(-INF,P14) C(-INF,N)
+      C(-INF,-P12) C(U,U)      C(U,U)      C(U,U)     C(U,U)     C(-INF,P12) C(N,N)
+      C(-INF,-P12) C(U,U)      C(-0.,-0.)  C(-0.,0.)  C(U,U)     C(-INF,P12) C(N,N)
+      C(INF,-P12)  C(U,U)      C(0.,-0.)   C(0.,0.)   C(U,U)     C(INF,P12)  C(N,N)
+      C(INF,-P12)  C(U,U)      C(U,U)      C(U,U)     C(U,U)     C(INF,P12)  C(N,N)
+      C(INF,-P14)  C(INF,-0.)  C(INF,-0.)  C(INF,0.)  C(INF,0.)  C(INF,P14)  C(INF,N)
+      C(INF,N)     C(N,N)      C(N,-0.)    C(N,0.)    C(N,N)     C(INF,N)    C(N,N)
+    })
+
+    INIT_SPECIAL_VALUES(atanh_special_values, {
+      C(-0.,-P12) C(-0.,-P12) C(-0.,-P12) C(-0.,P12) C(-0.,P12) C(-0.,P12) C(-0.,N)
+      C(-0.,-P12) C(U,U)      C(U,U)      C(U,U)     C(U,U)     C(-0.,P12) C(N,N)
+      C(-0.,-P12) C(U,U)      C(-0.,-0.)  C(-0.,0.)  C(U,U)     C(-0.,P12) C(-0.,N)
+      C(0.,-P12)  C(U,U)      C(0.,-0.)   C(0.,0.)   C(U,U)     C(0.,P12)  C(0.,N)
+      C(0.,-P12)  C(U,U)      C(U,U)      C(U,U)     C(U,U)     C(0.,P12)  C(N,N)
+      C(0.,-P12)  C(0.,-P12)  C(0.,-P12)  C(0.,P12)  C(0.,P12)  C(0.,P12)  C(0.,N)
+      C(0.,-P12)  C(N,N)      C(N,N)      C(N,N)     C(N,N)     C(0.,P12)  C(N,N)
+    })
+
+    INIT_SPECIAL_VALUES(cosh_special_values, {
+      C(INF,N) C(U,U) C(INF,0.)  C(INF,-0.) C(U,U) C(INF,N) C(INF,N)
+      C(N,N)   C(U,U) C(U,U)     C(U,U)     C(U,U) C(N,N)   C(N,N)
+      C(N,0.)  C(U,U) C(1.,0.)   C(1.,-0.)  C(U,U) C(N,0.)  C(N,0.)
+      C(N,0.)  C(U,U) C(1.,-0.)  C(1.,0.)   C(U,U) C(N,0.)  C(N,0.)
+      C(N,N)   C(U,U) C(U,U)     C(U,U)     C(U,U) C(N,N)   C(N,N)
+      C(INF,N) C(U,U) C(INF,-0.) C(INF,0.)  C(U,U) C(INF,N) C(INF,N)
+      C(N,N)   C(N,N) C(N,0.)    C(N,0.)    C(N,N) C(N,N)   C(N,N)
+    })
+
+    INIT_SPECIAL_VALUES(exp_special_values, {
+      C(0.,0.) C(U,U) C(0.,-0.)  C(0.,0.)  C(U,U) C(0.,0.) C(0.,0.)
+      C(N,N)   C(U,U) C(U,U)     C(U,U)    C(U,U) C(N,N)   C(N,N)
+      C(N,N)   C(U,U) C(1.,-0.)  C(1.,0.)  C(U,U) C(N,N)   C(N,N)
+      C(N,N)   C(U,U) C(1.,-0.)  C(1.,0.)  C(U,U) C(N,N)   C(N,N)
+      C(N,N)   C(U,U) C(U,U)     C(U,U)    C(U,U) C(N,N)   C(N,N)
+      C(INF,N) C(U,U) C(INF,-0.) C(INF,0.) C(U,U) C(INF,N) C(INF,N)
+      C(N,N)   C(N,N) C(N,-0.)   C(N,0.)   C(N,N) C(N,N)   C(N,N)
+    })
+
+    INIT_SPECIAL_VALUES(log_special_values, {
+      C(INF,-P34) C(INF,-P)  C(INF,-P)   C(INF,P)   C(INF,P)  C(INF,P34)  C(INF,N)
+      C(INF,-P12) C(U,U)     C(U,U)      C(U,U)     C(U,U)    C(INF,P12)  C(N,N)
+      C(INF,-P12) C(U,U)     C(-INF,-P)  C(-INF,P)  C(U,U)    C(INF,P12)  C(N,N)
+      C(INF,-P12) C(U,U)     C(-INF,-0.) C(-INF,0.) C(U,U)    C(INF,P12)  C(N,N)
+      C(INF,-P12) C(U,U)     C(U,U)      C(U,U)     C(U,U)    C(INF,P12)  C(N,N)
+      C(INF,-P14) C(INF,-0.) C(INF,-0.)  C(INF,0.)  C(INF,0.) C(INF,P14)  C(INF,N)
+      C(INF,N)    C(N,N)     C(N,N)      C(N,N)     C(N,N)    C(INF,N)    C(N,N)
+    })
+
+    INIT_SPECIAL_VALUES(sinh_special_values, {
+      C(INF,N) C(U,U) C(-INF,-0.) C(-INF,0.) C(U,U) C(INF,N) C(INF,N)
+      C(N,N)   C(U,U) C(U,U)      C(U,U)     C(U,U) C(N,N)   C(N,N)
+      C(0.,N)  C(U,U) C(-0.,-0.)  C(-0.,0.)  C(U,U) C(0.,N)  C(0.,N)
+      C(0.,N)  C(U,U) C(0.,-0.)   C(0.,0.)   C(U,U) C(0.,N)  C(0.,N)
+      C(N,N)   C(U,U) C(U,U)      C(U,U)     C(U,U) C(N,N)   C(N,N)
+      C(INF,N) C(U,U) C(INF,-0.)  C(INF,0.)  C(U,U) C(INF,N) C(INF,N)
+      C(N,N)   C(N,N) C(N,-0.)    C(N,0.)    C(N,N) C(N,N)   C(N,N)
+    })
+
+    INIT_SPECIAL_VALUES(sqrt_special_values, {
+      C(INF,-INF) C(0.,-INF) C(0.,-INF) C(0.,INF) C(0.,INF) C(INF,INF) C(N,INF)
+      C(INF,-INF) C(U,U)     C(U,U)     C(U,U)    C(U,U)    C(INF,INF) C(N,N)
+      C(INF,-INF) C(U,U)     C(0.,-0.)  C(0.,0.)  C(U,U)    C(INF,INF) C(N,N)
+      C(INF,-INF) C(U,U)     C(0.,-0.)  C(0.,0.)  C(U,U)    C(INF,INF) C(N,N)
+      C(INF,-INF) C(U,U)     C(U,U)     C(U,U)    C(U,U)    C(INF,INF) C(N,N)
+      C(INF,-INF) C(INF,-0.) C(INF,-0.) C(INF,0.) C(INF,0.) C(INF,INF) C(INF,N)
+      C(INF,-INF) C(N,N)     C(N,N)     C(N,N)    C(N,N)    C(INF,INF) C(N,N)
+    })
+
+    INIT_SPECIAL_VALUES(tanh_special_values, {
+      C(-1.,0.) C(U,U) C(-1.,-0.) C(-1.,0.) C(U,U) C(-1.,0.) C(-1.,0.)
+      C(N,N)    C(U,U) C(U,U)     C(U,U)    C(U,U) C(N,N)    C(N,N)
+      C(N,N)    C(U,U) C(-0.,-0.) C(-0.,0.) C(U,U) C(N,N)    C(N,N)
+      C(N,N)    C(U,U) C(0.,-0.)  C(0.,0.)  C(U,U) C(N,N)    C(N,N)
+      C(N,N)    C(U,U) C(U,U)     C(U,U)    C(U,U) C(N,N)    C(N,N)
+      C(1.,0.)  C(U,U) C(1.,-0.)  C(1.,0.)  C(U,U) C(1.,0.)  C(1.,0.)
+      C(N,N)    C(N,N) C(N,-0.)   C(N,0.)   C(N,N) C(N,N)    C(N,N)
+    })
+
+    INIT_SPECIAL_VALUES(rect_special_values, {
+      C(INF,N) C(U,U) C(-INF,0.) C(-INF,-0.) C(U,U) C(INF,N) C(INF,N)
+      C(N,N)   C(U,U) C(U,U)     C(U,U)      C(U,U) C(N,N)   C(N,N)
+      C(0.,0.) C(U,U) C(-0.,0.)  C(-0.,-0.)  C(U,U) C(0.,0.) C(0.,0.)
+      C(0.,0.) C(U,U) C(0.,-0.)  C(0.,0.)    C(U,U) C(0.,0.) C(0.,0.)
+      C(N,N)   C(U,U) C(U,U)     C(U,U)      C(U,U) C(N,N)   C(N,N)
+      C(INF,N) C(U,U) C(INF,-0.) C(INF,0.)   C(U,U) C(INF,N) C(INF,N)
+      C(N,N)   C(N,N) C(N,0.)    C(N,0.)     C(N,N) C(N,N)   C(N,N)
+    })
     return 0;
 }
 
 static PyModuleDef_Slot cmath_slots[] = {
-    _Py_ABI_SLOT,
     {Py_mod_exec, cmath_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {Py_mod_gil, Py_MOD_GIL_NOT_USED},

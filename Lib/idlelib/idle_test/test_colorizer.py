@@ -36,7 +36,6 @@ source = textwrap.dedent("""\
     # All valid prefixes for unicode and byte strings should be colored.
     r'x', u'x', R'x', U'x', f'x', F'x'
     fr'x', Fr'x', fR'x', FR'x', rf'x', rF'x', Rf'x', RF'x'
-    tr'x', Tr'x', tR'x', TR'x', rt'x', rT'x', Rt'x', RT'x'
     b'x',B'x', br'x',Br'x',bR'x',BR'x', rb'x', rB'x',Rb'x',RB'x'
     # Invalid combinations of legal characters should be half colored.
     ur'x', ru'x', uf'x', fu'x', UR'x', ufr'x', rfu'x', xf'x', fx'x'
@@ -52,8 +51,6 @@ source = textwrap.dedent("""\
     '''
     case _:'''
     "match x:"
-    type Point = tuple[float, float]
-    type = type(1)
     """)
 
 
@@ -393,21 +390,19 @@ class ColorDelegatorTest(unittest.TestCase):
                     ('6.0', ('KEYWORD',)), ('6.10', ('DEFINITION',)), ('6.11', ()),
                     ('8.0', ('STRING',)), ('8.4', ()), ('8.5', ('STRING',)),
                     ('8.12', ()), ('8.14', ('STRING',)),
-                    ('20.0', ('KEYWORD',)),
-                    ('21.4', ('KEYWORD',)), ('21.16', ('KEYWORD',)),# ('21.19', ('KEYWORD',)),
-                    #('23.4', ('KEYWORD',)), ('23.10', ('KEYWORD',)), ('23.14', ('KEYWORD',)), ('23.19', ('STRING',)),
-                    #('24.12', ('KEYWORD',)),
-                    ('25.8', ('KEYWORD',)),
-                    ('26.4', ('KEYWORD',)), ('26.9', ('KEYWORD',)),
-                    ('26.11', ('KEYWORD',)), ('26.15', ('STRING',)),
-                    ('26.19', ('KEYWORD',)), ('26.22', ()),
-                    ('26.24', ('KEYWORD',)), ('26.29', ('BUILTIN',)), ('26.37', ('KEYWORD',)),
-                    ('27.4', ('KEYWORD',)), ('27.9', ('KEYWORD',)),# ('27.11', ('KEYWORD',)), ('27.14', (),),
-                    ('28.25', ('STRING',)), ('28.38', ('STRING',)),
-                    ('30.0', ('STRING',)),
-                    ('31.1', ('STRING',)),
-                    ('32.0', ('KEYWORD',)),
-                    ('33.0', ('BUILTIN',)), ('33.1', ('BUILTIN',)),
+                    ('19.0', ('KEYWORD',)),
+                    ('20.4', ('KEYWORD',)), ('20.16', ('KEYWORD',)),# ('20.19', ('KEYWORD',)),
+                    #('22.4', ('KEYWORD',)), ('22.10', ('KEYWORD',)), ('22.14', ('KEYWORD',)), ('22.19', ('STRING',)),
+                    #('23.12', ('KEYWORD',)),
+                    ('24.8', ('KEYWORD',)),
+                    ('25.4', ('KEYWORD',)), ('25.9', ('KEYWORD',)),
+                    ('25.11', ('KEYWORD',)), ('25.15', ('STRING',)),
+                    ('25.19', ('KEYWORD',)), ('25.22', ()),
+                    ('25.24', ('KEYWORD',)), ('25.29', ('BUILTIN',)), ('25.37', ('KEYWORD',)),
+                    ('26.4', ('KEYWORD',)), ('26.9', ('KEYWORD',)),# ('26.11', ('KEYWORD',)), ('26.14', (),),
+                    ('27.25', ('STRING',)), ('27.38', ('STRING',)),
+                    ('29.0', ('STRING',)),
+                    ('30.1', ('STRING',)),
                     # SYNC at the end of every line.
                     ('1.55', ('SYNC',)), ('2.50', ('SYNC',)), ('3.34', ('SYNC',)),
                    )
@@ -438,7 +433,7 @@ class ColorDelegatorTest(unittest.TestCase):
         eq(text.tag_nextrange('STRING', '8.12'), ('8.14', '8.17'))
         eq(text.tag_nextrange('STRING', '8.17'), ('8.19', '8.26'))
         eq(text.tag_nextrange('SYNC', '8.0'), ('8.26', '9.0'))
-        eq(text.tag_nextrange('SYNC', '31.0'), ('31.10', '32.0'))
+        eq(text.tag_nextrange('SYNC', '30.0'), ('30.10', '32.0'))
 
     def _assert_highlighting(self, source, tag_ranges):
         """Check highlighting of a given piece of code.
@@ -484,6 +479,21 @@ class ColorDelegatorTest(unittest.TestCase):
 
         # def followed by non-keyword
         self._assert_highlighting('def ++', {'KEYWORD': [('1.0', '1.3')]})
+
+    def test_type_soft_keyword(self):
+        # type as a soft keyword
+        self._assert_highlighting('type X = int',
+                                  {'KEYWORD': [('1.0', '1.4')],
+                                   'BUILTIN': [('1.9', '1.12')]})
+        # type as a name
+        self._assert_highlighting('type = type(1)',
+                                  {'BUILTIN': [('1.0', '1.4'), ('1.7', '1.11')]})
+        self._assert_highlighting('type(x)',
+                                  {'BUILTIN': [('1.0', '1.4')]})
+        self._assert_highlighting('type in (int, str)',
+                                  {'KEYWORD': [('1.5', '1.7')],
+                                   'BUILTIN': [('1.0', '1.4'), ('1.9', '1.12'),
+                                               ('1.14', '1.17')]})
 
     def test_match_soft_keyword(self):
         # empty match
@@ -545,24 +555,6 @@ class ColorDelegatorTest(unittest.TestCase):
         # case followed by a lone underscore
         self._assert_highlighting('case _:', {'KEYWORD': [('1.0', '1.4'),
                                                           ('1.5', '1.6')]})
-
-    def test_lazy_soft_keyword(self):  # lazy new in 3.15.
-        # lazy followed by import
-        self._assert_highlighting('lazy import foo',
-                                  {'KEYWORD': [('1.0', '1.4'),
-                                               ('1.5', '1.11')]})
-        self._assert_highlighting('    lazy import foo',
-                                  {'KEYWORD': [('1.4', '1.8'),
-                                               ('1.9', '1.15')]})
-
-        # lazy followed by from
-        self._assert_highlighting('lazy from foo import bar',
-                                  {'KEYWORD': [('1.0', '1.4'), ('1.5', '1.9'),
-                                               ('1.14', '1.20')]})
-
-        # lazy not followed by import/from (not highlighted)
-        self._assert_highlighting('lazy = 1', {})
-        self._assert_highlighting('lazy foo', {})
 
     def test_long_multiline_string(self):
         source = textwrap.dedent('''\

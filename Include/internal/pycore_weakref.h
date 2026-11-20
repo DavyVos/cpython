@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 #include "pycore_critical_section.h" // Py_BEGIN_CRITICAL_SECTION()
-#include "pycore_lock.h"             // PyMutex_LockFlags()
+#include "pycore_lock.h"
 #include "pycore_object.h"           // _Py_REF_IS_MERGED()
 #include "pycore_pyatomic_ft_wrappers.h"
 
@@ -74,27 +74,26 @@ static inline PyObject* _PyWeakref_GET_REF(PyObject *ref_obj)
     assert(PyWeakref_Check(ref_obj));
     PyWeakReference *ref = _Py_CAST(PyWeakReference*, ref_obj);
 
+    PyObject *obj = FT_ATOMIC_LOAD_PTR(ref->wr_object);
+    if (obj == Py_None) {
+        // clear_weakref() was called
+        return NULL;
+    }
+
+    LOCK_WEAKREFS(obj);
 #ifdef Py_GIL_DISABLED
-    PyObject *obj = _Py_atomic_load_ptr(&ref->wr_object);
-    if (obj == Py_None) {
+    if (ref->wr_object == Py_None) {
         // clear_weakref() was called
+        UNLOCK_WEAKREFS(obj);
         return NULL;
     }
-    if (_Py_TryIncrefCompare(&ref->wr_object, obj)) {
-        return obj;
-    }
-    return NULL;
-#else
-    PyObject *obj = ref->wr_object;
-    if (obj == Py_None) {
-        // clear_weakref() was called
-        return NULL;
-    }
-    if (_Py_TryIncref(obj)) {
-        return obj;
-    }
-    return NULL;
 #endif
+    if (_Py_TryIncref(obj)) {
+        UNLOCK_WEAKREFS(obj);
+        return obj;
+    }
+    UNLOCK_WEAKREFS(obj);
+    return NULL;
 }
 
 static inline int _PyWeakref_IS_DEAD(PyObject *ref_obj)
@@ -109,8 +108,8 @@ static inline int _PyWeakref_IS_DEAD(PyObject *ref_obj)
     }
     else {
         LOCK_WEAKREFS(obj);
+        // See _PyWeakref_GET_REF() for the rationale of this test
 #ifdef Py_GIL_DISABLED
-        // The weakref may have been cleared before the lock was acquired.
         ret = (ref->wr_object == Py_None) || _is_dead(obj);
 #else
         ret = _is_dead(obj);

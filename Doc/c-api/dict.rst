@@ -2,7 +2,7 @@
 
 .. _dictobjects:
 
-Dictionary objects
+Dictionary Objects
 ------------------
 
 .. index:: pair: object; dictionary
@@ -42,12 +42,6 @@ Dictionary objects
    enforces read-only behavior.  This is normally used to create a view to
    prevent modification of the dictionary for non-dynamic class types.
 
-   The first argument can be a :class:`dict`, a :class:`frozendict`, or a
-   mapping.
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
-
 
 .. c:var:: PyTypeObject PyDictProxy_Type
 
@@ -64,25 +58,12 @@ Dictionary objects
 
    Empty an existing dictionary of all key-value pairs.
 
-   Do nothing if the argument is not a :class:`dict` or a :class:`!dict`
-   subclass.
-
 
 .. c:function:: int PyDict_Contains(PyObject *p, PyObject *key)
 
    Determine if dictionary *p* contains *key*.  If an item in *p* matches
    *key*, return ``1``, otherwise return ``0``.  On error, return ``-1``.
    This is equivalent to the Python expression ``key in p``.
-
-   The first argument can be a :class:`dict` or a :class:`frozendict`.
-
-   .. note::
-
-      The operation is atomic on :term:`free threading <free-threaded build>`
-      when *key* is :class:`str`, :class:`int`, :class:`float`, :class:`bool` or :class:`bytes`.
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
 
 
 .. c:function:: int PyDict_ContainsString(PyObject *p, const char *key)
@@ -91,17 +72,13 @@ Dictionary objects
    :c:expr:`const char*` UTF-8 encoded bytes string, rather than a
    :c:expr:`PyObject*`.
 
-   The first argument can be a :class:`dict` or a :class:`frozendict`.
-
    .. versionadded:: 3.13
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
 
 
 .. c:function:: PyObject* PyDict_Copy(PyObject *p)
 
    Return a new dictionary that contains the same key-value pairs as *p*.
+
 
 .. c:function:: int PyDict_SetItem(PyObject *p, PyObject *key, PyObject *val)
 
@@ -109,11 +86,6 @@ Dictionary objects
    :term:`hashable`; if it isn't, :exc:`TypeError` will be raised. Return
    ``0`` on success or ``-1`` on failure.
    This function *does not* ":term:`steal`" a reference to *val*.
-
-   .. note::
-
-      The operation is atomic on :term:`free threading <free-threaded build>`
-      when *key* is :class:`str`, :class:`int`, :class:`float`, :class:`bool` or :class:`bytes`.
 
 
 .. c:function:: int PyDict_SetItemString(PyObject *p, const char *key, PyObject *val)
@@ -129,11 +101,6 @@ Dictionary objects
    if it isn't, :exc:`TypeError` is raised.
    If *key* is not in the dictionary, :exc:`KeyError` is raised.
    Return ``0`` on success or ``-1`` on failure.
-
-   .. note::
-
-      The operation is atomic on :term:`free threading <free-threaded build>`
-      when *key* is :class:`str`, :class:`int`, :class:`float`, :class:`bool` or :class:`bytes`.
 
 
 .. c:function:: int PyDict_DelItemString(PyObject *p, const char *key)
@@ -153,17 +120,7 @@ Dictionary objects
    * If the key is missing, set *\*result* to ``NULL`` and return ``0``.
    * On error, raise an exception, set *\*result* to ``NULL`` and return ``-1``.
 
-   The first argument can be a :class:`dict` or a :class:`frozendict`.
-
-   .. note::
-
-      The operation is atomic on :term:`free threading <free-threaded build>`
-      when *key* is :class:`str`, :class:`int`, :class:`float`, :class:`bool` or :class:`bytes`.
-
    .. versionadded:: 3.13
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
 
    See also the :c:func:`PyObject_GetItem` function.
 
@@ -174,27 +131,15 @@ Dictionary objects
    has a key *key*.  Return ``NULL`` if the key *key* is missing *without*
    setting an exception.
 
-   The first argument can be a :class:`dict` or a :class:`frozendict`.
-
    .. note::
 
       Exceptions that occur while this calls :meth:`~object.__hash__` and
       :meth:`~object.__eq__` methods are silently ignored.
       Prefer the :c:func:`PyDict_GetItemWithError` function instead.
 
-   .. note::
-
-      In the :term:`free-threaded build`, the returned
-      :term:`borrowed reference` may become invalid if another thread modifies
-      the dictionary concurrently. Prefer :c:func:`PyDict_GetItemRef`, which
-      returns a :term:`strong reference`.
-
    .. versionchanged:: 3.10
-      Calling this API without an :term:`attached thread state` had been allowed for historical
+      Calling this API without :term:`GIL` held had been allowed for historical
       reason. It is no longer allowed.
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
 
 
 .. c:function:: PyObject* PyDict_GetItemWithError(PyObject *p, PyObject *key)
@@ -203,16 +148,6 @@ Dictionary objects
    exceptions. Return ``NULL`` **with** an exception set if an exception
    occurred.  Return ``NULL`` **without** an exception set if the key
    wasn't present.
-
-   .. note::
-
-      In the :term:`free-threaded build`, the returned
-      :term:`borrowed reference` may become invalid if another thread modifies
-      the dictionary concurrently. Prefer :c:func:`PyDict_GetItemRef`, which
-      returns a :term:`strong reference`.
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
 
 
 .. c:function:: PyObject* PyDict_GetItemString(PyObject *p, const char *key)
@@ -229,16 +164,6 @@ Dictionary objects
       Prefer using the :c:func:`PyDict_GetItemWithError` function with your own
       :c:func:`PyUnicode_FromString` *key* instead.
 
-   .. note::
-
-      In the :term:`free-threaded build`, the returned
-      :term:`borrowed reference` may become invalid if another thread modifies
-      the dictionary concurrently. Prefer :c:func:`PyDict_GetItemStringRef`,
-      which returns a :term:`strong reference`.
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
-
 
 .. c:function:: int PyDict_GetItemStringRef(PyObject *p, const char *key, PyObject **result)
 
@@ -247,9 +172,6 @@ Dictionary objects
    :c:expr:`PyObject*`.
 
    .. versionadded:: 3.13
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
 
 
 .. c:function:: PyObject* PyDict_SetDefault(PyObject *p, PyObject *key, PyObject *defaultobj)
@@ -261,14 +183,6 @@ Dictionary objects
    instead of evaluating it independently for the lookup and the insertion.
 
    .. versionadded:: 3.4
-
-   .. note::
-
-      In the :term:`free-threaded build`, the returned
-      :term:`borrowed reference` may become invalid if another thread modifies
-      the dictionary concurrently. Prefer :c:func:`PyDict_SetDefaultRef`,
-      which returns a :term:`strong reference`.
-
 
 
 .. c:function:: int PyDict_SetDefaultRef(PyObject *p, PyObject *key, PyObject *default_value, PyObject **result)
@@ -289,11 +203,6 @@ Dictionary objects
    These may refer to the same object: in that case you hold two separate
    references to it.
 
-   .. note::
-
-      The operation is atomic on :term:`free threading <free-threaded build>`
-      when *key* is :class:`str`, :class:`int`, :class:`float`, :class:`bool` or :class:`bytes`.
-
    .. versionadded:: 3.13
 
 
@@ -311,11 +220,6 @@ Dictionary objects
    Similar to :meth:`dict.pop`, but without the default value and
    not raising :exc:`KeyError` if the key is missing.
 
-   .. note::
-
-      The operation is atomic on :term:`free threading <free-threaded build>`
-      when *key* is :class:`str`, :class:`int`, :class:`float`, :class:`bool` or :class:`bytes`.
-
    .. versionadded:: 3.13
 
 
@@ -332,31 +236,16 @@ Dictionary objects
 
    Return a :c:type:`PyListObject` containing all the items from the dictionary.
 
-   The first argument can be a :class:`dict` or a :class:`frozendict`.
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
-
 
 .. c:function:: PyObject* PyDict_Keys(PyObject *p)
 
    Return a :c:type:`PyListObject` containing all the keys from the dictionary.
-
-   The first argument can be a :class:`dict` or a :class:`frozendict`.
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
 
 
 .. c:function:: PyObject* PyDict_Values(PyObject *p)
 
    Return a :c:type:`PyListObject` containing all the values from the dictionary
    *p*.
-
-   The first argument can be a :class:`dict` or a :class:`frozendict`.
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
 
 
 .. c:function:: Py_ssize_t PyDict_Size(PyObject *p)
@@ -366,18 +255,10 @@ Dictionary objects
    Return the number of items in the dictionary.  This is equivalent to
    ``len(p)`` on a dictionary.
 
-   The argument can be a :class:`dict` or a :class:`frozendict`.
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
-
 
 .. c:function:: Py_ssize_t PyDict_GET_SIZE(PyObject *p)
 
    Similar to :c:func:`PyDict_Size`, but without error checking.
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
 
 
 .. c:function:: int PyDict_Next(PyObject *p, Py_ssize_t *ppos, PyObject **pkey, PyObject **pvalue)
@@ -392,8 +273,6 @@ Dictionary objects
    them are borrowed.  *ppos* should not be altered during iteration. Its
    value represents offsets within the internal dictionary structure, and
    since the structure is sparse, the offsets are not consecutive.
-
-   The first argument can be a :class:`dict` or a :class:`frozendict`.
 
    For example::
 
@@ -428,7 +307,7 @@ Dictionary objects
       }
 
    The function is not thread-safe in the :term:`free-threaded <free threading>`
-   build without external synchronization for a mutable :class:`dict`. You can use
+   build without external synchronization.  You can use
    :c:macro:`Py_BEGIN_CRITICAL_SECTION` to lock the dictionary while iterating
    over it::
 
@@ -438,20 +317,6 @@ Dictionary objects
       }
       Py_END_CRITICAL_SECTION();
 
-   The function is thread-safe on a :class:`frozendict`.
-
-   .. note::
-
-      On the free-threaded build, this function can be used safely inside a
-      critical section. However, the references returned for *pkey* and *pvalue*
-      are :term:`borrowed <borrowed reference>` and are only valid while the
-      critical section is held. If you need to use these objects outside the
-      critical section or when the critical section can be suspended, create a
-      :term:`strong reference <strong reference>` (for example, using
-      :c:func:`Py_NewRef`).
-
-   .. versionchanged:: 3.15
-      Also accept :class:`frozendict`.
 
 .. c:function:: int PyDict_Merge(PyObject *a, PyObject *b, int override)
 
@@ -462,31 +327,14 @@ Dictionary objects
    only be added if there is not a matching key in *a*. Return ``0`` on
    success or ``-1`` if an exception was raised.
 
-   .. note::
-
-      In the :term:`free-threaded build`, when *b* is a
-      :class:`dict` (with the standard iterator), both *a* and *b* are locked
-      for the duration of the operation. When *b* is a non-dict mapping, only
-      *a* is locked; *b* may be concurrently modified by another thread.
-
 
 .. c:function:: int PyDict_Update(PyObject *a, PyObject *b)
 
-   This is the same as ``PyDict_Merge(a, b, 1)`` in C.
-
-   Similar to ``a.update(b)`` in Python, except that this function
-   does not fall back to the iterating over a sequence of key-value pairs
-   if *b* is not a mapping.
-   Use :c:func:`PyDict_MergeFromSeq2` for this case.
-
-   Return ``0`` on success or ``-1`` if an exception was raised.
-
-   .. note::
-
-      In the :term:`free-threaded build`, when *b* is a
-      :class:`dict` (with the standard iterator), both *a* and *b* are locked
-      for the duration of the operation. When *b* is a non-dict mapping, only
-      *a* is locked; *b* may be concurrently modified by another thread.
+   This is the same as ``PyDict_Merge(a, b, 1)`` in C, and is similar to
+   ``a.update(b)`` in Python except that :c:func:`PyDict_Update` doesn't fall
+   back to the iterating over a sequence of key value pairs if the second
+   argument has no "keys" attribute.  Return ``0`` on success or ``-1`` if an
+   exception was raised.
 
 
 .. c:function:: int PyDict_MergeFromSeq2(PyObject *a, PyObject *seq2, int override)
@@ -503,51 +351,12 @@ Dictionary objects
               if override or key not in a:
                   a[key] = value
 
-   .. note::
-
-      In the :term:`free-threaded <free threading>` build, only *a* is locked.
-      The iteration over *seq2* is not synchronized; *seq2* may be concurrently
-      modified by another thread.
-
-
-.. c:function:: PyObject* PyDict_AsFrozenDictAndClear(PyObject *dict)
-
-   Return a new :class:`frozendict` created
-   from the existing :class:`dict` instance.
-
-   Transfers all keys and values from *dict*
-   to the newly allocated :class:`!frozendict`.
-   Clears the input *dict* on success.
-   Returns ``NULL`` with the exception set on error.
-
-   This function is intended for building a :class:`!frozendict` instance via
-   a temporary *dict* that is not exposed to user code.
-   To "freeze" an arbitrary dictionary, for example one received from the user
-   as an argument, prefer :c:func:`PyFrozenDict_New` to leave the source
-   intact.
-
-   Does not work for dicts with embedded values.
-
-   .. impl-detail::
-
-      Works with O(1) complexity.
-
-   .. versionadded:: 3.16
-
-
 .. c:function:: int PyDict_AddWatcher(PyDict_WatchCallback callback)
 
    Register *callback* as a dictionary watcher. Return a non-negative integer
    id which must be passed to future calls to :c:func:`PyDict_Watch`. In case
    of error (e.g. no more watcher IDs available), return ``-1`` and set an
    exception.
-
-   .. note::
-
-      This function is not internally synchronized. In the
-      :term:`free-threaded <free threading>` build, callers should ensure no
-      concurrent calls to :c:func:`PyDict_AddWatcher` or
-      :c:func:`PyDict_ClearWatcher` are in progress.
 
    .. versionadded:: 3.12
 
@@ -556,13 +365,6 @@ Dictionary objects
    Clear watcher identified by *watcher_id* previously returned from
    :c:func:`PyDict_AddWatcher`. Return ``0`` on success, ``-1`` on error (e.g.
    if the given *watcher_id* was never registered.)
-
-   .. note::
-
-      This function is not internally synchronized. In the
-      :term:`free-threaded <free threading>` build, callers should ensure no
-      concurrent calls to :c:func:`PyDict_AddWatcher` or
-      :c:func:`PyDict_ClearWatcher` are in progress.
 
    .. versionadded:: 3.12
 
@@ -590,15 +392,6 @@ Dictionary objects
    ``PyDict_EVENT_CLEARED``, or ``PyDict_EVENT_DEALLOCATED``.
 
    .. versionadded:: 3.12
-
-.. c:macro:: PY_FOREACH_DICT_EVENT(V)
-
-   Apply the macro *V* to each suffix of :c:type:`PyDict_WatchEvent`
-   constants.
-   Currently expands to ``V(ADDED) V(MODIFIED) V(DELETED) V(CLONED)
-   V(CLEARED) V(DEALLOCATED)``.
-   The macro *V* must accept one event name and supply any punctuation
-   needed between expansions.
 
 .. c:type:: int (*PyDict_WatchCallback)(PyDict_WatchEvent event, PyObject *dict, PyObject *key, PyObject *new_value)
 
@@ -642,7 +435,7 @@ Dictionary objects
    .. versionadded:: 3.12
 
 
-Dictionary view objects
+Dictionary View Objects
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 .. c:function:: int PyDictViewSet_Check(PyObject *op)
@@ -688,58 +481,7 @@ Dictionary view objects
    always succeeds.
 
 
-Frozen dictionary objects
-^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. versionadded:: 3.15
-
-
-.. c:var:: PyTypeObject PyFrozenDict_Type
-
-   This instance of :c:type:`PyTypeObject` represents the Python frozen
-   dictionary type.
-   This is the same object as :class:`frozendict` in the Python layer.
-
-
-.. c:function:: int PyAnyDict_Check(PyObject *p)
-
-   Return true if *p* is a :class:`dict` object, a :class:`frozendict` object,
-   or an instance of a subtype of the :class:`!dict` or :class:`!frozendict`
-   type.
-   This function always succeeds.
-
-
-.. c:function:: int PyAnyDict_CheckExact(PyObject *p)
-
-   Return true if *p* is a :class:`dict` object or a :class:`frozendict` object,
-   but not an instance of a subtype of the :class:`!dict` or
-   :class:`!frozendict` type.
-   This function always succeeds.
-
-
-.. c:function:: int PyFrozenDict_Check(PyObject *p)
-
-   Return true if *p* is a :class:`frozendict` object or an instance of a
-   subtype of the :class:`!frozendict` type.
-   This function always succeeds.
-
-
-.. c:function:: int PyFrozenDict_CheckExact(PyObject *p)
-
-   Return true if *p* is a :class:`frozendict` object, but not an instance of a
-   subtype of the :class:`!frozendict` type.
-   This function always succeeds.
-
-
-.. c:function:: PyObject* PyFrozenDict_New(PyObject *iterable)
-
-   Return a new :class:`frozendict` from an iterable, or ``NULL`` on failure
-   with an exception set.
-
-   Create an empty dictionary if *iterable* is ``NULL``.
-
-
-Ordered dictionaries
+Ordered Dictionaries
 ^^^^^^^^^^^^^^^^^^^^
 
 Python's C API provides interface for :class:`collections.OrderedDict` from C.

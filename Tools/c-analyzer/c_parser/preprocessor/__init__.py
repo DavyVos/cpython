@@ -16,7 +16,6 @@ from . import errors as _errors
 from . import (
     pure as _pure,
     gcc as _gcc,
-    clang as _clang,
 )
 
 
@@ -235,7 +234,7 @@ _COMPILERS = {
     'bcpp': None,
     # aliases/extras:
     'gcc': _gcc.preprocess,
-    'clang': _clang.preprocess,
+    'clang': None,
 }
 
 

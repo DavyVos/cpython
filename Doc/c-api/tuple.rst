@@ -37,19 +37,6 @@ Tuple Objects
    or ``NULL`` with an exception set on failure.
 
 
-.. c:function:: PyObject* PyTuple_FromArray(PyObject *const *array, Py_ssize_t size)
-
-   Create a tuple of *size* items and copy references from *array* to the new
-   tuple.
-
-   *array* can be NULL if *size* is ``0``.
-
-   On success, return a new reference.
-   On error, set an exception and return ``NULL``.
-
-   .. versionadded:: 3.15
-
-
 .. c:function:: PyObject* PyTuple_Pack(Py_ssize_t n, ...)
 
    Return a new tuple object of size *n*,
@@ -99,8 +86,7 @@ Tuple Objects
 
    Insert a reference to object *o* at position *pos* of the tuple pointed to by
    *p*.  Return ``0`` on success.  If *pos* is out of bounds, return ``-1``
-   and set an :exc:`IndexError` exception. This function should only be used to fill in brand new tuples;
-   using it on an existing tuple is thread-unsafe.
+   and set an :exc:`IndexError` exception.
 
    .. note::
 
@@ -112,7 +98,7 @@ Tuple Objects
 .. c:function:: void PyTuple_SET_ITEM(PyObject *p, Py_ssize_t pos, PyObject *o)
 
    Like :c:func:`PyTuple_SetItem`, but does no error checking, and should *only* be
-   used to fill in brand new tuples, using it on an existing tuple is thread-unsafe.
+   used to fill in brand new tuples.
 
    Bounds checking is performed as an assertion if Python is built in
    :ref:`debug mode <debug-build>` or :option:`with assertions <--with-assertions>`.
@@ -124,45 +110,19 @@ Tuple Objects
       is being replaced; any reference in the tuple at position *pos* will be
       leaked.
 
-   .. warning::
-
-      This macro should *only* be used on tuples that are newly created.
-      Using this macro on a tuple that is already in use (or in other words, has
-      a refcount > 1) could lead to undefined behavior.
-
 
 .. c:function:: int _PyTuple_Resize(PyObject **p, Py_ssize_t newsize)
 
-   Resize a tuple.
-   *newsize* will be the new length of the tuple.
-
-   Because tuples are *supposed* to be immutable, this should only be used if
-   there is only one reference to the object.
-   Do *not* use this if the tuple may already be known to some other part of
-   the code.
-   The tuple hash value must not be computed yet.
-
-   The tuple will always grow or shrink at the end.
-   Think of this as destroying the old tuple and creating a new one, only more
-   efficiently.
-
-   Returns ``0`` on success.
-   Client code should never assume that the resulting value of ``*p`` will be
-   the same as before calling this function.
-   If the object referenced by ``*p`` is replaced, the original ``*p`` is
-   destroyed.
-
-   On failure, returns ``-1`` and sets ``*p`` to ``NULL``, and raises
-   :exc:`MemoryError` or :exc:`SystemError`.
-
-   While tuple objects are usually immutable in Python, this special C API
-   allows mutating a tuple object in-place.
-   The returned tuple object can still be mutated using
-   :c:func:`PyTuple_SetItem`; except if *newsize* is zero in which case it
-   returns the immutable empty tuple.
-
-   .. versionchanged:: 3.16
-      The function now fails if the tuple hash value was already computed.
+   Can be used to resize a tuple.  *newsize* will be the new length of the tuple.
+   Because tuples are *supposed* to be immutable, this should only be used if there
+   is only one reference to the object.  Do *not* use this if the tuple may already
+   be known to some other part of the code.  The tuple will always grow or shrink
+   at the end.  Think of this as destroying the old tuple and creating a new one,
+   only more efficiently.  Returns ``0`` on success. Client code should never
+   assume that the resulting value of ``*p`` will be the same as before calling
+   this function. If the object referenced by ``*p`` is replaced, the original
+   ``*p`` is destroyed.  On failure, returns ``-1`` and sets ``*p`` to ``NULL``, and
+   raises :exc:`MemoryError` or :exc:`SystemError`.
 
 
 .. _struct-sequence-objects:
@@ -170,11 +130,8 @@ Tuple Objects
 Struct Sequence Objects
 -----------------------
 
-A struct sequence object is a :term:`named tuple`, that is, a sequence
-whose items can also be accessed through attributes.
-It is similar to :func:`collections.namedtuple`, but provides a slightly
-different interface.
-
+Struct sequence objects are the C equivalent of :func:`~collections.namedtuple`
+objects, i.e. a sequence whose items can also be accessed through attributes.
 To create a struct sequence, you first have to create a specific struct sequence
 type.
 
@@ -258,8 +215,6 @@ type.
 .. c:function:: PyObject* PyStructSequence_GetItem(PyObject *p, Py_ssize_t pos)
 
    Return the object at position *pos* in the struct sequence pointed to by *p*.
-   The returned reference is borrowed from the struct sequence *p*
-   (that is: it is only valid as long as you hold a reference to *p*).
 
    Bounds checking is performed as an assertion if Python is built in
    :ref:`debug mode <debug-build>` or :option:`with assertions <--with-assertions>`.

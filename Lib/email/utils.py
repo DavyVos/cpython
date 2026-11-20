@@ -1,4 +1,4 @@
-# Copyright (C) 2001 Python Software Foundation
+# Copyright (C) 2001-2010 Python Software Foundation
 # Author: Barry Warsaw
 # Contact: email-sig@python.org
 
@@ -69,7 +69,7 @@ def _sanitize(string):
 
 # Helpers
 
-def formataddr(pair, charset='utf-8', *, strict=True):
+def formataddr(pair, charset='utf-8'):
     """The inverse of parseaddr(), this takes a 2-tuple of the form
     (realname, email_address) and returns the string value suitable
     for an RFC 2822 From, To or Cc header.
@@ -81,15 +81,8 @@ def formataddr(pair, charset='utf-8', *, strict=True):
     realname in case realname is not ASCII safe.  Can be an instance of str or
     a Charset-like object which has a header_encode method.  Default is
     'utf-8'.
-
-    If strict is True (the default), raise ValueError for inputs that
-    contain CR or LF, which are not allowed in an email address.
     """
     name, address = pair
-    if strict and ('\r' in address or '\n' in address
-                   or (name and ('\r' in name or '\n' in name))):
-        raise ValueError(
-            "invalid arguments; address parts cannot contain CR or LF")
     # The address MUST (per RFC) be ascii, so raise a UnicodeError if it isn't.
     address.encode('ascii')
     if name:
@@ -470,10 +463,6 @@ def collapse_rfc2231_value(value, errors='replace',
         charset = fallback_charset
     rawbytes = bytes(text, 'raw-unicode-escape')
     try:
-        # Explicitly look up the codec for warning generation, see gh-140030
-        # Can be removed in 3.17
-        import codecs
-        codecs.lookup(charset)
         return str(rawbytes, charset, errors)
     except LookupError:
         # charset is not a known codec.
@@ -486,15 +475,23 @@ def collapse_rfc2231_value(value, errors='replace',
 # better than not having it.
 #
 
-def localtime(dt=None):
+def localtime(dt=None, isdst=None):
     """Return local time as an aware datetime object.
 
     If called without arguments, return current time.  Otherwise *dt*
     argument should be a datetime instance, and it is converted to the
     local time zone according to the system time zone database.  If *dt* is
     naive (that is, dt.tzinfo is None), it is assumed to be in local time.
+    The isdst parameter is ignored.
 
     """
+    if isdst is not None:
+        import warnings
+        warnings._deprecated(
+            "The 'isdst' parameter to 'localtime'",
+            message='{name} is deprecated and slated for removal in Python {remove}',
+            remove=(3, 14),
+            )
     if dt is None:
         dt = datetime.datetime.now()
     return dt.astimezone()

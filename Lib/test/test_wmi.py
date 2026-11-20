@@ -1,6 +1,7 @@
 # Test the internal _wmi module on Windows
 # This is used by the platform module, and potentially others
 
+import time
 import unittest
 from test import support
 from test.support import import_helper
@@ -70,8 +71,8 @@ class WmiTests(unittest.TestCase):
     def test_wmi_query_multiple_rows(self):
         # Multiple instances should have an extra null separator
         r = wmi_exec_query("SELECT ProcessId FROM Win32_Process WHERE ProcessId < 1000")
-        self.assertNotStartsWith(r, "\0")
-        self.assertNotEndsWith(r, "\0")
+        self.assertFalse(r.startswith("\0"), r)
+        self.assertFalse(r.endswith("\0"), r)
         it = iter(r.split("\0"))
         try:
             while True:

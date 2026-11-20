@@ -411,7 +411,7 @@ def _get_user_info(user):
     if user is None:
         uid = os.geteuid()
         #username = os.getlogin()
-        username = pwd.getpwuid(uid).pw_name
+        username = pwd.getpwuid(uid)[0]
         gid = os.getgid()
         groups = os.getgroups()
     else:

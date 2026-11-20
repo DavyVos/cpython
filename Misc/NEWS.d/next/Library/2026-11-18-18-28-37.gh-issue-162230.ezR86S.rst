@@ -1,3 +1,0 @@
-Speed up :meth:`!io.BufferedRWPair.readline`. If a non-blocking read would
-block, return the bytes read so far (possibly ``b''``). Previously, it raised
-:exc:`OSError`.

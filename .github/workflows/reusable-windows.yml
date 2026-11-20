@@ -3,6 +3,10 @@ name: Reusable Windows
 on:
   workflow_call:
     inputs:
+      os:
+        description: OS to run on
+        required: true
+        type: string
       arch:
         description: CPU architecture
         required: true
@@ -12,21 +16,19 @@ on:
         required: false
         type: boolean
         default: false
-      interpreter:
-        description: Which interpreter to build (switch-case or tail-call)
-        required: true
-        type: string
 
 permissions:
   contents: read
 
 env:
   FORCE_COLOR: 1
+  IncludeUwp: >-
+    true
 
 jobs:
   build:
-    name: Build and test (${{ inputs.arch }}, ${{ inputs.interpreter }})
-    runs-on: ${{ inputs.arch == 'arm64' && 'windows-11-arm' || 'windows-2025' }}
+    name: ${{ inputs.arch == 'arm64' && 'build' || 'build and test' }} (${{ inputs.arch }})
+    runs-on: ${{ inputs.os }}
     timeout-minutes: 60
     env:
       ARCH: ${{ inputs.arch }}
@@ -38,22 +40,20 @@ jobs:
       if: inputs.arch != 'Win32'
       run: echo "::add-matcher::.github/problem-matchers/msvc.json"
     - name: Build CPython
-      # msvc::musttail is not supported for debug builds, so we have to
-      # switch to release.
       run: >-
         .\\PCbuild\\build.bat
-        -e -v
-        ${{ inputs.interpreter == 'switch-case' && '-d' || '--tail-call-interp -c Release' }}
+        -e -d -v
         -p "${ARCH}"
         ${{ inputs.free-threading && '--disable-gil' || '' }}
       shell: bash
-    - name: Display build info
+    - name: Display build info  # FIXME(diegorusso): remove the `if`
+      if: inputs.arch != 'arm64'
       run: .\\python.bat -m test.pythoninfo
-    - name: Tests
+    - name: Tests  # FIXME(diegorusso): remove the `if`
+      if: inputs.arch != 'arm64'
       run: >-
         .\\PCbuild\\rt.bat
         -p "${ARCH}"
-        -q --fast-ci
-        ${{ inputs.interpreter == 'switch-case' && '-d' || '' }}
+        -d -q --fast-ci
         ${{ inputs.free-threading && '--disable-gil' || '' }}
       shell: bash

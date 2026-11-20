@@ -16,9 +16,6 @@ ROOT_DIR = os.path.abspath(ROOT_DIR)
 FROZEN_ONLY = os.path.join(ROOT_DIR, 'Tools', 'freeze', 'flag.py')
 
 STDLIB_DIR = os.path.join(ROOT_DIR, 'Lib')
-# Frozen under the "builtins" ID rather than its own name, so that the frames
-# of the builtins it defines show up as "<frozen builtins>" in tracebacks.
-PYBUILTINS = os.path.join(STDLIB_DIR, '_pybuiltins.py')
 # If FROZEN_MODULES_DIR or DEEPFROZEN_MODULES_DIR is changed then the
 # .gitattributes and .gitignore files needs to be updated.
 FROZEN_MODULES_DIR = os.path.join(ROOT_DIR, 'Python', 'frozen_modules')
@@ -48,20 +45,15 @@ FROZEN = [
         # This module is important because some Python builds rely
         # on a builtin zip file instead of a filesystem.
         'zipimport',
-        # Builtins implemented in Python; loaded while builtins is set up.
-        f'builtins : _pybuiltins = {PYBUILTINS}',
         ]),
     # (You can delete entries from here down to the end of the list.)
     ('stdlib - startup, without site (python -S)', [
         'abc',
         'codecs',
-        # gh-148750: Partially freezing encodings causes import errors of
-        # submodules when using a zipped standard library.
-        #'<encodings>',
-        #'encodings.aliases',
-        #'encodings.utf_8',
-        #'encodings._win_cp_codecs',
-        #'encodings._iconv_codecs',
+        # For now we do not freeze the encodings, due # to the noise all
+        # those extra modules add to the text printed during the build.
+        # (See https://github.com/python/cpython/pull/28398#pullrequestreview-756856469.)
+        #'<encodings.*>',
         'io',
         ]),
     ('stdlib - startup, with site', [
@@ -70,13 +62,13 @@ FROZEN = [
         'genericpath',
         'ntpath',
         'posixpath',
+        # We must explicitly mark os.path as a frozen module
+        # even though it will never be imported.
+        f'{OS_PATH} : os.path',
         'os',
         'site',
         'stat',
         ]),
-    ('pythonrun - interactive', [
-        'linecache',
-    ]),
     ('runpy - run module with -m', [
         "importlib.util",
         "importlib.machinery",
@@ -96,7 +88,6 @@ BOOTSTRAP = {
     'importlib._bootstrap',
     'importlib._bootstrap_external',
     'zipimport',
-    'builtins',
 }
 
 

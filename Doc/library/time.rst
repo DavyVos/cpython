@@ -190,7 +190,7 @@ Functions
    .. versionadded:: 3.7
 
 
-.. function:: clock_settime(clk_id, time, /)
+.. function:: clock_settime(clk_id, time: float, /)
 
    Set the time of the specified clock *clk_id*.  Currently,
    :data:`CLOCK_REALTIME` is the only accepted value for *clk_id*.
@@ -201,9 +201,6 @@ Functions
    .. availability:: Unix, not Android, not iOS.
 
    .. versionadded:: 3.3
-
-   .. versionchanged:: 3.15
-      Accepts any real number as *time*, not only integer or float.
 
 
 .. function:: clock_settime_ns(clk_id, time: int, /)
@@ -226,9 +223,6 @@ Functions
    returned by :func:`.time` is used. ``ctime(seconds)`` is equivalent to
    ``asctime(localtime(seconds))``. Locale information is not used by
    :func:`ctime`.
-
-   .. versionchanged:: 3.15
-      Accepts any real number, not only integer or float.
 
 
 .. function:: get_clock_info(name, /)
@@ -265,9 +259,6 @@ Functions
    :class:`struct_time` object. See :func:`calendar.timegm` for the inverse of this
    function.
 
-   .. versionchanged:: 3.15
-      Accepts any real number, not only integer or float.
-
 
 .. function:: localtime(seconds=None, /)
 
@@ -281,9 +272,6 @@ Functions
    or :c:func:`gmtime` functions, and :exc:`OSError` on :c:func:`localtime` or
    :c:func:`gmtime` failure. It's common for this to be restricted to years
    between 1970 and 2038.
-
-   .. versionchanged:: 3.15
-      Accepts any real number, not only integer or float.
 
 
 .. function:: mktime(time_tuple, /)
@@ -396,7 +384,8 @@ Functions
 .. function:: sleep(seconds, /)
 
    Suspend execution of the calling thread for the given number of seconds.
-   The argument may be a non-integer to indicate a more precise sleep time.
+   The argument may be a floating-point number to indicate a more precise sleep
+   time.
 
    If the sleep is interrupted by a signal and no exception is raised by the
    signal handler, the sleep is restarted with a recomputed timeout.
@@ -445,9 +434,6 @@ Functions
    .. versionchanged:: 3.13
       Raises an auditing event.
 
-   .. versionchanged:: 3.15
-      Accepts any real number, not only integer or float.
-
 .. index::
    single: % (percent); datetime format
 
@@ -486,7 +472,7 @@ Functions
    |           |                                                |       |
    +-----------+------------------------------------------------+-------+
    | ``%f``    | Microseconds as a decimal number               | \(1)  |
-   |           | [000000,999999].                               |       |
+   |           |    [000000,999999].                            |       |
    |           |                                                |       |
    +-----------+------------------------------------------------+-------+
    | ``%H``    | Hour (24-hour clock) as a decimal number       |       |
@@ -678,7 +664,7 @@ Functions
 
       * - 5
         - .. attribute:: tm_sec
-        - range [0, 61]; see :ref:`Note (3) <leap-second>` in :func:`strftime`
+        - range [0, 61]; see :ref:`Note (2) <leap-second>` in :func:`strftime`
 
       * - 6
         - .. attribute:: tm_wday

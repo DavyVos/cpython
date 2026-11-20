@@ -33,12 +33,16 @@
 # [meta-key] is identified with [esc key].  We demand that any console
 # class does quite a lot towards emulating a unix terminal.
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 import unicodedata
 from collections import deque
 
+
 # types
-lazy from .types import EventTuple
+if False:
+    from .types import EventTuple
 
 
 class InputTranslator(ABC):

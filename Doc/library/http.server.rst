@@ -19,7 +19,7 @@ This module defines classes for implementing HTTP servers.
 
 .. warning::
 
-    :mod:`!http.server` is not recommended for production. It only implements
+    :mod:`http.server` is not recommended for production. It only implements
     :ref:`basic security checks <http.server-security>`.
 
 .. include:: ../includes/wasm-notavail.rst
@@ -61,49 +61,9 @@ handler.  Code to create and run the server looks like this::
    .. versionadded:: 3.7
 
 
-.. class:: HTTPSServer(server_address, RequestHandlerClass,\
-                       bind_and_activate=True, *, certfile, keyfile=None,\
-                       password=None, alpn_protocols=None)
-
-   Subclass of :class:`HTTPServer` with a wrapped socket using the :mod:`ssl` module.
-   If the :mod:`ssl` module is not available, instantiating a :class:`!HTTPSServer`
-   object fails with a :exc:`RuntimeError`.
-
-   The *certfile* argument is the path to the SSL certificate chain file,
-   and the *keyfile* is the path to the file containing the private key.
-
-   A *password* can be specified for files protected and wrapped with PKCS#8,
-   but beware that this could possibly expose hardcoded passwords in clear.
-
-   .. seealso::
-
-      See :meth:`ssl.SSLContext.load_cert_chain` for additional
-      information on the accepted values for *certfile*, *keyfile*
-      and *password*.
-
-   When specified, the *alpn_protocols* argument must be a sequence of strings
-   specifying the "Application-Layer Protocol Negotiation" (ALPN) protocols
-   supported by the server. ALPN allows the server and the client to negotiate
-   the application protocol during the TLS handshake.
-
-   By default, it is set to ``["http/1.1"]``, meaning the server supports HTTP/1.1.
-
-   .. versionadded:: 3.14
-
-.. class:: ThreadingHTTPSServer(server_address, RequestHandlerClass,\
-                                bind_and_activate=True, *, certfile, keyfile=None,\
-                                password=None, alpn_protocols=None)
-
-   This class is identical to :class:`HTTPSServer` but uses threads to handle
-   requests by inheriting from :class:`~socketserver.ThreadingMixIn`. This is
-   analogous to :class:`ThreadingHTTPServer` only using :class:`HTTPSServer`.
-
-   .. versionadded:: 3.14
-
-
-The :class:`HTTPServer`, :class:`ThreadingHTTPServer`, :class:`HTTPSServer` and
-:class:`ThreadingHTTPSServer` must be given a *RequestHandlerClass* on
-instantiation, of which this module provides three different variants:
+The :class:`HTTPServer` and :class:`ThreadingHTTPServer` must be given
+a *RequestHandlerClass* on instantiation, of which this module
+provides three different variants:
 
 .. class:: BaseHTTPRequestHandler(request, client_address, server)
 
@@ -376,8 +336,7 @@ instantiation, of which this module provides three different variants:
          delays, it now always returns the IP address.
 
 
-.. class:: SimpleHTTPRequestHandler(request, client_address, server, \
-                                    *, directory=None, extra_response_headers=None)
+.. class:: SimpleHTTPRequestHandler(request, client_address, server, directory=None)
 
    This class serves files from the directory *directory* and below,
    or the current directory if *directory* is not provided, directly
@@ -388,9 +347,6 @@ instantiation, of which this module provides three different variants:
 
    .. versionchanged:: 3.9
       The *directory* parameter accepts a :term:`path-like object`.
-
-   .. versionchanged:: 3.15
-      Added *extra_response_headers* parameter.
 
    A lot of the work, such as parsing the request, is done by the base class
    :class:`BaseHTTPRequestHandler`.  This class implements the :func:`do_GET`
@@ -403,14 +359,6 @@ instantiation, of which this module provides three different variants:
 
       This will be ``"SimpleHTTP/" + __version__``, where ``__version__`` is
       defined at the module level.
-
-   .. attribute:: default_content_type
-
-      Specifies the Content-Type header value sent when the MIME type
-      cannot be guessed from the file extension of the requested URL.
-      By default, it is set to ``'application/octet-stream'``.
-
-      .. versionadded:: 3.15
 
    .. attribute:: index_pages
 
@@ -429,15 +377,6 @@ instantiation, of which this module provides three different variants:
       .. versionchanged:: 3.9
          This dictionary is no longer filled with the default system mappings,
          but only contains overrides.
-
-   .. attribute:: extra_response_headers
-
-      A sequence of ``(name, value)`` pairs containing user-defined extra HTTP
-      response headers to add to each successful HTTP status 200 response. These
-      headers are not included in other status code responses.
-
-      Headers that the server sends automatically such as ``Content-Type``
-      will not be overwritten by :attr:`!extra_response_headers`.
 
    The :class:`SimpleHTTPRequestHandler` class defines the following methods:
 
@@ -471,9 +410,6 @@ instantiation, of which this module provides three different variants:
       followed by a ``'Content-Length:'`` header with the file's size and a
       ``'Last-Modified:'`` header with the file's modification time.
 
-      The instance attribute :attr:`extra_response_headers` is a sequence of
-      ``(name, value)`` pairs containing user-defined extra response headers.
-
       Then follows a blank line signifying the end of the headers, and then the
       contents of the file are output.
 
@@ -501,7 +437,7 @@ instantiation, of which this module provides three different variants:
       The default implementation looks the file's extension up in
       :attr:`extensions_map`, falling back to
       :func:`mimetypes.guess_file_type` and then to
-      :attr:`default_content_type`.
+      ``'application/octet-stream'``.
 
       .. versionchanged:: 3.13
          Add :func:`mimetypes.guess_file_type` as a fallback.
@@ -527,12 +463,63 @@ such as using different index file names by overriding the class attribute
 :attr:`~SimpleHTTPRequestHandler.index_pages`.
 
 
+.. class:: CGIHTTPRequestHandler(request, client_address, server)
+
+   This class is used to serve either files or output of CGI scripts from the
+   current directory and below. Note that mapping HTTP hierarchic structure to
+   local directory structure is exactly as in :class:`SimpleHTTPRequestHandler`.
+
+   .. note::
+
+      CGI scripts run by the :class:`CGIHTTPRequestHandler` class cannot execute
+      redirects (HTTP code 302), because code 200 (script output follows) is
+      sent prior to execution of the CGI script.  This pre-empts the status
+      code.
+
+   The class will however, run the CGI script, instead of serving it as a file,
+   if it guesses it to be a CGI script.  Only directory-based CGI are used ---
+   the other common server configuration is to treat special extensions as
+   denoting CGI scripts.
+
+   The :func:`~SimpleHTTPRequestHandler.do_GET` and
+   :func:`~SimpleHTTPRequestHandler.do_HEAD` functions
+   are modified to run CGI scripts
+   and serve the output, instead of serving files, if the request leads to
+   somewhere below the ``cgi_directories`` path.
+
+   The :class:`CGIHTTPRequestHandler` defines the following data member:
+
+   .. attribute:: cgi_directories
+
+      This defaults to ``['/cgi-bin', '/htbin']`` and describes directories to
+      treat as containing CGI scripts.
+
+   The :class:`CGIHTTPRequestHandler` defines the following method:
+
+   .. method:: do_POST()
+
+      This method serves the ``'POST'`` request type, only allowed for CGI
+      scripts.  Error 501, "Can only POST to CGI scripts", is output when trying
+      to POST to a non-CGI url.
+
+   Note that CGI scripts will be run with UID of user nobody, for security
+   reasons.  Problems with the CGI script will be translated to error 403.
+
+   .. deprecated-removed:: 3.13 3.15
+
+      :class:`CGIHTTPRequestHandler` is being removed in 3.15.  CGI has not
+      been considered a good way to do things for well over a decade. This code
+      has been unmaintained for a while now and sees very little practical use.
+      Retaining it could lead to further :ref:`security considerations
+      <http.server-security>`.
+
+
 .. _http-server-cli:
 
 Command-line interface
 ----------------------
 
-:mod:`!http.server` can also be invoked directly using the :option:`-m`
+:mod:`http.server` can also be invoked directly using the :option:`-m`
 switch of the interpreter.  The following example illustrates how to serve
 files relative to the current directory:
 
@@ -593,59 +580,25 @@ The following options are accepted:
 
    .. versionadded:: 3.11
 
-.. option:: --content-type <content_type>
+.. option:: --cgi
 
-   Specifies the default Content-Type HTTP header used when the MIME type
-   cannot be guessed from the URL's file extension. By default, the server
-   uses ``'application/octet-stream'``:
-
-   .. code-block:: bash
-
-      python -m http.server --content-type text/html
-
-   .. versionadded:: 3.15
-
-.. option:: --tls-cert
-
-   Specifies a TLS certificate chain for HTTPS connections:
+   :class:`CGIHTTPRequestHandler` can be enabled in the command line by passing
+   the ``--cgi`` option:
 
    .. code-block:: bash
 
-      python -m http.server --tls-cert fullchain.pem
+      python -m http.server --cgi
 
-   .. versionadded:: 3.14
+   .. deprecated-removed:: 3.13 3.15
 
-.. option:: --tls-key
+      :mod:`http.server` command line ``--cgi`` support is being removed
+      because :class:`CGIHTTPRequestHandler` is being removed.
 
-   Specifies a private key file for HTTPS connections.
+.. warning::
 
-   This option requires ``--tls-cert`` to be specified.
-
-   .. versionadded:: 3.14
-
-.. option:: --tls-password-file
-
-   Specifies the password file for password-protected private keys:
-
-   .. code-block:: bash
-
-      python -m http.server \
-             --tls-cert cert.pem \
-             --tls-key key.pem \
-             --tls-password-file password.txt
-
-   This option requires ``--tls-cert`` to be specified.
-
-   .. versionadded:: 3.14
-
-.. option:: -H, --header <header> <value>
-
-   Specify an additional HTTP Response Header to send on successful HTTP 200
-   responses. Can be used multiple times to send additional custom response
-   headers. Headers that are sent automatically by the server (for instance
-   Content-Type) will not be overwritten by the server.
-
-   .. versionadded:: 3.15
+   :class:`CGIHTTPRequestHandler` and the ``--cgi`` command-line option
+   are not intended for use by untrusted clients and may be vulnerable
+   to exploitation. Always use within a secure environment.
 
 
 .. _http.server-security:

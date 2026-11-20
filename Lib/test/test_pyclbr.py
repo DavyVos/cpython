@@ -3,14 +3,14 @@
    Nick Mathewson
 '''
 
-import importlib.machinery
 import sys
-from contextlib import contextmanager
 from textwrap import dedent
 from types import FunctionType, MethodType, BuiltinFunctionType
 import pyclbr
 from unittest import TestCase, main as unittest_main
 from test.test_importlib import util as test_importlib_util
+import warnings
+from test.support.testcase import ExtraAssertions
 
 
 StaticMethodType = type(staticmethod(lambda: None))
@@ -23,30 +23,7 @@ ClassMethodType = type(classmethod(lambda c: None))
 # is imperfect (as designed), testModule is called with a set of
 # members to ignore.
 
-
-@contextmanager
-def temporary_main_spec():
-    """
-    A context manager that temporarily sets the `__spec__` attribute
-    of the `__main__` module if it's missing.
-    """
-    main_mod = sys.modules.get("__main__")
-    if main_mod is None:
-        yield  # Do nothing if __main__ is not present
-        return
-
-    original_spec = getattr(main_mod, "__spec__", None)
-    if original_spec is None:
-        main_mod.__spec__ = importlib.machinery.ModuleSpec(
-            name="__main__", loader=None, origin="built-in"
-        )
-    try:
-        yield
-    finally:
-        main_mod.__spec__ = original_spec
-
-
-class PyclbrTest(TestCase):
+class PyclbrTest(TestCase, ExtraAssertions):
 
     def assertListEq(self, l1, l2, ignore):
         ''' succeed iff {l1} - {ignore} == {l2} - {ignore} '''
@@ -102,7 +79,7 @@ class PyclbrTest(TestCase):
         for name, value in dict.items():
             if name in ignore:
                 continue
-            self.assertHasAttr(module, name)
+            self.assertHasAttr(module, name, ignore)
             py_item = getattr(module, name)
             if isinstance(value, pyclbr.Function):
                 self.assertIsInstance(py_item, (FunctionType, BuiltinFunctionType))
@@ -126,8 +103,6 @@ class PyclbrTest(TestCase):
 
                 actualMethods = []
                 for m in py_item.__dict__.keys():
-                    if m == "__annotate__":
-                        continue
                     if ismethod(py_item, getattr(py_item, m), m):
                         actualMethods.append(m)
 
@@ -169,9 +144,8 @@ class PyclbrTest(TestCase):
         self.checkModule('pyclbr')
         # XXX: Metaclasses are not supported
         # self.checkModule('ast')
-        with temporary_main_spec():
-            self.checkModule('doctest', ignore=("TestResults", "_SpoofOut",
-                                                "DocTestCase", '_DocTestSuite'))
+        self.checkModule('doctest', ignore=("TestResults", "_SpoofOut",
+                                            "DocTestCase", '_DocTestSuite'))
         self.checkModule('difflib', ignore=("Match",))
 
     def test_cases(self):
@@ -245,15 +219,15 @@ class PyclbrTest(TestCase):
         # These were once some of the longest modules.
         cm('random', ignore=('Random',))  # from _random import Random as CoreGenerator
         cm('pickle', ignore=('partial', 'PickleBuffer'))
-        with temporary_main_spec():
-            cm(
-                'pdb',
-                # pyclbr does not handle elegantly `typing` or properties
-                ignore=('Union', '_ModuleTarget', '_ScriptTarget', '_ZipTarget', 'curframe_locals',
-                        '_InteractState', 'rlcompleter'),
-            )
-        cm('pydoc', ignore=('input', 'output',  # properties
-                            'getpager', 'plainpager', )) # aliases
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            cm('sre_parse', ignore=('dump', 'groups', 'pos')) # from sre_constants import *; property
+        cm(
+            'pdb',
+            # pyclbr does not handle elegantly `typing` or properties
+            ignore=('Union', '_ModuleTarget', '_ScriptTarget', '_ZipTarget', 'rlcompleter'),
+        )
+        cm('pydoc', ignore=('input', 'output',)) # properties
 
         # Tests for modules inside packages
         cm('email.parser')

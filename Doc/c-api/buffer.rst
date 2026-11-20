@@ -10,6 +10,11 @@
 Buffer Protocol
 ---------------
 
+.. sectionauthor:: Greg Stein <gstein@lyra.org>
+.. sectionauthor:: Benjamin Peterson
+.. sectionauthor:: Stefan Krah
+
+
 Certain objects available in Python wrap access to an underlying memory
 array or *buffer*.  Such objects include the built-in :class:`bytes` and
 :class:`bytearray`, and some extension types like :class:`array.array`.
@@ -258,9 +263,7 @@ readonly, format
 
    .. c:macro:: PyBUF_WRITEABLE
 
-      This is an alias to :c:macro:`PyBUF_WRITABLE`.
-
-      .. soft-deprecated:: 3.13
+      This is a :term:`soft deprecated` alias to :c:macro:`PyBUF_WRITABLE`.
 
    .. c:macro:: PyBUF_FORMAT
 
@@ -284,38 +287,19 @@ The flags that control the logical structure of the memory are listed
 in decreasing order of complexity. Note that each flag contains all bits
 of the flags below it.
 
-.. stable-abi-note::
+.. tabularcolumns:: |p{0.35\linewidth}|l|l|l|
 
-   These values are available when compiling for the
-   :ref:`Stable ABI <stable>` since version 3.11.
-
-.. omit-stable-abi-notes::
-
-   .. list-table::
-      :align: left
-      :widths: auto
-      :header-rows: 1
-
-      * - Request
-        - shape
-        - strides
-        - suboffsets
-      * - .. c:macro:: PyBUF_INDIRECT
-        - yes
-        - yes
-        - if needed
-      * - .. c:macro:: PyBUF_STRIDES
-        - yes
-        - yes
-        - NULL
-      * - .. c:macro:: PyBUF_ND
-        - yes
-        - NULL
-        - NULL
-      * - .. c:macro:: PyBUF_SIMPLE
-        - NULL
-        - NULL
-        - NULL
++-----------------------------+-------+---------+------------+
+|  Request                    | shape | strides | suboffsets |
++=============================+=======+=========+============+
+| .. c:macro:: PyBUF_INDIRECT |  yes  |   yes   | if needed  |
++-----------------------------+-------+---------+------------+
+| .. c:macro:: PyBUF_STRIDES  |  yes  |   yes   |    NULL    |
++-----------------------------+-------+---------+------------+
+| .. c:macro:: PyBUF_ND       |  yes  |   NULL  |    NULL    |
++-----------------------------+-------+---------+------------+
+| .. c:macro:: PyBUF_SIMPLE   |  NULL |   NULL  |    NULL    |
++-----------------------------+-------+---------+------------+
 
 
 .. index:: contiguous, C-contiguous, Fortran contiguous
@@ -327,43 +311,19 @@ C or Fortran :term:`contiguity <contiguous>` can be explicitly requested,
 with and without stride information. Without stride information, the buffer
 must be C-contiguous.
 
-.. stable-abi-note::
+.. tabularcolumns:: |p{0.35\linewidth}|l|l|l|l|
 
-   These values are available when compiling for the
-   :ref:`Stable ABI <stable>` since version 3.11.
-
-.. omit-stable-abi-notes::
-
-   .. list-table::
-      :align: left
-      :widths: auto
-      :header-rows: 1
-
-      * - Request
-        - shape
-        - strides
-        - suboffsets
-        - contig
-      * - .. c:macro:: PyBUF_C_CONTIGUOUS
-        - yes
-        - yes
-        - NULL
-        - C
-      * - .. c:macro:: PyBUF_F_CONTIGUOUS
-        - yes
-        - yes
-        - NULL
-        - F
-      * - .. c:macro:: PyBUF_ANY_CONTIGUOUS
-        - yes
-        - yes
-        - NULL
-        - C or F
-      * - :c:macro:`PyBUF_ND`
-        - yes
-        - NULL
-        - NULL
-        - C
++-----------------------------------+-------+---------+------------+--------+
+|  Request                          | shape | strides | suboffsets | contig |
++===================================+=======+=========+============+========+
+| .. c:macro:: PyBUF_C_CONTIGUOUS   |  yes  |   yes   |    NULL    |   C    |
++-----------------------------------+-------+---------+------------+--------+
+| .. c:macro:: PyBUF_F_CONTIGUOUS   |  yes  |   yes   |    NULL    |   F    |
++-----------------------------------+-------+---------+------------+--------+
+| .. c:macro:: PyBUF_ANY_CONTIGUOUS |  yes  |   yes   |    NULL    | C or F |
++-----------------------------------+-------+---------+------------+--------+
+| :c:macro:`PyBUF_ND`               |  yes  |   NULL  |    NULL    |   C    |
++-----------------------------------+-------+---------+------------+--------+
 
 
 compound requests
@@ -376,81 +336,27 @@ used combinations as single flags.
 In the following table *U* stands for undefined contiguity. The consumer would
 have to call :c:func:`PyBuffer_IsContiguous` to determine contiguity.
 
-.. stable-abi-note::
+.. tabularcolumns:: |p{0.35\linewidth}|l|l|l|l|l|l|
 
-   These values are available when compiling for the
-   :ref:`Stable ABI <stable>` since version 3.11.
-
-.. omit-stable-abi-notes::
-
-   .. list-table::
-      :align: left
-      :widths: auto
-      :header-rows: 1
-
-      * - Request
-        - shape
-        - strides
-        - suboffsets
-        - contig
-        - readonly
-        - format
-      * - .. c:macro:: PyBUF_FULL
-        - yes
-        - yes
-        - if needed
-        - U
-        - 0
-        - yes
-      * - .. c:macro:: PyBUF_FULL_RO
-        - yes
-        - yes
-        - if needed
-        - U
-        - 1 or 0
-        - yes
-      * - .. c:macro:: PyBUF_RECORDS
-        - yes
-        - yes
-        - NULL
-        - U
-        - 0
-        - yes
-      * - .. c:macro:: PyBUF_RECORDS_RO
-        - yes
-        - yes
-        - NULL
-        - U
-        - 1 or 0
-        - yes
-      * - .. c:macro:: PyBUF_STRIDED
-        - yes
-        - yes
-        - NULL
-        - U
-        - 0
-        - NULL
-      * - .. c:macro:: PyBUF_STRIDED_RO
-        - yes
-        - yes
-        - NULL
-        - U
-        - 1 or 0
-        - NULL
-      * - .. c:macro:: PyBUF_CONTIG
-        - yes
-        - NULL
-        - NULL
-        - C
-        - 0
-        - NULL
-      * - .. c:macro:: PyBUF_CONTIG_RO
-        - yes
-        - NULL
-        - NULL
-        - C
-        - 1 or 0
-        - NULL
++-------------------------------+-------+---------+------------+--------+----------+--------+
+|  Request                      | shape | strides | suboffsets | contig | readonly | format |
++===============================+=======+=========+============+========+==========+========+
+| .. c:macro:: PyBUF_FULL       |  yes  |   yes   | if needed  |   U    |     0    |  yes   |
++-------------------------------+-------+---------+------------+--------+----------+--------+
+| .. c:macro:: PyBUF_FULL_RO    |  yes  |   yes   | if needed  |   U    |  1 or 0  |  yes   |
++-------------------------------+-------+---------+------------+--------+----------+--------+
+| .. c:macro:: PyBUF_RECORDS    |  yes  |   yes   |    NULL    |   U    |     0    |  yes   |
++-------------------------------+-------+---------+------------+--------+----------+--------+
+| .. c:macro:: PyBUF_RECORDS_RO |  yes  |   yes   |    NULL    |   U    |  1 or 0  |  yes   |
++-------------------------------+-------+---------+------------+--------+----------+--------+
+| .. c:macro:: PyBUF_STRIDED    |  yes  |   yes   |    NULL    |   U    |     0    |  NULL  |
++-------------------------------+-------+---------+------------+--------+----------+--------+
+| .. c:macro:: PyBUF_STRIDED_RO |  yes  |   yes   |    NULL    |   U    |  1 or 0  |  NULL  |
++-------------------------------+-------+---------+------------+--------+----------+--------+
+| .. c:macro:: PyBUF_CONTIG     |  yes  |   NULL  |    NULL    |   C    |     0    |  NULL  |
++-------------------------------+-------+---------+------------+--------+----------+--------+
+| .. c:macro:: PyBUF_CONTIG_RO  |  yes  |   NULL  |    NULL    |   C    |  1 or 0  |  NULL  |
++-------------------------------+-------+---------+------------+--------+----------+--------+
 
 
 Complex arrays
@@ -599,11 +505,10 @@ Buffer-related functions
    *indices* must point to an array of ``view->ndim`` indices.
 
 
-.. c:function:: int PyBuffer_FromContiguous(const Py_buffer *view, const void *buf, Py_ssize_t len, char order)
+.. c:function:: int PyBuffer_FromContiguous(const Py_buffer *view, const void *buf, Py_ssize_t len, char fort)
 
    Copy contiguous *len* bytes from *buf* to *view*.
-   *order* can be ``'C'`` or ``'F'`` or ``'A'`` (for C-style or Fortran-style
-   ordering or either one).
+   *fort* can be ``'C'`` or ``'F'`` (for C-style or Fortran-style ordering).
    ``0`` is returned on success, ``-1`` on error.
 
 

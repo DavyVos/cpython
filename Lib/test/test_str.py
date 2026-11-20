@@ -267,30 +267,6 @@ class StrTest(string_tests.StringLikeTest,
             pass
         self.checkequal(3, MyStr('aaa'), 'count', 'a')
 
-    def test_find_adaptive_widths(self):
-        # The adaptive path in Objects/stringlib/fastsearch.h needs a haystack
-        # of at least 2500 characters and a needle of at least a third of it,
-        # and it is compiled once per character width. Exercise all four.
-        cases = [
-            ('ascii', 'a', 'b', 'c'),
-            ('latin1', '\xe9', '\xea', '\xeb'),
-            ('ucs2', '\u0100', '\u0101', '\u0102'),
-            ('ucs4', '\U0001d11e', '\U0001d11f', '\U0001d120'),
-        ]
-        for kind, c, d, x in cases:
-            # A needle of 2000 characters, none of which is x.
-            needle = c * 1000 + d * 1000
-            with self.subTest(kind=kind):
-                # 4000 characters, mostly x: the skip branches jump by m.
-                haystack = c * 1000 + x * 3000
-                self.assertEqual(haystack.find(needle), -1)
-                self.assertEqual(haystack.count(needle), 0)
-                # A match at 3000 in a haystack of 5000, so count() reaches
-                # the match branch inside adaptive_find rather than two-way.
-                haystack = c * 1000 + x * 2000 + needle
-                self.assertEqual(haystack.find(needle), 3000)
-                self.assertEqual(haystack.count(needle), 1)
-
     def test_find(self):
         string_tests.StringLikeTest.test_find(self)
         # test implementation details of the memchr fast path
@@ -478,13 +454,6 @@ class StrTest(string_tests.StringLikeTest,
         self.assertEqual("[a\xe9]".translate(str.maketrans({'a': '<\u20ac>'})),
                          "[<\u20ac>\xe9]")
 
-        # with frozendict
-        tbl = self.type2test.maketrans(frozendict({'s': 'S', 'T': 't'}))
-        self.assertEqual(tbl, {ord('s'): 'S', ord('T'): 't'})
-        self.assertEqual('sTan'.translate(tbl), 'Stan')
-        tbl = self.type2test.maketrans(frozendict({'a': None, 'b': '<i>'}))
-        self.checkequalnofix('<i><i><i>c', 'abababc', 'translate', tbl)
-
         # invalid Unicode characters
         invalid_char = 0x10ffff+1
         for before in "a\xe9\u20ac\U0010ffff":
@@ -630,16 +599,6 @@ class StrTest(string_tests.StringLikeTest,
         pattern = 'abc'
         text = 'abc def'
         self.assertIs(text.replace(pattern, pattern), text)
-
-    @support.nomemtest
-    def test_replace_oom(self):
-        # https://github.com/python/cpython/issues/152228
-        s1 = "轘" * 4
-        s2 = "&"
-        s3 = "&amp;"
-        with self.assertRaises(MemoryError):
-            with support.inject_memory_error_cm():
-                s1.replace(s2, s3)  # this line used to crash before
 
     def test_repeat_id_preserving(self):
         a = '123abc1@'
@@ -1619,40 +1578,17 @@ class StrTest(string_tests.StringLikeTest,
         self.assertEqual('%X' % letter_m, '6D')
         self.assertEqual('%o' % letter_m, '155')
         self.assertEqual('%c' % letter_m, 'm')
-        with self.assertRaisesRegex(TypeError,
-                'format argument: %x requires an integer, not float'):
-            '%x' % 3.14
-        with self.assertRaisesRegex(TypeError,
-                'format argument: %X requires an integer, not float'):
-            '%X' % 2.11
-        with self.assertRaisesRegex(TypeError,
-                'format argument: %o requires an integer, not float'):
-            '%o' % 1.79
-        with self.assertRaisesRegex(TypeError,
-                r'format argument: %x requires an integer, not .*\.PseudoFloat'):
-            '%x' % pi
-        with self.assertRaisesRegex(TypeError,
-                'format argument: %x requires an integer, not complex'):
-            '%x' % 3j
-        with self.assertRaisesRegex(TypeError,
-                'format argument: %X requires an integer, not complex'):
-            '%X' % 2j
-        with self.assertRaisesRegex(TypeError,
-                'format argument: %o requires an integer, not complex'):
-            '%o' % 1j
-        with self.assertRaisesRegex(TypeError,
-                'format argument: %u requires a real number, not complex'):
-            '%u' % 3j
-        with self.assertRaisesRegex(TypeError,
-                'format argument: %i requires a real number, not complex'):
-            '%i' % 2j
-        with self.assertRaisesRegex(TypeError,
-                'format argument: %d requires a real number, not complex'):
-            '%d' % 1j
-        with self.assertRaisesRegex(TypeError,
-                r'format argument: %c requires an integer or a unicode character, '
-                r'not .*\.PseudoFloat'):
-            '%c' % pi
+        self.assertRaisesRegex(TypeError, '%x format: an integer is required, not float', operator.mod, '%x', 3.14)
+        self.assertRaisesRegex(TypeError, '%X format: an integer is required, not float', operator.mod, '%X', 2.11)
+        self.assertRaisesRegex(TypeError, '%o format: an integer is required, not float', operator.mod, '%o', 1.79)
+        self.assertRaisesRegex(TypeError, '%x format: an integer is required, not PseudoFloat', operator.mod, '%x', pi)
+        self.assertRaisesRegex(TypeError, '%x format: an integer is required, not complex', operator.mod, '%x', 3j)
+        self.assertRaisesRegex(TypeError, '%X format: an integer is required, not complex', operator.mod, '%X', 2j)
+        self.assertRaisesRegex(TypeError, '%o format: an integer is required, not complex', operator.mod, '%o', 1j)
+        self.assertRaisesRegex(TypeError, '%u format: a real number is required, not complex', operator.mod, '%u', 3j)
+        self.assertRaisesRegex(TypeError, '%i format: a real number is required, not complex', operator.mod, '%i', 2j)
+        self.assertRaisesRegex(TypeError, '%d format: a real number is required, not complex', operator.mod, '%d', 1j)
+        self.assertRaisesRegex(TypeError, '%c requires int or char', operator.mod, '%c', pi)
 
         class RaisingNumber:
             def __int__(self):
@@ -2510,10 +2446,8 @@ class StrTest(string_tests.StringLikeTest,
         self.assertEqual(repr(s1()), '\\n')
 
     def test_printable_repr(self):
-        # printable
-        self.assertEqual(repr('\U00010000'), "'%c'" % (0x10000,))
-        # nonprintable (private use area)
-        self.assertEqual(repr('\U00100001'), "'\\U00100001'")
+        self.assertEqual(repr('\U00010000'), "'%c'" % (0x10000,)) # printable
+        self.assertEqual(repr('\U00014000'), "'\\U00014000'")     # nonprintable
 
     # This test only affects 32-bit platforms because expandtabs can only take
     # an int as the max value, not a 64-bit C long.  If expandtabs is changed
@@ -2629,7 +2563,7 @@ class StrTest(string_tests.StringLikeTest,
                 self.assertFalse(copy1 != copy2)
 
                 self.assertTrue(copy1 <= copy2)
-                self.assertTrue(copy1 >= copy2)
+                self.assertTrue(copy2 >= copy2)
 
         self.assertTrue(ascii < ascii2)
         self.assertTrue(ascii < latin)
@@ -2669,8 +2603,7 @@ class StrTest(string_tests.StringLikeTest,
 
     def test_free_after_iterating(self):
         support.check_free_after_iterating(self, iter, str)
-        if not support.Py_GIL_DISABLED:
-            support.check_free_after_iterating(self, reversed, str)
+        support.check_free_after_iterating(self, reversed, str)
 
     def test_check_encoding_errors(self):
         # bpo-37388: str(bytes) and str.decode() must check encoding and errors

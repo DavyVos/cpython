@@ -19,8 +19,8 @@
 # CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 # CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+from __future__ import annotations
 import os
-import time
 
 # Categories of actions:
 #  killing
@@ -31,11 +31,10 @@ import time
 #  finishing
 # [completion]
 
-from .render import RenderedScreen
-from .trace import trace
 
 # types
-lazy from .historical_reader import HistoricalReader
+if False:
+    from .historical_reader import HistoricalReader
 
 
 class Command:
@@ -73,7 +72,7 @@ class KillCommand(Command):
         else:
             r.kill_ring.append(text)
         r.pos = start
-        r.invalidate_buffer(start)
+        r.dirty = True
 
 
 class YankCommand(Command):
@@ -124,27 +123,24 @@ class digit_arg(Command):
                     r.arg = 10 * r.arg - d
                 else:
                     r.arg = 10 * r.arg + d
-        r.invalidate_prompt()
+        r.dirty = True
 
 
 class clear_screen(Command):
     def do(self) -> None:
         r = self.reader
-        trace("command.clear_screen")
         r.console.clear()
-        r.invalidate_full()
+        r.dirty = True
 
 
 class refresh(Command):
     def do(self) -> None:
-        trace("command.refresh")
-        self.reader.invalidate_full()
+        self.reader.dirty = True
 
 
 class repaint(Command):
     def do(self) -> None:
-        trace("command.repaint")
-        self.reader.invalidate_full()
+        self.reader.dirty = True
         self.reader.console.repaint()
 
 
@@ -210,10 +206,9 @@ class yank_pop(YankCommand):
         repl = len(r.kill_ring[-1])
         r.kill_ring.insert(0, r.kill_ring.pop())
         t = r.kill_ring[-1]
-        start = r.pos - repl
         b[r.pos - repl : r.pos] = t
         r.pos = r.pos - repl + len(t)
-        r.invalidate_buffer(start)
+        r.dirty = True
 
 
 class interrupt(FinishCommand):
@@ -245,9 +240,8 @@ class suspend(Command):
         r.console.prepare()
         r.pos = p
         # r.posxy = 0, 0  # XXX this is invalid
-        r.invalidate_full()
-        trace("command.suspend sync_rendered_screen")
-        r.console.sync_rendered_screen(RenderedScreen.empty(), r.console.posxy)
+        r.dirty = True
+        r.console.screen = []
 
 
 class up(MotionCommand):
@@ -262,7 +256,7 @@ class up(MotionCommand):
                     r.select_item(r.historyi - 1)
                     return
                 r.pos = 0
-                r.debug("start of buffer")
+                r.error("start of buffer")
                 return
 
             if (
@@ -294,7 +288,7 @@ class down(MotionCommand):
                     r.pos = r.eol(0)
                     return
                 r.pos = len(b)
-                r.debug("end of buffer")
+                r.error("end of buffer")
                 return
 
             if (
@@ -320,7 +314,7 @@ class left(MotionCommand):
             if p >= 0:
                 r.pos = p
             else:
-                self.reader.debug("start of buffer")
+                self.reader.error("start of buffer")
 
 
 class right(MotionCommand):
@@ -332,7 +326,7 @@ class right(MotionCommand):
             if p <= len(b):
                 r.pos = p
             else:
-                self.reader.debug("end of buffer")
+                self.reader.error("end of buffer")
 
 
 class beginning_of_line(MotionCommand):
@@ -373,15 +367,7 @@ class self_insert(EditCommand):
     def do(self) -> None:
         r = self.reader
         text = self.event * r.get_arg()
-        start = r.pos
         r.insert(text)
-        if r.paste_mode:
-            data = ""
-            ev = r.console.getpending()
-            data += ev.data
-            if data:
-                r.insert(data)
-                r.invalidate_buffer(start)
 
 
 class insert_nl(EditCommand):
@@ -396,7 +382,7 @@ class transpose_characters(EditCommand):
         b = r.buffer
         s = r.pos - 1
         if s < 0:
-            r.debug("cannot transpose at start of buffer")
+            r.error("cannot transpose at start of buffer")
         else:
             if s == len(b):
                 s -= 1
@@ -405,23 +391,20 @@ class transpose_characters(EditCommand):
             del b[s]
             b.insert(t, c)
             r.pos = t
-            r.invalidate_buffer(s)
+            r.dirty = True
 
 
 class backspace(EditCommand):
     def do(self) -> None:
         r = self.reader
         b = r.buffer
-        changed_from: int | None = None
         for i in range(r.get_arg()):
             if r.pos > 0:
                 r.pos -= 1
                 del b[r.pos]
-                changed_from = r.pos if changed_from is None else min(changed_from, r.pos)
+                r.dirty = True
             else:
-                self.reader.debug("can't backspace at start")
-        if changed_from is not None:
-            r.invalidate_buffer(changed_from)
+                self.reader.error("can't backspace at start")
 
 
 class delete(EditCommand):
@@ -439,15 +422,12 @@ class delete(EditCommand):
                 r.console.finish()
                 raise EOFError
 
-        changed_from: int | None = None
         for i in range(r.get_arg()):
             if r.pos != len(b):
                 del b[r.pos]
-                changed_from = r.pos if changed_from is None else min(changed_from, r.pos)
+                r.dirty = True
             else:
-                self.reader.debug("end of buffer")
-        if changed_from is not None:
-            r.invalidate_buffer(changed_from)
+                self.reader.error("end of buffer")
 
 
 class accept(FinishCommand):
@@ -461,18 +441,19 @@ class help(Command):
 
         with self.reader.suspend():
             self.reader.msg = _sitebuiltins._Helper()()  # type: ignore[assignment]
-        self.reader.invalidate_prompt()
 
 
 class invalid_key(Command):
     def do(self) -> None:
-        self.reader.console.getpending()
-        self.reader.error("no command is bound to this key")
+        pending = self.reader.console.getpending()
+        s = "".join(self.event) + pending.data
+        self.reader.error("`%r' not bound" % s)
 
 
 class invalid_command(Command):
     def do(self) -> None:
-        self.reader.error(f"command {self.event_name!r} is not implemented")
+        s = self.event_name
+        self.reader.error("command `%s' not known" % s)
 
 
 class show_history(Command):
@@ -480,37 +461,32 @@ class show_history(Command):
         from .pager import get_pager
         from site import gethistoryfile
 
-        # After the pager exits, the screen state is unknown (Unix may
-        # restore via alternate screen, Windows shows pager output).
-        # Clear and force a full redraw at the end for consistency.
-        self.reader.console.clear()
-
         history = os.linesep.join(self.reader.history[:])
         self.reader.console.restore()
         pager = get_pager()
         pager(history, gethistoryfile())
         self.reader.console.prepare()
 
-        self.reader.invalidate_full()
+        # We need to copy over the state so that it's consistent between
+        # console and reader, and console does not overwrite/append stuff
+        self.reader.console.screen = self.reader.screen.copy()
+        self.reader.console.posxy = self.reader.cxy
 
 
 class paste_mode(Command):
+
     def do(self) -> None:
         self.reader.paste_mode = not self.reader.paste_mode
-        self.reader.invalidate_prompt()
+        self.reader.dirty = True
 
 
-class perform_bracketed_paste(Command):
+class enable_bracketed_paste(Command):
     def do(self) -> None:
-        done = "\x1b[201~"
-        data = ""
-        start = time.time()
-        while done not in data:
-            ev = self.reader.console.getpending()
-            data += ev.data
-        trace(
-            "bracketed pasting of {l} chars done in {s:.2f}s",
-            l=len(data),
-            s=time.time() - start,
-        )
-        self.reader.insert(data.replace(done, ""))
+        self.reader.paste_mode = True
+        self.reader.in_bracketed_paste = True
+
+class disable_bracketed_paste(Command):
+    def do(self) -> None:
+        self.reader.paste_mode = False
+        self.reader.in_bracketed_paste = False
+        self.reader.dirty = True

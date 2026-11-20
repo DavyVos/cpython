@@ -43,8 +43,11 @@ __all__ = ['BASIC_FORMAT', 'BufferingFormatter', 'CRITICAL', 'DEBUG', 'ERROR',
 
 import threading
 
-# Original author: Vinay Sajip <vinay_sajip@red-dove.com>
+__author__  = "Vinay Sajip <vinay_sajip@red-dove.com>"
 __status__  = "production"
+# The following module attributes are no longer updated.
+__version__ = "0.5.1.2"
+__date__    = "07 February 2010"
 
 #---------------------------------------------------------------------------
 #   Miscellaneous module data
@@ -622,9 +625,6 @@ class Formatter(object):
         self._fmt = self._style._fmt
         self.datefmt = datefmt
 
-    def __repr__(self):
-        return '<%s (%s)>' % (self.__class__.__name__, self._fmt)
-
     default_time_format = '%Y-%m-%d %H:%M:%S'
     default_msec_format = '%s,%03d'
 
@@ -796,9 +796,6 @@ class Filter(object):
         """
         self.name = name
         self.nlen = len(name)
-
-    def __repr__(self):
-        return '<%s (%s)>' % (self.__class__.__name__, self.name)
 
     def filter(self, record):
         """
@@ -1378,17 +1375,9 @@ class Manager(object):
         logger and fix up the parent/child references which pointed to the
         placeholder to now point to the logger.
         """
+        rv = None
         if not isinstance(name, str):
             raise TypeError('A logger name must be a string')
-        # Fast path: an already-registered, non-placeholder logger can be
-        # returned without taking the lock. dict.get() is atomic under both
-        # the GIL and free threading. A Logger is inserted into loggerDict only
-        # after it is fully wired up (parent/child references fixed) under the
-        # lock, so the fast path never observes a logger whose parent is not yet
-        # set.
-        rv = self.loggerDict.get(name)
-        if rv is not None and not isinstance(rv, PlaceHolder):
-            return rv
         with _lock:
             if name in self.loggerDict:
                 rv = self.loggerDict[name]
@@ -1396,18 +1385,14 @@ class Manager(object):
                     ph = rv
                     rv = (self.loggerClass or _loggerClass)(name)
                     rv.manager = self
+                    self.loggerDict[name] = rv
                     self._fixupChildren(ph, rv)
                     self._fixupParents(rv)
-                    # Publish only after rv is fully wired: the fast path reads
-                    # loggerDict without the lock.
-                    self.loggerDict[name] = rv
             else:
                 rv = (self.loggerClass or _loggerClass)(name)
                 rv.manager = self
-                self._fixupParents(rv)
-                # Publish only after rv is fully wired: the fast path reads
-                # loggerDict without the lock.
                 self.loggerDict[name] = rv
+                self._fixupParents(rv)
         return rv
 
     def setLoggerClass(self, klass):
@@ -1680,8 +1665,6 @@ class Logger(Filterer):
                 exc_info = (type(exc_info), exc_info, exc_info.__traceback__)
             elif not isinstance(exc_info, tuple):
                 exc_info = sys.exc_info()
-        else:  # Normalize any falsy value to None, for type precision
-            exc_info = None
         record = self.makeRecord(self.name, level, fn, lno, msg, args,
                                  exc_info, func, extra, sinfo)
         self.handle(record)
@@ -2073,15 +2056,6 @@ def basicConfig(**kwargs):
               created FileHandler, causing it to be used when the file is
               opened in text mode. If not specified, the default value is
               `backslashreplace`.
-    formatter If specified, set this formatter instance for all involved
-              handlers.
-              If not specified, the default is to create and use an instance of
-              `logging.Formatter` based on arguments 'format', 'datefmt' and
-              'style'.
-              When 'formatter' is specified together with any of the three
-              arguments 'format', 'datefmt' and 'style', a `ValueError`
-              is raised to signal that these arguments would lose meaning
-              otherwise.
 
     Note that you could specify a stream created using open(filename, mode)
     rather than passing the filename and mode in. However, it should be
@@ -2104,9 +2078,6 @@ def basicConfig(**kwargs):
 
     .. versionchanged:: 3.9
        Added the ``encoding`` and ``errors`` parameters.
-
-    .. versionchanged:: 3.15
-       Added the ``formatter`` parameter.
     """
     # Add thread safety in case someone mistakenly calls
     # basicConfig() from multiple threads
@@ -2142,19 +2113,13 @@ def basicConfig(**kwargs):
                     stream = kwargs.pop("stream", None)
                     h = StreamHandler(stream)
                 handlers = [h]
-            fmt = kwargs.pop("formatter", None)
-            if fmt is None:
-                dfs = kwargs.pop("datefmt", None)
-                style = kwargs.pop("style", '%')
-                if style not in _STYLES:
-                    raise ValueError('Style must be one of: %s' % ','.join(
-                                    _STYLES.keys()))
-                fs = kwargs.pop("format", _STYLES[style][1])
-                fmt = Formatter(fs, dfs, style)
-            else:
-                for forbidden_key in ("datefmt", "format", "style"):
-                    if forbidden_key in kwargs:
-                        raise ValueError(f"{forbidden_key!r} should not be specified together with 'formatter'")
+            dfs = kwargs.pop("datefmt", None)
+            style = kwargs.pop("style", '%')
+            if style not in _STYLES:
+                raise ValueError('Style must be one of: %s' % ','.join(
+                                 _STYLES.keys()))
+            fs = kwargs.pop("format", _STYLES[style][1])
+            fmt = Formatter(fs, dfs, style)
             for h in handlers:
                 if h.formatter is None:
                     h.setFormatter(fmt)
@@ -2368,15 +2333,3 @@ def captureWarnings(capture):
         if _warnings_showwarning is not None:
             warnings.showwarning = _warnings_showwarning
             _warnings_showwarning = None
-
-
-def __getattr__(name):
-    if name in ("__version__", "__date__", "__author__"):
-        warnings._deprecated(name, remove=(3, 20))
-        return {  # Do not change
-            "__version__": "0.5.1.2",
-            "__date__": "07 February 2010",
-            "__author__": "Vinay Sajip <vinay_sajip@red-dove.com>",
-        }[name]
-
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

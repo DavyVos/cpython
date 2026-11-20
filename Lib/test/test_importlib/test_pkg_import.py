@@ -8,8 +8,9 @@ import unittest
 
 from importlib.util import cache_from_source
 from test.support.os_helper import create_empty_file
+from test.support.testcase import ExtraAssertions
 
-class TestImport(unittest.TestCase):
+class TestImport(unittest.TestCase, ExtraAssertions):
 
     def __init__(self, *args, **kw):
         self.package_name = 'PACKAGE_'
@@ -39,12 +40,9 @@ class TestImport(unittest.TestCase):
         self.remove_modules()
 
     def rewrite_file(self, contents):
-        try:
-            compiled_path = cache_from_source(self.module_path)
-            if os.path.exists(compiled_path):
-                os.remove(compiled_path)
-        except NotImplementedError:
-            pass
+        compiled_path = cache_from_source(self.module_path)
+        if os.path.exists(compiled_path):
+            os.remove(compiled_path)
         with open(self.module_path, 'w', encoding='utf-8') as f:
             f.write(contents)
 

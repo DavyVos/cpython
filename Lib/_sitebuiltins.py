@@ -55,6 +55,7 @@ class _Printer(object):
         if not data:
             data = self.__data
         self.__lines = data.split('\n')
+        self.__linecnt = len(self.__lines)
 
     def __repr__(self):
         self.__setup()
@@ -64,17 +65,7 @@ class _Printer(object):
             return "Type %s() to see the full %s text" % ((self.__name,)*2)
 
     def __call__(self):
-        try:
-            from _pyrepl.pager import get_pager
-        except ModuleNotFoundError:
-            try:
-                from pydoc import get_pager
-            except ModuleNotFoundError:
-                def get_pager():
-                    def _print(text, title=None):
-                        print(text)
-                    return _print
-
+        from _pyrepl.pager import get_pager
         self.__setup()
 
         pager = get_pager()

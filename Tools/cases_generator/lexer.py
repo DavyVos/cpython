@@ -79,11 +79,8 @@ for op in operators:
 opmap = {pattern.replace("\\", "") or "\\": op for op, pattern in operators.items()}
 
 # Macros
-macro = r"#.*\n"
-CMACRO_IF = "CMACRO_IF"
-CMACRO_ELSE = "CMACRO_ELSE"
-CMACRO_ENDIF = "CMACRO_ENDIF"
-CMACRO_OTHER = "CMACRO_OTHER"
+macro = r"# *(ifdef|ifndef|undef|define|error|endif|if|else|include|#)"
+CMACRO = "CMACRO"
 
 id_re = r"[a-zA-Z_][0-9a-zA-Z_]*"
 IDENTIFIER = "IDENTIFIER"
@@ -216,11 +213,6 @@ kwds.append(OP)
 # A macro in the DSL
 MACRO = "MACRO"
 kwds.append(MACRO)
-# A label in the DSL
-LABEL = "LABEL"
-kwds.append(LABEL)
-SPILLED = "SPILLED"
-kwds.append(SPILLED)
 keywords = {name.lower(): name for name in kwds}
 
 ANNOTATION = "ANNOTATION"
@@ -230,10 +222,10 @@ annotations = {
     "register",
     "replaced",
     "pure",
+    "split",
     "replicate",
     "tier1",
     "tier2",
-    "no_save_ip",
 }
 
 __all__ = []
@@ -250,7 +242,7 @@ def make_syntax_error(
     return SyntaxError(message, (filename, line, column, line_text))
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class Token:
     filename: str
     kind: str
@@ -295,7 +287,6 @@ def tokenize(src: str, line: int = 1, filename: str = "") -> Iterator[Token]:
     linestart = -1
     for m in matcher.finditer(src):
         start, end = m.span()
-        macro_body = ""
         text = m.group(0)
         if text in keywords:
             kind = keywords[text]
@@ -320,15 +311,7 @@ def tokenize(src: str, line: int = 1, filename: str = "") -> Iterator[Token]:
         elif text[0] == "'":
             kind = CHARACTER
         elif text[0] == "#":
-            macro_body = text[1:].strip()
-            if macro_body.startswith("if"):
-                kind = CMACRO_IF
-            elif macro_body.startswith("else"):
-                kind = CMACRO_ELSE
-            elif macro_body.startswith("endif"):
-                kind = CMACRO_ENDIF
-            else:
-                kind = CMACRO_OTHER
+            kind = CMACRO
         elif text[0] == "/" and text[1] in "/*":
             kind = COMMENT
         else:
@@ -350,9 +333,6 @@ def tokenize(src: str, line: int = 1, filename: str = "") -> Iterator[Token]:
                 line += newlines
         else:
             begin = line, start - linestart
-            if macro_body:
-                linestart = end
-                line += 1
         if kind != "\n":
             yield Token(
                 filename, kind, text, begin, (line, start - linestart + len(text))

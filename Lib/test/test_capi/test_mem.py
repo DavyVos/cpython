@@ -1,4 +1,3 @@
-import os
 import re
 import textwrap
 import unittest
@@ -72,13 +71,8 @@ class PyMemDebugTests(unittest.TestCase):
 
     def check_malloc_without_gil(self, code):
         out = self.check(code)
-        if not support.Py_GIL_DISABLED:
-            expected = ('Fatal Python error: _PyMem_DebugMalloc: '
-                        'Python memory allocator called without holding the GIL')
-        else:
-            expected = ('Fatal Python error: _PyMem_DebugMalloc: '
-                        'Python memory allocator called without an active thread state. '
-                        'Are you trying to call it inside of a Py_BEGIN_ALLOW_THREADS block?')
+        expected = ('Fatal Python error: _PyMem_DebugMalloc: '
+                    'Python memory allocator called without holding the GIL')
         self.assertIn(expected, out)
 
     def test_pymem_malloc_without_gil(self):
@@ -181,22 +175,6 @@ class PyMemMimallocDebugTests(PyMemDebugTests):
 class PyMemDefaultTests(PyMemDebugTests):
     # test default allocator of Python compiled in debug mode
     PYTHONMALLOC = ''
-
-
-@requires_subprocess()
-@support.requires_gil_enabled("PYTHONMALLOC='malloc' needs GIL build")
-@unittest.skipUnless(support.check_sanitizer(address=True),
-                     'need address sanitizer')
-class AddressSanitizerTests(unittest.TestCase):
-    def test_buffer_overflow(self):
-        asan_options = os.environ.get('ASAN_OPTIONS', '')
-        with support.SuppressCrashReport():
-            out = assert_python_failure(
-                '-c', 'import _testcapi; _testcapi.pymem_buffer_overflow()',
-                PYTHONMALLOC='malloc',
-                ASAN_OPTIONS=f'{asan_options}:log_path=stderr',
-            )
-        self.assertIn(b'AddressSanitizer', out.err)
 
 
 if __name__ == "__main__":

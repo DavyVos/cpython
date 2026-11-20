@@ -1,5 +1,6 @@
 import unittest
 from test.support import import_helper
+from test.support import warnings_helper
 
 # Skip this test if the _testcapi module isn't available.
 import_helper.import_module('_testcapi')
@@ -37,9 +38,6 @@ def _make_test_object(cls):
                9.99999,# T_FLOAT
                10.1010101010, # T_DOUBLE
                "hi",   # T_STRING_INPLACE
-               12,     # T_LONGLONG
-               13,     # T_ULONGLONG
-               b"c",   # T_CHAR
                )
 
 
@@ -62,7 +60,10 @@ class ReadWriteTests:
 
     def _test_overflow(self, name, value):
         ts = self.ts
+        oldvalue = getattr(ts, name)
         self.assertRaises(OverflowError, setattr, ts, name, value)
+        # a failed assignment does not change the value
+        self.assertEqual(getattr(ts, name), oldvalue)
 
     def _test_int_range(self, name, minval, maxval, *, hardlimit=None,
                         indexlimit=None):
@@ -156,23 +157,16 @@ class ReadWriteTests:
         # issue8014: this produced 'bad argument to internal function'
         # internal error
         for nonint in None, 3.2j, "full of eels", {}, []:
-            for attr in integer_attributes:
+            for attr in integer_attributes + ['T_FLOAT', 'T_DOUBLE']:
+                oldvalue = getattr(ts, attr)
                 self.assertRaises(TypeError, setattr, ts, attr, nonint)
+                # a failed assignment does not change the value
+                self.assertEqual(getattr(ts, attr), oldvalue)
 
     def test_inplace_string(self):
         ts = self.ts
         self.assertEqual(ts.T_STRING_INPLACE, "hi")
         self.assertRaises(TypeError, setattr, ts, "T_STRING_INPLACE", "s")
-        self.assertRaises(TypeError, delattr, ts, "T_STRING_INPLACE")
-
-    def test_char(self):
-        ts = self.ts
-        self.assertEqual(ts.T_CHAR, "c")
-        ts.T_CHAR = "z"
-        self.assertEqual(ts.T_CHAR, "z")
-        self.assertRaises(TypeError, setattr, ts, "T_CHAR", "")
-        self.assertRaises(TypeError, setattr, ts, "T_CHAR", b"a")
-        self.assertRaises(TypeError, setattr, ts, "T_CHAR", bytearray(b"b"))
         self.assertRaises(TypeError, delattr, ts, "T_STRING_INPLACE")
 
 class ReadWriteTests_OldAPI(ReadWriteTests, unittest.TestCase):

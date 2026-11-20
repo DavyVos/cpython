@@ -39,8 +39,8 @@ def spawn_repl(*args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, custom=F
     # line option '-i' and the process name set to '<stdin>'.
     # The directory of argv[0] must match the directory of the Python
     # executable for the Popen() call to python to succeed as the directory
-    # path may be used by PyConfig_Get("module_search_paths") to build the
-    # default module search path.
+    # path may be used by Py_GetPath() to build the default module search
+    # path.
     stdin_fname = os.path.join(os.path.dirname(sys.executable), "<stdin>")
     cmd_line = [stdin_fname]
     # Isolated mode implies -EPs and ignores PYTHON* variables.
@@ -104,11 +104,10 @@ class TestInteractiveInterpreter(unittest.TestCase):
         # no memory. Check also that the fix does not break the interactive
         # loop when an exception is raised.
         user_input = """
-            import sys
-            from test import support
+            import sys, _testcapi
             1/0
             print('After the exception.')
-            support.inject_memory_error()
+            _testcapi.set_nomemory(0)
             sys.exit(0)
         """
         user_input = dedent(user_input)
@@ -153,69 +152,21 @@ class TestInteractiveInterpreter(unittest.TestCase):
         output = kill_python(p)
         self.assertEqual(p.returncode, 0)
 
-    @unittest.skipIf(sys.platform == "win32", "select() cannot wait for pipes")
-    def test_secondary_prompt_is_not_read_ahead(self):
-        process = spawn_repl()
-        output = ""
-
-        def read_until(marker, start=0):
-            nonlocal output
-            while marker not in output[start:]:
-                ready, _, _ = select.select(
-                    [process.stdout], [], [], SHORT_TIMEOUT
-                )
-                self.assertTrue(ready, output)
-                data = os.read(process.stdout.fileno(), 4096)
-                self.assertTrue(data, output)
-                output += data.decode()
-
-        try:
-            read_until(">>> ")
-            process.stdin.write("(\n")
-            process.stdin.flush()
-            read_until("... ")
-            after_secondary_prompt = len(output)
-
-            process.stdin.write("1)\n")
-            process.stdin.flush()
-            read_until(">>> ", after_secondary_prompt)
-            self.assertEqual(output[after_secondary_prompt:], "1\n>>> ")
-        finally:
-            kill_python(process)
-
     @cpython_only
     def test_lexer_buffer_realloc_with_null_start(self):
-        # gh-144759: NULL pointer arithmetic when the lexer buffer grows
-        # while parsing long input.
-        long_value = "é漢" * 2000
+        # gh-144759: NULL pointer arithmetic in the lexer when start and
+        # multi_line_start are NULL (uninitialized in tok_mode_stack[0])
+        # and the lexer buffer is reallocated while parsing long input.
+        long_value = "a" * 2000
         user_input = dedent(f"""\
         x = f'{{{long_value!r}}}'
         print(x)
         """)
-        for newline in ("\n", "\r\n"):
-            with self.subTest(newline=newline):
-                p = spawn_repl(encoding="utf-8")
-                # Bypass Windows text-mode translation of CRLF to CRCRLF.
-                p.stdin.buffer.write(user_input.replace("\n", newline).encode("utf-8"))
-                output = kill_python(p)
-                self.assertEqual(p.returncode, 0)
-                self.assertIn(long_value, output)
-
-    @cpython_only
-    def test_multiline_fstring_source_reallocation(self):
-        long_line = " " * 9000 + "+ 2"
-        user_input = (
-            'value = f"""{(\n'
-            '1\n'
-            f'{long_line}\n'
-            ')}"""\n'
-            'print(value)\n'
-        )
         p = spawn_repl()
         p.stdin.write(user_input)
         output = kill_python(p)
         self.assertEqual(p.returncode, 0)
-        self.assertIn(">>> 3\n>>> ", output)
+        self.assertIn(long_value, output)
 
     def test_close_stdin(self):
         user_input = dedent('''
@@ -343,7 +294,7 @@ class TestInteractiveInterpreter(unittest.TestCase):
         expected_lines = [
             '    def f(x, x): ...',
             '             ^',
-            "SyntaxError: duplicate parameter 'x' in function definition"
+            "SyntaxError: duplicate argument 'x' in function definition"
         ]
         self.assertEqual(output.splitlines()[4:-1], expected_lines)
 
@@ -482,13 +433,6 @@ class TestAsyncioREPL(unittest.TestCase):
         p = spawn_asyncio_repl()
         p.stdin.write(user_input)
         user_input2 = "async def set_var(): var.set('ok')\n"
-        try:
-            import _pyrepl # noqa: F401
-        except ModuleNotFoundError:
-            # If we're going to be forced into the regular REPL, then we need an
-            # extra newline here. Omit it by default to catch any breakage to
-            # the new REPL's behavior.
-            user_input2 += "\n"
         p.stdin.write(user_input2)
         user_input3 = "await set_var()\n"
         p.stdin.write(user_input3)

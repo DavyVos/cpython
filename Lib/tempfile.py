@@ -31,7 +31,6 @@ __all__ = [
     "TMP_MAX", "gettempprefix",            # constants
     "tempdir", "gettempdir",
     "gettempprefixb", "gettempdirb",
-    "TemporaryFileWrapper",
    ]
 
 
@@ -119,15 +118,11 @@ def _sanitize_params(prefix, suffix, dir):
     output_type = _infer_return_type(prefix, suffix, dir)
     if suffix is None:
         suffix = output_type()
-    if _os.path.dirname(suffix):
-        raise ValueError("suffix can't contain a directory component")
     if prefix is None:
         if output_type is str:
             prefix = template
         else:
             prefix = _os.fsencode(template)
-    if _os.path.dirname(prefix):
-        raise ValueError("prefix can't contain a directory component")
     if dir is None:
         if output_type is str:
             dir = gettempdir()
@@ -497,19 +492,11 @@ class _TemporaryFileCloser:
     cleanup_called = False
     close_called = False
 
-    def __init__(
-        self,
-        file,
-        name,
-        delete=True,
-        delete_on_close=True,
-        warn_message="Implicitly cleaning up unknown file",
-    ):
+    def __init__(self, file, name, delete=True, delete_on_close=True):
         self.file = file
         self.name = name
         self.delete = delete
         self.delete_on_close = delete_on_close
-        self.warn_message = warn_message
 
     def cleanup(self, windows=(_os.name == 'nt'), unlink=_os.unlink):
         if not self.cleanup_called:
@@ -537,13 +524,10 @@ class _TemporaryFileCloser:
                     self.cleanup()
 
     def __del__(self):
-        close_called = self.close_called
         self.cleanup()
-        if not close_called:
-            _warnings.warn(self.warn_message, ResourceWarning)
 
 
-class TemporaryFileWrapper:
+class _TemporaryFileWrapper:
     """Temporary file wrapper
 
     This class provides a wrapper around files opened for
@@ -554,17 +538,8 @@ class TemporaryFileWrapper:
     def __init__(self, file, name, delete=True, delete_on_close=True):
         self.file = file
         self.name = name
-        self._closer = _TemporaryFileCloser(
-            file,
-            name,
-            delete,
-            delete_on_close,
-            warn_message=f"Implicitly cleaning up {self!r}",
-        )
-
-    def __repr__(self):
-        file = self.__dict__['file']
-        return f"<{type(self).__name__} {file=}>"
+        self._closer = _TemporaryFileCloser(file, name, delete,
+                                            delete_on_close)
 
     def __getattr__(self, name):
         # Attribute lookups are delegated to the underlying file
@@ -613,19 +588,6 @@ class TemporaryFileWrapper:
         # closed when the generator is finalized, due to PEP380 semantics.
         for line in self.file:
             yield line
-
-def __getattr__(name):
-    if name == "_TemporaryFileWrapper":
-        _warnings._deprecated(
-            "tempfile._TemporaryFileWrapper",
-            message=(
-                "{name!r} is deprecated and slated for removal in Python {remove}. "
-                "Use tempfile.TemporaryFileWrapper instead."
-            ),
-            remove=(3, 21),
-        )
-        return TemporaryFileWrapper
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 def NamedTemporaryFile(mode='w+b', buffering=-1, encoding=None,
                        newline=None, suffix=None, prefix=None,
@@ -679,7 +641,7 @@ def NamedTemporaryFile(mode='w+b', buffering=-1, encoding=None,
             raw = getattr(file, 'buffer', file)
             raw = getattr(raw, 'raw', raw)
             raw.name = name
-            return TemporaryFileWrapper(file, name, delete, delete_on_close)
+            return _TemporaryFileWrapper(file, name, delete, delete_on_close)
         except:
             file.close()
             raise
@@ -728,7 +690,7 @@ else:
             fd = None
             def opener(*args):
                 nonlocal fd
-                flags2 = (flags | _os.O_TMPFILE) & ~_os.O_CREAT & ~_os.O_EXCL
+                flags2 = (flags | _os.O_TMPFILE) & ~_os.O_CREAT
                 fd = _os.open(dir, flags2, 0o600)
                 return fd
             try:
@@ -763,7 +725,7 @@ else:
             fd, name = _mkstemp_inner(dir, prefix, suffix, flags, output_type)
             try:
                 _os.unlink(name)
-            except BaseException:
+            except BaseException as e:
                 _os.close(fd)
                 raise
             return fd
@@ -987,13 +949,10 @@ class TemporaryDirectory:
     @classmethod
     def _rmtree(cls, name, ignore_errors=False, repeated=False, dir_fd=None,
                 fullname=None):
-
-        # work with str paths throughout
-        name = _os.fsdecode(name)
-        fullname = name if fullname is None else _os.fsdecode(fullname)
+        if fullname is None:
+            fullname = name
 
         def onexc(func, path, exc, direntry=None, dir_fd=None):
-            path = _os.fsdecode(path)
             # On DragonFly BSD, UF_NOUNLINK removal fails with EISDIR, not EPERM.
             if isinstance(exc, (PermissionError, IsADirectoryError)):
                 if repeated and path == name:

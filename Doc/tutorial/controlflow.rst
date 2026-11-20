@@ -147,7 +147,7 @@ the list, thus saving space.
 
 We say such an object is :term:`iterable`, that is, suitable as a target for
 functions and constructs that expect something from which they can
-obtain successive items until the supply is :term:`exhausted`.  We have seen that
+obtain successive items until the supply is exhausted.  We have seen that
 the :keyword:`for` statement is such a construct, while an example of a function
 that takes an iterable is :func:`sum`::
 
@@ -296,8 +296,7 @@ similar to a switch statement in C, Java or JavaScript (and many
 other languages), but it's more similar to pattern matching in
 languages like Rust or Haskell. Only the first pattern that matches
 gets executed and it can also extract components (sequence elements
-or object attributes) from the value into variables. If no case matches,
-none of the branches is executed.
+or object attributes) from the value into variables.
 
 The simplest form compares a subject value against one or more literals::
 
@@ -313,7 +312,7 @@ The simplest form compares a subject value against one or more literals::
                 return "Something's wrong with the internet"
 
 Note the last block: the "variable name" ``_`` acts as a *wildcard* and
-never fails to match.
+never fails to match. If no case matches, none of the branches is executed.
 
 You can combine several literals in a single pattern using ``|`` ("or")::
 
@@ -1068,6 +1067,7 @@ Here is an example of a multi-line docstring::
 Function Annotations
 --------------------
 
+.. sectionauthor:: Zachary Ware <zachary.ware@gmail.com>
 .. index::
    pair: function; annotations
    single: ->; function annotations
@@ -1077,7 +1077,7 @@ Function Annotations
 information about the types used by user-defined functions (see :pep:`3107` and
 :pep:`484` for more information).
 
-:term:`Annotations <function annotation>` are stored in the :attr:`~object.__annotations__`
+:term:`Annotations <function annotation>` are stored in the :attr:`!__annotations__`
 attribute of the function as a dictionary and have no effect on any other part of the
 function.  Parameter annotations are defined by a colon after the parameter name, followed
 by an expression evaluating to the value of the annotation.  Return annotations are
@@ -1101,6 +1101,7 @@ value annotated::
 Intermezzo: Coding Style
 ========================
 
+.. sectionauthor:: Georg Brandl <georg@python.org>
 .. index:: pair: coding; style
 
 Now that you are about to write longer, more complex pieces of Python, it is a

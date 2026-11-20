@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/resource.h>         // getrusage()
 #include <unistd.h>               // getpagesize()
+#include <internal/pycore_long.h> // _PyLong_IsNegative()
 
 /* On some systems, these aren't in any header file.
    On others they are, with inconsistent prototypes.
@@ -21,6 +22,22 @@
 module resource
 [clinic start generated code]*/
 /*[clinic end generated code: output=da39a3ee5e6b4b0d input=e89d38ed52609d7c]*/
+
+/*[python input]
+class pid_t_converter(CConverter):
+    type = 'pid_t'
+    format_unit = '" _Py_PARSE_PID "'
+
+    def parse_arg(self, argname, displayname, *, limited_capi):
+        return self.format_code("""
+            {paramname} = PyLong_AsPid({argname});
+            if ({paramname} == -1 && PyErr_Occurred()) {{{{
+                goto exit;
+            }}}}
+            """,
+            argname=argname)
+[python start generated code]*/
+/*[python end generated code: output=da39a3ee5e6b4b0d input=c94349aa1aad151d]*/
 
 #include "clinic/resource.c.h"
 
@@ -139,7 +156,7 @@ py2rlim(PyObject *obj, rlim_t *out)
     if (obj == NULL) {
         return -1;
     }
-    int neg = PyLong_IsNegative(obj);
+    int neg = _PyLong_IsNegative((const PyLongObject *)obj);
     assert(neg >= 0);
     Py_ssize_t bytes = PyLong_AsNativeBytes(obj, out, sizeof(*out),
                                             Py_ASNATIVEBYTES_NATIVE_ENDIAN |
@@ -148,14 +165,7 @@ py2rlim(PyObject *obj, rlim_t *out)
     if (bytes < 0) {
         return -1;
     }
-    else if (neg && *out == RLIM_INFINITY && bytes <= (Py_ssize_t)sizeof(*out)) {
-        if (PyErr_WarnEx(PyExc_DeprecationWarning,
-            "Use RLIM_INFINITY instead of negative limit value.", 1))
-        {
-            return -1;
-        }
-    }
-    else if (neg) {
+    else if (neg && (*out != RLIM_INFINITY || bytes > (Py_ssize_t)sizeof(*out))) {
         PyErr_SetString(PyExc_ValueError,
             "Cannot convert negative int");
         return -1;
@@ -201,6 +211,9 @@ error:
 static PyObject*
 rlim2py(rlim_t value)
 {
+    if (value == RLIM_INFINITY) {
+        return PyLong_FromNativeBytes(&value, sizeof(value), -1);
+    }
     return PyLong_FromUnsignedNativeBytes(&value, sizeof(value), -1);
 }
 
@@ -506,45 +519,15 @@ resource_exec(PyObject *module)
     ADD_INT(module, RLIMIT_KQUEUES);
 #endif
 
-#ifdef RLIMIT_NTHR
-    ADD_INT(module, RLIMIT_NTHR);
-#endif
-
-#ifdef RLIMIT_THREADS
-    ADD_INT(module, RLIMIT_THREADS);
-#endif
-
-#ifdef RLIMIT_UMTXP
-    ADD_INT(module, RLIMIT_UMTXP);
-#endif
-
-#ifdef RLIMIT_PIPEBUF
-    ADD_INT(module, RLIMIT_PIPEBUF);
-#endif
-
     if (PyModule_Add(module, "RLIM_INFINITY", rlim2py(RLIM_INFINITY)) < 0) {
         return -1;
     }
-
-#ifdef RLIM_SAVED_CUR
-    if (PyModule_Add(module, "RLIM_SAVED_CUR", rlim2py(RLIM_SAVED_CUR)) < 0) {
-        return -1;
-    }
-#endif
-
-#ifdef RLIM_SAVED_MAX
-    if (PyModule_Add(module, "RLIM_SAVED_MAX", rlim2py(RLIM_SAVED_MAX)) < 0) {
-        return -1;
-    }
-#endif
-
     return 0;
 
 #undef ADD_INT
 }
 
 static struct PyModuleDef_Slot resource_slots[] = {
-    _Py_ABI_SLOT,
     {Py_mod_exec, resource_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {Py_mod_gil, Py_MOD_GIL_NOT_USED},

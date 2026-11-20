@@ -5,6 +5,8 @@
    :synopsis: Functions for working with calendars, including some emulation
               of the Unix cal program.
 
+.. sectionauthor:: Drew Csillag <drew_csillag@geocities.com>
+
 **Source code:** :source:`Lib/calendar.py`
 
 --------------
@@ -156,40 +158,32 @@ interpreted as prescribed by the ISO 8601 standard.  Year 0 is 1 BC, year -1 is
 
    :class:`TextCalendar` instances have the following methods:
 
-   .. method:: prweek(theweek, width)
 
-      Print a week's calendar as returned by :meth:`formatweek` and without a
-      final newline.
-
-
-   .. method:: formatday(day, weekday, width)
+   .. method:: formatday(theday, weekday, width)
 
       Return a string representing a single day formatted with the given *width*.
-      If *day* is ``0``, return a string of spaces of
+      If *theday* is ``0``, return a string of spaces of
       the specified width, representing an empty day. The *weekday* parameter
       is unused.
 
-   .. method:: formatweek(theweek, width)
+   .. method:: formatweek(theweek, w=0)
 
-      Return a single week in a string with no newline. *width* specifies
-      the width of the date columns, which are centered. Depends
+      Return a single week in a string with no newline. If *w* is provided, it
+      specifies the width of the date columns, which are centered. Depends
       on the first weekday as specified in the constructor or set by the
       :meth:`setfirstweekday` method.
 
-
-   .. method:: formatweekday(day, width)
+   .. method:: formatweekday(weekday, width)
 
       Return a string representing the name of a single weekday formatted to
-      the specified *width*. The *day* parameter is an integer representing
+      the specified *width*. The *weekday* parameter is an integer representing
       the day of the week, where ``0`` is Monday and ``6`` is Sunday.
-
 
    .. method:: formatweekheader(width)
 
       Return a string containing the header row of weekday names, formatted
       with the given *width* for each column. The names depend on the locale
       settings and are padded to the specified width.
-
 
    .. method:: formatmonth(theyear, themonth, w=0, l=0)
 
@@ -199,14 +193,12 @@ interpreted as prescribed by the ISO 8601 standard.  Year 0 is 1 BC, year -1 is
       on the first weekday as specified in the constructor or set by the
       :meth:`setfirstweekday` method.
 
-
-   .. method:: formatmonthname(theyear, themonth, width, withyear=True)
+   .. method:: formatmonthname(theyear, themonth, width=0, withyear=True)
 
       Return a string representing the month's name centered within the
       specified *width*. If *withyear* is ``True``, include the year in the
       output. The *theyear* and *themonth* parameters specify the year
       and month for the name to be formatted respectively.
-
 
    .. method:: prmonth(theyear, themonth, w=0, l=0)
 
@@ -254,7 +246,7 @@ interpreted as prescribed by the ISO 8601 standard.  Year 0 is 1 BC, year -1 is
       3) specifies the number of months per row. *css* is the name for the
       cascading style sheet to be used. :const:`None` can be passed if no style
       sheet should be used. *encoding* specifies the encoding to be used for the
-      output (defaulting to ``'utf-8'``).
+      output (defaulting to the system default encoding).
 
 
    .. method:: formatmonthname(theyear, themonth, withyear=True)
@@ -432,8 +424,7 @@ For simple text calendars this module provides the following functions.
 
 .. function:: prcal(theyear, w=0, l=0, c=6, m=3)
 
-   Prints the calendar for an entire year as returned by
-   :func:`~calendar.calendar`.
+   Prints the calendar for an entire year as returned by  :func:`calendar`.
 
 
 .. function:: calendar(theyear, w=2, l=1, c=6, m=3)
@@ -451,7 +442,7 @@ For simple text calendars this module provides the following functions.
    inverse.
 
 
-The :mod:`!calendar` module exports the following data attributes:
+The :mod:`calendar` module exports the following data attributes:
 
 .. data:: day_name
 
@@ -505,14 +496,6 @@ The :mod:`!calendar` module exports the following data attributes:
        >>> list(calendar.month_name)
        ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
-   .. caution::
-
-      In locales with alternative month names forms, the :data:`!month_name` sequence
-      may not be suitable when a month name stands by itself and not as part of a date.
-      For instance, in Greek and in many Slavic and Baltic languages, :data:`!month_name`
-      will produce the month in genitive case. Use :data:`standalone_month_name` for a form
-      suitable for standalone use.
-
 
 .. data:: month_abbr
 
@@ -523,31 +506,6 @@ The :mod:`!calendar` module exports the following data attributes:
        >>> import calendar
        >>> list(calendar.month_abbr)
        ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-   .. caution::
-
-      In locales with alternative month names forms, the :data:`!month_abbr` sequence
-      may not be suitable when a month name stands by itself and not as part of a date.
-      Use :data:`standalone_month_abbr` for a form suitable for standalone use.
-
-
-.. data:: standalone_month_name
-
-   A sequence that represents the months of the year in the current locale
-   in the standalone form if the locale provides one. Else it is equivalent
-   to :data:`month_name`.
-
-   .. versionadded:: 3.15
-
-
-.. data:: standalone_month_abbr
-
-   A sequence that represents the abbreviated months of the year in the current
-   locale in the standalone form if the locale provides one. Else it is
-   equivalent to :data:`month_abbr`.
-
-   .. versionadded:: 3.15
-
 
 .. data:: JANUARY
           FEBRUARY
@@ -577,7 +535,7 @@ The :mod:`!calendar` module exports the following data attributes:
    .. versionadded:: 3.12
 
 
-The :mod:`!calendar` module defines the following exceptions:
+The :mod:`calendar` module defines the following exceptions:
 
 .. exception:: IllegalMonthError(month)
 
@@ -616,12 +574,12 @@ The :mod:`!calendar` module defines the following exceptions:
 
 .. _calendar-cli:
 
-Command-line usage
+Command-Line Usage
 ------------------
 
 .. versionadded:: 2.5
 
-The :mod:`!calendar` module can be executed as a script from the command line
+The :mod:`calendar` module can be executed as a script from the command line
 to interactively print a calendar.
 
 .. code-block:: shell
@@ -719,7 +677,8 @@ The following options are accepted:
 .. option:: month
 
    The month of the specified :option:`year` to print the calendar for.
-   Must be a number between 1 and 12.
+   Must be a number between 1 and 12,
+   and may only be used in text mode.
    Defaults to printing a calendar for the full year.
 
 
@@ -753,14 +712,6 @@ The following options are accepted:
    The number of months printed per row.
    Defaults to 3.
 
-.. versionchanged:: 3.14
-   By default, today's date is highlighted in color and can be
-   :ref:`controlled using environment variables <using-on-controlling-color>`.
-
-.. versionchanged:: 3.15
-   By default, the month is now also highlighted in color, and
-   the days of the week are also in color. This behavior can be
-   :ref:`controlled using environment variables <using-on-controlling-color>`.
 
 *HTML-mode options:*
 

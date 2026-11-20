@@ -28,85 +28,18 @@ under :ref:`reference counting <countingrefs>`.
    object.  In a normal "release" build, it contains only the object's
    reference count and a pointer to the corresponding type object.
    Nothing is actually declared to be a :c:type:`PyObject`, but every pointer
-   to a Python object can be cast to a :c:expr:`PyObject*`.
-
-   The members must not be accessed directly; instead use macros such as
-   :c:macro:`Py_REFCNT` and :c:macro:`Py_TYPE`.
-
-   In the :ref:`Stable ABI <stable-abi>` for Free-Threaded Builds (``abi3t``),
-   this struct is opaque; its size and layout may change between
-   Python versions.
-   In Stable ABI for non-free-threaded builds (``abi3``), the
-   :c:member:`!ob_refcnt` and :c:member:`!ob_type` fields are available,
-   but using them directly is discouraged.
-
-   .. c:member:: Py_ssize_t ob_refcnt
-
-      The object's reference count, as returned by :c:macro:`Py_REFCNT`.
-      Do not use this field directly; instead use functions and macros such as
-      :c:macro:`!Py_REFCNT`, :c:func:`Py_INCREF` and :c:func:`Py_DecRef`.
-
-      The field type may be different from ``Py_ssize_t``, depending on
-      build configuration and platform.
-
-   .. c:member:: PyTypeObject* ob_type
-
-      The object's type.
-      Do not use this field directly; use :c:macro:`Py_TYPE` and
-      :c:func:`Py_SET_TYPE` instead.
-
-   .. c:member:: PyMutex ob_mutex
-
-      A :ref:`per-object lock <per-object-locks>`, present only in the :term:`free-threaded <free threading>`
-      build (when :c:macro:`Py_GIL_DISABLED` is defined).
-
-      This field is **reserved for use by the critical section API**
-      (:c:macro:`Py_BEGIN_CRITICAL_SECTION` / :c:macro:`Py_END_CRITICAL_SECTION`).
-      Do **not** lock it directly with ``PyMutex_Lock``; doing so can cause
-      deadlocks.  If you need your own lock, add a separate :c:type:`PyMutex`
-      field to your object struct.
-
-      .. versionadded:: 3.13
+   to a Python object can be cast to a :c:expr:`PyObject*`.  Access to the
+   members must be done by using the macros :c:macro:`Py_REFCNT` and
+   :c:macro:`Py_TYPE`.
 
 
 .. c:type:: PyVarObject
 
-   An extension of :c:type:`PyObject` that adds the
-   :c:member:`~PyVarObject.ob_size` field.
-   This is intended for objects that have some notion of *length*.
-
-   As with :c:type:`!PyObject`, the members must not be accessed directly;
-   instead use macros such as :c:macro:`Py_SIZE`, :c:macro:`Py_REFCNT` and
-   :c:macro:`Py_TYPE`.
-
-   In the :ref:`Stable ABI <stable-abi>` for Free-Threaded Builds (``abi3t``),
-   this struct is opaque; its size and layout may change between
-   Python versions.
-   In Stable ABI for non-free-threaded builds (``abi3``), the
-   :c:member:`!ob_base` and :c:member:`!ob_size` fields are available,
-   but using them directly is discouraged.
-
-   .. c:member:: PyObject ob_base
-
-      Common object header.
-      Typically, this field is not accessed directly; instead
-      :c:type:`!PyVarObject` can be cast to :c:type:`PyObject`.
-
-   .. c:member:: Py_ssize_t ob_size
-
-      A size field, whose contents should be considered an object's internal
-      implementation detail.
-
-      Do not use this field directly; use :c:macro:`Py_SIZE` instead.
-
-      Object creation functions such as :c:func:`PyObject_NewVar` will
-      generally set this field to the requested size (number of items).
-      After creation, arbitrary values can be stored in :c:member:`!ob_size`
-      using :c:macro:`Py_SET_SIZE`.
-
-      To get an object's publicly exposed length, as returned by
-      the Python function :py:func:`len`, use :c:func:`PyObject_Length`
-      instead.
+   This is an extension of :c:type:`PyObject` that adds the :c:member:`~PyVarObject.ob_size`
+   field.  This is only used for objects that have some notion of *length*.
+   This type does not often appear in the Python/C API.
+   Access to the members must be done by using the macros
+   :c:macro:`Py_REFCNT`, :c:macro:`Py_TYPE`, and :c:macro:`Py_SIZE`.
 
 
 .. c:macro:: PyObject_HEAD
@@ -170,8 +103,9 @@ under :ref:`reference counting <countingrefs>`.
 
    Get the type of the Python object *o*.
 
-   The returned reference is :term:`borrowed <borrowed reference>` from *o*.
-   Do not release it with :c:func:`Py_DECREF` or similar.
+   Return a :term:`borrowed reference`.
+
+   Use the :c:func:`Py_SET_TYPE` function to set an object type.
 
    .. versionchanged:: 3.11
       :c:func:`Py_TYPE()` is changed to an inline static function.
@@ -188,26 +122,16 @@ under :ref:`reference counting <countingrefs>`.
 
 .. c:function:: void Py_SET_TYPE(PyObject *o, PyTypeObject *type)
 
-   Set the type of object *o* to *type*, without any checking or reference
-   counting.
-
-   This is a very low-level operation.
-   Consider instead setting the Python attribute :attr:`~object.__class__`
-   using :c:func:`PyObject_SetAttrString` or similar.
-
-   Note that assigning an incompatible type can lead to undefined behavior.
-
-   If *type* is a :ref:`heap type <heap-types>`, the caller must create a
-   new reference to it.
-   Similarly, if the old type of *o* is a heap type, the caller must release
-   a reference to that type.
+   Set the object *o* type to *type*.
 
    .. versionadded:: 3.9
 
 
 .. c:function:: Py_ssize_t Py_SIZE(PyVarObject *o)
 
-   Get the :c:member:`~PyVarObject.ob_size` field of *o*.
+   Get the size of the Python object *o*.
+
+   Use the :c:func:`Py_SET_SIZE` function to set an object size.
 
    .. versionchanged:: 3.11
       :c:func:`Py_SIZE()` is changed to an inline static function.
@@ -216,7 +140,7 @@ under :ref:`reference counting <countingrefs>`.
 
 .. c:function:: void Py_SET_SIZE(PyVarObject *o, Py_ssize_t size)
 
-   Set the :c:member:`~PyVarObject.ob_size` field of *o* to *size*.
+   Set the object *o* size to *size*.
 
    .. versionadded:: 3.9
 
@@ -312,8 +236,6 @@ Implementing functions and methods
    .. c:member:: const char *ml_name
 
       Name of the method.
-
-      A ``NULL`` *ml_name* marks the end of a :c:type:`!PyMethodDef` array.
 
    .. c:member:: PyCFunction ml_meth
 
@@ -610,18 +532,6 @@ definition with the same method name.
    type checking.
 
 
-.. c:function:: PyTypeObject *PyCFunction_GET_CLASS(PyObject *func)
-
-   Return a :term:`borrowed reference` to the defining class of *func* if
-   its :c:member:`~PyMethodDef.ml_flags` includes :c:macro:`METH_METHOD`.
-   Otherwise, return ``NULL`` without setting an exception.
-
-   *func* must be a C function object and must not be ``NULL``.
-   This function does not perform error or type checking.
-
-   .. versionadded:: 3.9
-
-
 Accessing attributes of extension types
 ---------------------------------------
 
@@ -673,8 +583,7 @@ Accessing attributes of extension types
    ``PyMemberDef`` may contain a definition for the special member
    ``"__vectorcalloffset__"``, corresponding to
    :c:member:`~PyTypeObject.tp_vectorcall_offset` in type objects.
-   This member must be defined with ``Py_T_PYSSIZET``, and either
-   ``Py_READONLY`` or ``Py_READONLY | Py_RELATIVE_OFFSET``. For example::
+   These must be defined with ``Py_T_PYSSIZET`` and ``Py_READONLY``, for example::
 
       static PyMemberDef spam_type_members[] = {
           {"__vectorcalloffset__", Py_T_PYSSIZET,
@@ -694,12 +603,6 @@ Accessing attributes of extension types
 
       ``PyMemberDef`` is always available.
       Previously, it required including ``"structmember.h"``.
-
-   .. versionchanged:: 3.14
-
-      :c:macro:`Py_RELATIVE_OFFSET` is now allowed for
-      ``"__vectorcalloffset__"``, ``"__dictoffset__"`` and
-      ``"__weaklistoffset__"``.
 
 .. c:function:: PyObject* PyMember_GetOne(const char *obj_addr, struct PyMemberDef *m)
 
@@ -745,12 +648,14 @@ The following flags can be used with :c:member:`PyMemberDef.flags`:
    entry indicates an offset from the subclass-specific data, rather than
    from ``PyObject``.
 
-   Can only be used as part of the :c:data:`Py_tp_members`
+   Can only be used as part of :c:member:`Py_tp_members <PyTypeObject.tp_members>`
    :c:type:`slot <PyType_Slot>` when creating a class using negative
    :c:member:`~PyType_Spec.basicsize`.
    It is mandatory in that case.
-   When setting :c:member:`~PyTypeObject.tp_members` from the slot during
-   class creation, Python clears the flag and sets
+
+   This flag is only used in :c:type:`PyType_Slot`.
+   When setting :c:member:`~PyTypeObject.tp_members` during
+   class creation, Python clears it and sets
    :c:member:`PyMemberDef.offset` to the offset from the ``PyObject`` struct.
 
 .. index::
@@ -772,29 +677,10 @@ The following flags can be used with :c:member:`PyMemberDef.flags`:
 .. versionchanged:: 3.12
 
    The :c:macro:`!READONLY` macro was renamed to :c:macro:`Py_READONLY`.
-   The :c:macro:`PY_AUDIT_READ` macro was renamed with the ``Py_`` prefix.
+   The :c:macro:`!PY_AUDIT_READ` macro was renamed with the ``Py_`` prefix.
    The new names are now always available.
    Previously, these required ``#include "structmember.h"``.
    The header is still available and it provides the old names.
-
-.. c:macro:: PY_AUDIT_READ
-
-   Soft-deprecated alias of :c:macro:`Py_AUDIT_READ` (note capitalization of
-   the ``y``).
-   Only available with  ``#include "structmember.h"``.
-
-   .. soft-deprecated:: 3.12
-      Use :c:macro:`Py_AUDIT_READ` instead.
-
-
-.. c:macro:: PY_WRITE_RESTRICTED
-
-   A member flag that has no effect, retained solely for backwards compatibility.
-   This is only available with ``#include "structmember.h"``.
-
-   .. soft-deprecated:: 3.16
-      Omit this flag instead.
-
 
 .. _PyMemberDef-types:
 
@@ -812,77 +698,29 @@ If that is not possible, an exception such as :exc:`TypeError` or
 Unless marked (D), attributes defined this way cannot be deleted
 using e.g. :keyword:`del` or :py:func:`delattr`.
 
-.. stable-abi-note::
-
-   These values are available when compiling for the
-   :ref:`Stable ABI <stable>` since version 3.12.
-
-.. omit-stable-abi-notes::
-
-   .. list-table::
-      :align: left
-      :widths: auto
-      :header-rows: 1
-
-      * - Macro name
-        - C type
-        - Python type
-      * - .. c:macro:: Py_T_BYTE
-        - :c:expr:`char`
-        - :py:class:`int`
-      * - .. c:macro:: Py_T_SHORT
-        - :c:expr:`short`
-        - :py:class:`int`
-      * - .. c:macro:: Py_T_INT
-        - :c:expr:`int`
-        - :py:class:`int`
-      * - .. c:macro:: Py_T_LONG
-        - :c:expr:`long`
-        - :py:class:`int`
-      * - .. c:macro:: Py_T_LONGLONG
-        - :c:expr:`long long`
-        - :py:class:`int`
-      * - .. c:macro:: Py_T_UBYTE
-        - :c:expr:`unsigned char`
-        - :py:class:`int`
-      * - .. c:macro:: Py_T_UINT
-        - :c:expr:`unsigned int`
-        - :py:class:`int`
-      * - .. c:macro:: Py_T_USHORT
-        - :c:expr:`unsigned short`
-        - :py:class:`int`
-      * - .. c:macro:: Py_T_ULONG
-        - :c:expr:`unsigned long`
-        - :py:class:`int`
-      * - .. c:macro:: Py_T_ULONGLONG
-        - :c:expr:`unsigned long long`
-        - :py:class:`int`
-      * - .. c:macro:: Py_T_PYSSIZET
-        - :c:expr:`Py_ssize_t`
-        - :py:class:`int`
-      * - .. c:macro:: Py_T_FLOAT
-        - :c:expr:`float`
-        - :py:class:`float`
-      * - .. c:macro:: Py_T_DOUBLE
-        - :c:expr:`double`
-        - :py:class:`float`
-      * - .. c:macro:: Py_T_BOOL
-        - :c:expr:`char` (written as 0 or 1)
-        - :py:class:`bool`
-      * - .. c:macro:: Py_T_STRING
-        - :c:expr:`const char *` (*)
-        - :py:class:`str` (RO)
-      * - .. c:macro:: Py_T_STRING_INPLACE
-        - :c:expr:`const char[]` (*)
-        - :py:class:`str` (RO)
-      * - .. c:macro:: Py_T_CHAR
-        - :c:expr:`char` (0-127)
-        - :py:class:`str` (**)
-      * - .. c:macro:: Py_T_OBJECT_EX
-        - :c:expr:`PyObject *`
-        - :py:class:`object` (D)
-
-..
+================================ ============================= ======================
+Macro name                       C type                        Python type
+================================ ============================= ======================
+.. c:macro:: Py_T_BYTE           :c:expr:`char`                :py:class:`int`
+.. c:macro:: Py_T_SHORT          :c:expr:`short`               :py:class:`int`
+.. c:macro:: Py_T_INT            :c:expr:`int`                 :py:class:`int`
+.. c:macro:: Py_T_LONG           :c:expr:`long`                :py:class:`int`
+.. c:macro:: Py_T_LONGLONG       :c:expr:`long long`           :py:class:`int`
+.. c:macro:: Py_T_UBYTE          :c:expr:`unsigned char`       :py:class:`int`
+.. c:macro:: Py_T_UINT           :c:expr:`unsigned int`        :py:class:`int`
+.. c:macro:: Py_T_USHORT         :c:expr:`unsigned short`      :py:class:`int`
+.. c:macro:: Py_T_ULONG          :c:expr:`unsigned long`       :py:class:`int`
+.. c:macro:: Py_T_ULONGLONG      :c:expr:`unsigned long long`  :py:class:`int`
+.. c:macro:: Py_T_PYSSIZET       :c:expr:`Py_ssize_t`          :py:class:`int`
+.. c:macro:: Py_T_FLOAT          :c:expr:`float`               :py:class:`float`
+.. c:macro:: Py_T_DOUBLE         :c:expr:`double`              :py:class:`float`
+.. c:macro:: Py_T_BOOL           :c:expr:`char`                :py:class:`bool`
+                                 (written as 0 or 1)
+.. c:macro:: Py_T_STRING         :c:expr:`const char *` (*)    :py:class:`str` (RO)
+.. c:macro:: Py_T_STRING_INPLACE :c:expr:`const char[]` (*)    :py:class:`str` (RO)
+.. c:macro:: Py_T_CHAR           :c:expr:`char` (0-127)        :py:class:`str` (**)
+.. c:macro:: Py_T_OBJECT_EX      :c:expr:`PyObject *`          :py:class:`object` (D)
+================================ ============================= ======================
 
    (*): Zero-terminated, UTF8-encoded C string.
    With :c:macro:`!Py_T_STRING` the C representation is a pointer;

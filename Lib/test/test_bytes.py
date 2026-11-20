@@ -5,25 +5,19 @@ the latter should be modernized).
 """
 
 import array
-import codecs
-import contextlib
+import os
+import re
+import sys
 import copy
 import functools
 import operator
-import os
 import pickle
-import re
-import sys
 import tempfile
 import textwrap
-import threading
 import unittest
-from _codecs import _unregister_error as _codecs_unregister_error
 
 import test.support
-from test import support
 from test.support import import_helper
-from test.support import threading_helper
 from test.support import warnings_helper
 import test.string_tests
 import test.list_tests
@@ -49,13 +43,6 @@ class Indexable:
         self.value = value
     def __index__(self):
         return self.value
-
-
-@contextlib.contextmanager
-def inject_memory_error(testcase, start=0):
-    with testcase.assertRaises(MemoryError):
-        with support.inject_memory_error_cm(start):
-            yield
 
 
 class BaseBytesTest:
@@ -410,8 +397,6 @@ class BaseBytesTest:
         self.assertRaises(TypeError, lambda: b1 + "def")
         self.assertRaises(TypeError, lambda: "abc" + b2)
 
-        self.assertEqual(self.type2test() + memoryview(b''), b'')
-
     def test_repeat(self):
         for b in b"abc", self.type2test(b"abc"):
             self.assertEqual(b * 3, b"abcabcabc")
@@ -462,49 +447,18 @@ class BaseBytesTest:
 
         # check that ASCII whitespace is ignored
         self.assertEqual(self.type2test.fromhex(' 1A\n2B\t30\v'), b)
-        self.assertEqual(self.type2test.fromhex(b' 1A\n2B\t30\v'), b)
         for c in "\x09\x0A\x0B\x0C\x0D\x20":
             self.assertEqual(self.type2test.fromhex(c), self.type2test())
         for c in "\x1C\x1D\x1E\x1F\x85\xa0\u2000\u2002\u2028":
             self.assertRaises(ValueError, self.type2test.fromhex, c)
 
-        # Check that we can parse bytes and bytearray
-        tests = [
-            ("bytes", bytes),
-            ("bytearray", bytearray),
-            ("memoryview", memoryview),
-            ("array.array", lambda bs: array.array('B', bs)),
-        ]
-        for name, factory in tests:
-            with self.subTest(name=name):
-                self.assertEqual(self.type2test.fromhex(factory(b' 1A 2B 30 ')), b)
-
-        # Invalid bytes are rejected
-        for u8 in b"\0\x1C\x1D\x1E\x1F\x85\xa0":
-            b = bytes([30, 31, u8])
-            self.assertRaises(ValueError, self.type2test.fromhex, b)
-
         self.assertEqual(self.type2test.fromhex('0000'), b'\0\0')
-        with self.assertRaisesRegex(
-            TypeError,
-            r'fromhex\(\) argument must be str or bytes-like, not tuple',
-        ):
-            self.type2test.fromhex(())
+        self.assertRaises(TypeError, self.type2test.fromhex, b'1B')
         self.assertRaises(ValueError, self.type2test.fromhex, 'a')
         self.assertRaises(ValueError, self.type2test.fromhex, 'rt')
         self.assertRaises(ValueError, self.type2test.fromhex, '1a b cd')
         self.assertRaises(ValueError, self.type2test.fromhex, '\x00')
         self.assertRaises(ValueError, self.type2test.fromhex, '12   \x00   34')
-
-        # For odd number of character(s)
-        for value in ("a", "aaa", "deadbee"):
-            with self.assertRaises(ValueError) as cm:
-                self.type2test.fromhex(value)
-            self.assertIn("fromhex() arg must contain an even number of hexadecimal digits", str(cm.exception))
-        for value, position in (("a ", 1), (" aa a ", 5), (" aa a a ", 5)):
-            with self.assertRaises(ValueError) as cm:
-                self.type2test.fromhex(value)
-            self.assertIn(f"non-hexadecimal number found in fromhex() arg at position {position}", str(cm.exception))
 
         for data, pos in (
             # invalid first hexadecimal character
@@ -519,15 +473,6 @@ class BaseBytesTest:
             with self.assertRaises(ValueError) as cm:
                 self.type2test.fromhex(data)
             self.assertIn('at position %s' % pos, str(cm.exception))
-
-        # gh-158583: Check for out of bounds reads (uninitialized bytes).
-        # Create an array from a list to not overallocate.
-        a = array.array('B', list(b'1234  '))  # Py_ISSPACE() loop
-        self.assertEqual(self.type2test.fromhex(a), b'\x12\x34')
-
-        a = array.array('B', list(b'12345'))  # Missing second digit
-        with self.assertRaises(ValueError):
-            self.type2test.fromhex(a)
 
     def test_hex(self):
         self.assertRaises(TypeError, self.type2test.hex)
@@ -572,10 +517,10 @@ class BaseBytesTest:
         self.assertEqual(three_bytes.hex('*', -2), 'b901*ef')
         self.assertEqual(three_bytes.hex(sep=':', bytes_per_sep=2), 'b9:01ef')
         self.assertEqual(three_bytes.hex(sep='*', bytes_per_sep=-2), 'b901*ef')
-        for bytes_per_sep in 3, -3, sys.maxsize, -sys.maxsize:
+        for bytes_per_sep in 3, -3, 2**31-1, -(2**31-1):
             with self.subTest(bytes_per_sep=bytes_per_sep):
                 self.assertEqual(three_bytes.hex(':', bytes_per_sep), 'b901ef')
-        for bytes_per_sep in sys.maxsize+1, -sys.maxsize-1, 2**1000, -2**1000:
+        for bytes_per_sep in 2**31, -2**31, 2**1000, -2**1000:
             with self.subTest(bytes_per_sep=bytes_per_sep):
                 try:
                     self.assertEqual(three_bytes.hex(':', bytes_per_sep), 'b901ef')
@@ -604,37 +549,6 @@ class BaseBytesTest:
         self.assertEqual(six_bytes.hex(b'@', -5), '0306090c0f@12')
         self.assertEqual(six_bytes.hex(':', -6), '0306090c0f12')
         self.assertEqual(six_bytes.hex(' ', -95), '0306090c0f12')
-
-    def test_hex_simd_boundaries(self):
-        # Test lengths around the SIMD threshold (16 bytes).
-        # SIMD processes 16 bytes at a time; smaller inputs use scalar code.
-        for length in (14, 15, 16, 17, 31, 32, 33, 64, 65):
-            data = self.type2test(bytes(range(length)))
-            expected = ''.join(f'{b:02x}' for b in range(length))
-            with self.subTest(length=length):
-                self.assertEqual(data.hex(), expected)
-
-    def test_hex_nibble_boundaries(self):
-        # Test the nibble value boundary at 9/10 (where '9' becomes 'a').
-        # SIMD uses signed comparison for efficiency; verify correctness
-        # at this boundary for various nibble combinations.
-        boundary_bytes = self.type2test(bytes([
-            0x09,  # both nibbles: 0, 9
-            0x0a,  # both nibbles: 0, 10
-            0x90,  # both nibbles: 9, 0
-            0x99,  # both nibbles: 9, 9 (max all-digit)
-            0x9a,  # both nibbles: 9, 10
-            0xa0,  # both nibbles: 10, 0
-            0xa9,  # both nibbles: 10, 9
-            0xaa,  # both nibbles: 10, 10 (min all-letter)
-            0x00,  # min value
-            0xff,  # max value
-        ]))
-        self.assertEqual(boundary_bytes.hex(), '090a90999aa0a9aa00ff')
-
-        # Repeat with 16+ bytes to exercise SIMD path
-        simd_boundary = self.type2test(boundary_bytes * 2)
-        self.assertEqual(simd_boundary.hex(), '090a90999aa0a9aa00ff' * 2)
 
     def test_join(self):
         self.assertEqual(self.type2test(b"").join([]), b"")
@@ -870,46 +784,34 @@ class BaseBytesTest:
         pi = PseudoFloat(3.1415)
 
         exceptions_params = [
-            ('%x requires an integer, not float', b'%x', 3.14),
-            ('%X requires an integer, not float', b'%X', 2.11),
-            ('%o requires an integer, not float', b'%o', 1.79),
-            (r'%x requires an integer, not .*\.PseudoFloat', b'%x', pi),
-            ('%x requires an integer, not complex', b'%x', 3j),
-            ('%X requires an integer, not complex', b'%X', 2j),
-            ('%o requires an integer, not complex', b'%o', 1j),
-            ('%u requires a real number, not complex', b'%u', 3j),
-            ('%i requires a real number, not complex', b'%i', 2j),
-            ('%d requires a real number, not complex', b'%d', 2j),
+            ('%x format: an integer is required, not float', b'%x', 3.14),
+            ('%X format: an integer is required, not float', b'%X', 2.11),
+            ('%o format: an integer is required, not float', b'%o', 1.79),
+            ('%x format: an integer is required, not PseudoFloat', b'%x', pi),
+            ('%x format: an integer is required, not complex', b'%x', 3j),
+            ('%X format: an integer is required, not complex', b'%X', 2j),
+            ('%o format: an integer is required, not complex', b'%o', 1j),
+            ('%u format: a real number is required, not complex', b'%u', 3j),
+            # See https://github.com/python/cpython/issues/130928 as for why
+            # the exception message contains '%d' instead of '%i'.
+            ('%d format: a real number is required, not complex', b'%i', 2j),
+            ('%d format: a real number is required, not complex', b'%d', 2j),
             (
-                r'%c requires an integer in range\(256\)'
-                r' or a single byte, not .*\.PseudoFloat',
+                r'%c requires an integer in range\(256\) or a single byte',
                 b'%c', pi
             ),
         ]
 
         for msg, format_bytes, value in exceptions_params:
-            with self.assertRaisesRegex(TypeError, 'format argument: ' + msg):
+            with self.assertRaisesRegex(TypeError, msg):
                 operator.mod(format_bytes, value)
 
     def test_memory_leak_gh_140939(self):
         # gh-140939: MemoryError is raised without leaking
         _testcapi = import_helper.import_module('_testcapi')
-        with self.assertRaises((MemoryError, OverflowError)):
+        with self.assertRaises(MemoryError):
             b = self.type2test(b'%*b')
             b % (_testcapi.PY_SSIZE_T_MAX, b'abc')
-
-    def test_mod_bytes_lookup_error(self):
-        # An error raised while looking up __bytes__ propagates.
-        class BadBytes:
-            @property
-            def __bytes__(self):
-                raise ZeroDivisionError
-            def __buffer__(self, flags):
-                return memoryview(b'abc')
-
-        b = self.type2test(b'%b')
-        with self.assertRaises(ZeroDivisionError):
-            b % BadBytes()
 
     def test_imod(self):
         b = self.type2test(b'hello, %b!')
@@ -937,13 +839,6 @@ class BaseBytesTest:
         b = self.type2test(b'mississippi')
         self.assertEqual(b.replace(b'i', b'a'), b'massassappa')
         self.assertEqual(b.replace(b'ss', b'x'), b'mixixippi')
-
-    def test_replace_count_keyword(self):
-        b = self.type2test(b'aa')
-        self.assertEqual(b.replace(b'a', b'b', count=0), b'aa')
-        self.assertEqual(b.replace(b'a', b'b', count=1), b'ba')
-        self.assertEqual(b.replace(b'a', b'b', count=2), b'bb')
-        self.assertEqual(b.replace(b'a', b'b', count=3), b'bb')
 
     def test_replace_int_error(self):
         self.assertRaises(TypeError, self.type2test(b'a b').replace, 32, b'')
@@ -1150,14 +1045,13 @@ class BaseBytesTest:
         self.assertRaises(ValueError, b.translate, bytes(range(255)))
 
         c = b.translate(rosetta, b'hello')
-        self.assertEqual(c, b'')
-        self.assertEqual(type(c), self.type2test)
+        self.assertEqual(b, b'hello')
+        self.assertIsInstance(c, self.type2test)
 
         c = b.translate(rosetta)
         d = b.translate(rosetta, b'')
+        self.assertEqual(c, d)
         self.assertEqual(c, b'helle')
-        self.assertEqual(type(c), self.type2test)
-        self.assertEqual(d, b'helle')
 
         c = b.translate(rosetta, b'l')
         self.assertEqual(c, b'hee')
@@ -1171,34 +1065,6 @@ class BaseBytesTest:
         self.assertEqual(c, b'hee')
         c = b.translate(None, delete=b'e')
         self.assertEqual(c, b'hllo')
-
-        # short inputs starting with NUL bytes
-        table = bytes.maketrans(b'\x00', b'Z')
-        for data in b'\x00', b'\x00' * 8, b'\x00' * 8 + b'a' * 247:
-            c = self.type2test(data).translate(table)
-            self.assertEqual(c, data.replace(b'\x00', b'Z'))
-
-    @support.cpython_only
-    def test_translate_unchanged(self):
-        if self.type2test != bytes:
-            self.skipTest("test specific bytes.translate()")
-
-        # bytes.translate() returns the input string unchanged
-        # if no byte is modified
-        size = 1024
-        b = b'hell' + b'o' * size
-        rosetta = bytearray(range(256))
-        rosetta[ord('#')] = ord('?')
-        self.assertIs(b.translate(rosetta), b)
-
-        # bytes.translate() always create a new object
-        # if the input string is a bytes subclass
-        class bytes_subclass(bytes):
-            pass
-        b = bytes_subclass(b)
-        result = b.translate(rosetta)
-        self.assertIsNot(result, b)
-        self.assertEqual(result, b)
 
     def test_sq_item(self):
         _testlimitedcapi = import_helper.import_module('_testlimitedcapi')
@@ -1462,45 +1328,6 @@ class BytesTest(BaseBytesTest, unittest.TestCase):
         self.assertNotEqual(id(s), id(1 * s))
         self.assertNotEqual(id(s), id(s * 2))
 
-    @support.cpython_only
-    def test_concat_cpython(self):
-        # Test optimizations
-        empty = b''
-        abc = b"abc"
-        self.assertIs(abc + empty, abc)
-        self.assertIs(empty + abc, abc)
-        self.assertIs(empty + bytearray(b''), empty)
-        self.assertIs(empty + memoryview(b''), empty)
-
-        class Subclass(bytes):
-            pass
-
-        empty_subclass = Subclass(b"")
-        self.assertIs(empty + empty_subclass, empty)
-        self.assertIs(empty_subclass + empty, empty)
-        self.assertIs(abc + empty_subclass, abc)
-        self.assertIs(empty_subclass + abc, abc)
-
-        def assert_copy(result, expected):
-            self.assertIsNot(result, expected)
-            self.assertEqual(type(result), bytes)
-            self.assertEqual(result, expected)
-
-        # Copy the string if it's a subclass
-        def_subclass = Subclass(b"def")
-        assert_copy(def_subclass + empty, b'def')
-        assert_copy(empty + def_subclass, b'def')
-        assert_copy(abc + def_subclass, b'abcdef')
-        assert_copy(def_subclass + abc, b'defabc')
-
-    @support.cpython_only
-    def test_repeat_cpython(self):
-        # Test optimizations
-        for b in b'', b'x', b"abc":
-            self.assertIs(b * 1, b)
-            self.assertIs(b * 0, b'')
-            self.assertIs(b * -23, b'')
-
 
 class ByteArrayTest(BaseBytesTest, unittest.TestCase):
     type2test = bytearray
@@ -1586,16 +1413,6 @@ class ByteArrayTest(BaseBytesTest, unittest.TestCase):
         b.append(ord('p'))
         self.assertEqual(b, b'p')
 
-        # Cleared object should be empty.
-        b = bytearray(b'abc')
-        b.clear()
-        self.assertEqual(b.__alloc__(), 0)
-        base_size = sys.getsizeof(bytearray())
-        self.assertEqual(sys.getsizeof(b), base_size)
-        c = b.copy()
-        self.assertEqual(c.__alloc__(), 0)
-        self.assertEqual(sys.getsizeof(c), base_size)
-
     def test_copy(self):
         b = bytearray(b'abc')
         bb = b.copy()
@@ -1619,268 +1436,6 @@ class ByteArrayTest(BaseBytesTest, unittest.TestCase):
             return bytearray(map(ord, s))
         b = by("Hello, world")
         self.assertEqual(re.findall(br"\w+", b), [by("Hello"), by("world")])
-
-    def test_resize(self):
-        ba = bytearray(b'abcdef')
-        self.assertIsNone(ba.resize(3))
-        self.assertEqual(ba, bytearray(b'abc'))
-
-        self.assertIsNone(ba.resize(10))
-        self.assertEqual(len(ba), 10)
-        # Bytes beyond set values must be cleared.
-        self.assertEqual(ba, bytearray(b'abc\0\0\0\0\0\0\0'))
-
-        ba[3:10] = b'defghij'
-        self.assertEqual(ba, bytearray(b'abcdefghij'))
-
-        self.assertIsNone(ba.resize(2 ** 20))
-        self.assertEqual(len(ba), 2**20)
-        self.assertEqual(ba, bytearray(b'abcdefghij' + b'\0' * (2 ** 20 - 10)))
-
-        self.assertIsNone(ba.resize(0))
-        self.assertEqual(ba, bytearray())
-
-        self.assertIsNone(ba.resize(10))
-        self.assertEqual(ba, bytearray(b'\0' * 10))
-
-        # Subclass
-        ba = ByteArraySubclass(b'abcdef')
-        self.assertIsNone(ba.resize(3))
-        self.assertEqual(ba, bytearray(b'abc'))
-
-        # Check arguments
-        self.assertRaises(TypeError, bytearray().resize)
-        self.assertRaises(TypeError, bytearray().resize, (10, 10))
-
-        self.assertRaises(ValueError, bytearray().resize, -1)
-        self.assertRaises(ValueError, bytearray().resize, -200)
-        self.assertRaises(MemoryError, bytearray().resize, sys.maxsize)
-        self.assertRaises(MemoryError, bytearray(1000).resize, sys.maxsize)
-
-    @support.nomemtest
-    def test_resize_error(self):
-        # gh-157242: If bytearray.resize() fails (MemoryError),
-        # the bytearray must be left unchanged.
-        #
-        # gh-160303: If a slice is deleted or replaced by shorter data and
-        # shrinking the memory block fails (MemoryError), the bytearray
-        # must be modified anyway.
-
-        offset = 3
-        for logical_offset in (False, True):
-            with self.subTest(logical_offset=logical_offset):
-                # grow bytearray
-                ba = bytearray(b'0123456789')
-                if logical_offset:
-                    expected = ba[offset:]
-                    del ba[:offset]
-                else:
-                    expected = ba.copy()
-                with inject_memory_error(self):
-                    ba.resize(1024)
-                self.assertEqual(ba, expected)
-
-                # shrink bytearray
-                ba = bytearray(b'0123456789')
-                if logical_offset:
-                    expected = ba[offset:]
-                    del ba[:offset]
-                else:
-                    expected = ba.copy()
-                with inject_memory_error(self):
-                    ba.resize(1)
-                self.assertEqual(ba, expected)
-
-                # shrink bytearray with a slice at the front, in the middle
-                # and at the end
-                data = b'0123456789'
-                if logical_offset:
-                    data = data[offset:]
-                for start, stop in ((0, -2), (1, -1), (2, len(data))):
-                    for replacement in (b'', b'.'):
-                        with self.subTest(start=start, stop=stop,
-                                          replacement=replacement):
-                            ba = bytearray(b'0123456789')
-                            if logical_offset:
-                                del ba[:offset]
-                            index = slice(start, stop)
-                            value = bytearray(replacement)
-                            expected = data[:start] + replacement + data[stop:]
-                            with inject_memory_error(self):
-                                if replacement:
-                                    ba[index] = value
-                                else:
-                                    del ba[index]
-                            self.assertEqual(ba, expected)
-                            # float() relies on the null byte after the data.
-                            self.assertEqual(float(ba), float(expected))
-                            ba.append(ord('5'))
-                            del ba[:1]
-                            self.assertEqual(ba, expected[1:] + b'5')
-
-    def test_take_bytes(self):
-        ba = bytearray(b'ab')
-        self.assertEqual(ba.take_bytes(), b'ab')
-        self.assertEqual(len(ba), 0)
-        self.assertEqual(ba, bytearray(b''))
-        self.assertEqual(ba.__alloc__(), 0)
-        base_size = sys.getsizeof(bytearray())
-        self.assertEqual(sys.getsizeof(ba), base_size)
-
-        # Positive and negative slicing.
-        ba = bytearray(b'abcdef')
-        self.assertEqual(ba.take_bytes(1), b'a')
-        self.assertEqual(ba, bytearray(b'bcdef'))
-        self.assertEqual(len(ba), 5)
-        self.assertEqual(ba.take_bytes(-5), b'')
-        self.assertEqual(ba, bytearray(b'bcdef'))
-        self.assertEqual(len(ba), 5)
-        self.assertEqual(ba.take_bytes(-3), b'bc')
-        self.assertEqual(ba, bytearray(b'def'))
-        self.assertEqual(len(ba), 3)
-        self.assertEqual(ba.take_bytes(3), b'def')
-        self.assertEqual(ba, bytearray(b''))
-        self.assertEqual(len(ba), 0)
-
-        # Take nothing from emptiness.
-        self.assertEqual(ba.take_bytes(0), b'')
-        self.assertEqual(ba.take_bytes(), b'')
-        self.assertEqual(ba.take_bytes(None), b'')
-
-        # Out of bounds, bad take value.
-        self.assertRaises(IndexError, ba.take_bytes, -1)
-        self.assertRaises(TypeError, ba.take_bytes, 3.14)
-        ba = bytearray(b'abcdef')
-        self.assertRaises(IndexError, ba.take_bytes, 7)
-
-        # Offset between physical and logical start (ob_bytes != ob_start).
-        ba = bytearray(b'abcde')
-        del ba[:2]
-        self.assertEqual(ba, bytearray(b'cde'))
-        self.assertEqual(ba.take_bytes(), b'cde')
-
-        # Overallocation at end.
-        ba = bytearray(b'abcde')
-        del ba[-2:]
-        self.assertEqual(ba, bytearray(b'abc'))
-        self.assertEqual(ba.take_bytes(), b'abc')
-        ba = bytearray(b'abcde')
-        ba.resize(4)
-        self.assertEqual(ba.take_bytes(), b'abcd')
-
-        # Take of a bytearray with references should fail.
-        ba = bytearray(b'abc')
-        with memoryview(ba) as mv:
-            self.assertRaises(BufferError, ba.take_bytes)
-        self.assertEqual(ba.take_bytes(), b'abc')
-
-        # Leaving one byte must not adopt the shared single-byte bytes object
-        # as the buffer.
-        ba = bytearray(b'abc')
-        self.assertEqual(ba.take_bytes(2), b'ab')
-        ba[0] = ord('A')
-        self.assertEqual(ba, bytearray(b'A'))
-        self.assertEqual(ord(b'c'), ord('c'))
-
-    @support.nomemtest
-    def test_take_bytes_error(self):
-        # gh-157242: If bytearray.take_bytes() fails (MemoryError),
-        # the bytearray must be left unchanged.
-
-        for logical_offset, to_take, start_list in (
-            (True, 5, (0, 1)),
-            (False, 5, (0, 1)),
-            (True, None, (0,)),
-        ):
-            for start in start_list:
-                with self.subTest(logical_offset=logical_offset, start=start):
-                    ba = bytearray(b'0123456789')
-                    if logical_offset:
-                        expected = ba[3:]
-                        del ba[:3]
-                    else:
-                        expected = ba.copy()
-                    with inject_memory_error(self, start):
-                        ba.take_bytes(to_take)
-                    self.assertEqual(ba, expected)
-
-    @support.cpython_only  # tests an implementation detail
-    def test_take_bytes_optimization(self):
-        # Validate optimization around taking lots of little chunks out of a
-        # much bigger buffer. Save work by only copying a little rather than
-        # moving a lot.
-        ba = bytearray(b'abcdef' + b'0' * 1000)
-        start_alloc = ba.__alloc__()
-
-        # Take two bytes at a time, checking alloc doesn't change.
-        self.assertEqual(ba.take_bytes(2), b'ab')
-        self.assertEqual(ba.__alloc__(), start_alloc)
-        self.assertEqual(len(ba), 4 + 1000)
-        self.assertEqual(ba.take_bytes(2), b'cd')
-        self.assertEqual(ba.__alloc__(), start_alloc)
-        self.assertEqual(len(ba), 2 + 1000)
-        self.assertEqual(ba.take_bytes(2), b'ef')
-        self.assertEqual(ba.__alloc__(), start_alloc)
-        self.assertEqual(len(ba), 0 + 1000)
-        self.assertEqual(ba.__alloc__(), start_alloc)
-
-        # Take over half, alloc shrinks to exact size.
-        self.assertEqual(ba.take_bytes(501), b'0' * 501)
-        self.assertEqual(len(ba), 499)
-        bytes_header_size = sys.getsizeof(b'')
-        self.assertEqual(ba.__alloc__(), 499 + bytes_header_size)
-
-    def test_take_bytes_hash(self):
-        # gh-158219: bytearray constructor must not use a bytes object
-        # if its hash value is already cached.
-
-        def encode(string, errors='strict'):
-            encoded = string.encode('utf-8')
-            hash(encoded)   # a codec may hash its own output
-            return encoded, len(string)
-
-        def hashing_codec(name):
-            if name != 'test_take_bytes_hash':
-                return None
-            return codecs.CodecInfo(encode, None, name=name)
-
-        codecs.register(hashing_codec)
-        self.addCleanup(codecs.unregister, hashing_codec)
-
-        ba = bytearray('hello', 'test_take_bytes_hash')
-        ba[0] = ord('H')
-        taken = ba.take_bytes()
-        self.assertEqual(taken, b'Hello')
-        self.assertEqual(hash(taken), hash(b'Hello'))
-
-    def test_take_bytes_reentrant_resize(self):
-        # gh-153570: n.__index__() can resize the bytearray, so take_bytes()
-        # must re-read the size afterwards.  It cached the size before the
-        # call and used it for the bounds check and the buffer reads, so a
-        # reentrant clear() returned freed memory (a use-after-free read).
-        def take(target, resize, n):
-            class Evil:
-                def __index__(self):
-                    resize(target)
-                    return n
-            return target.take_bytes(Evil())
-
-        # clear() during __index__: nothing is left to take.
-        ba = bytearray(b'abcdefgh')
-        with self.assertRaises(IndexError):
-            take(ba, lambda b: b.clear(), 8)
-        self.assertEqual(ba, b'')
-
-        # shrink during __index__: n past the new size is out of range.
-        ba = bytearray(b'abcdefgh')
-        with self.assertRaises(IndexError):
-            take(ba, lambda b: b.__delitem__(slice(4, None)), 8)
-        self.assertEqual(ba, b'abcd')
-
-        # grow during __index__: the take runs against the new, larger size.
-        ba = bytearray(b'abcd')
-        self.assertEqual(take(ba, lambda b: b.extend(b'efgh'), 8), b'abcdefgh')
-        self.assertEqual(ba, b'')
 
     def test_setitem(self):
         def setitem_as_mapping(b, i, val):
@@ -2129,22 +1684,6 @@ class ByteArrayTest(BaseBytesTest, unittest.TestCase):
         alloc = b.__alloc__()
         self.assertGreater(alloc, len(b))
 
-    def test_init_from_iterator_with_offset(self):
-        # gh-158928: Inserting from an iterator in __init__ needs to take into
-        # account if there is a start offset.
-        b = bytearray()
-        def iterator_which_resets():
-            # __init__ reset ob_start. Make it an offset inside by allocating
-            # then doing fast prefix delete.
-            nonlocal b
-            b.resize(200)
-            del b[:100]
-            # Fill remaining already allocated space
-            yield from b'A' * 100
-        # Fill to end. Used to land out of bounds and crash.
-        b.__init__(iterator_which_resets())
-        self.assertEqual(b, bytes(100) + b'A' * 100)
-
     def test_extend(self):
         orig = b'hello'
         a = bytearray(orig)
@@ -2278,18 +1817,17 @@ class ByteArrayTest(BaseBytesTest, unittest.TestCase):
         # if it wouldn't reallocate the underlying buffer.
         # Furthermore, no destructive changes to the buffer may be applied
         # before raising the error.
-        b = bytearray(10)
+        b = bytearray(range(10))
         v = memoryview(b)
-        def manual_resize(n):
+        def resize(n):
             b[1:-1] = range(n + 1, 2*n - 1)
-        b.resize(10)
+        resize(10)
         orig = b[:]
-        self.assertRaises(BufferError, b.resize, 11)
-        self.assertRaises(BufferError, manual_resize, 11)
+        self.assertRaises(BufferError, resize, 11)
         self.assertEqual(b, orig)
-        self.assertRaises(BufferError, b.resize, 9)
+        self.assertRaises(BufferError, resize, 9)
         self.assertEqual(b, orig)
-        self.assertRaises(BufferError, b.resize, 0)
+        self.assertRaises(BufferError, resize, 0)
         self.assertEqual(b, orig)
         # Other operations implying resize
         self.assertRaises(BufferError, b.pop, 0)
@@ -2305,30 +1843,6 @@ class ByteArrayTest(BaseBytesTest, unittest.TestCase):
             b[1:-1:2] = b""
         self.assertRaises(BufferError, delslice)
         self.assertEqual(b, orig)
-
-    def test_decode_resize_forbidden(self):
-        # The storage is pinned while it is decoded, so an error handler
-        # cannot resize the bytearray.
-        b = bytearray(b'ab\xffcd')
-        errors = 'test.bytearray_decode_resize'
-        def handler(exc):
-            self.assertRaises(BufferError, b.clear)
-            self.assertRaises(BufferError, b.append, 0)
-            return ('?', exc.end)
-        self.addCleanup(_codecs_unregister_error, errors)
-        codecs.register_error(errors, handler)
-        for encoding in 'utf-8', 'utf-8-sig':
-            with self.subTest(encoding=encoding):
-                self.assertEqual(b.decode(encoding, errors), 'ab?cd')
-        self.assertEqual(b, b'ab\xffcd')
-
-    def test_decode_subclass_buffer(self):
-        # decode() decodes the buffer that the object exports.
-        class B(bytearray):
-            def __buffer__(self, flags):
-                return memoryview(b'other')
-        self.assertEqual(B(b'mine').decode(), 'other')
-        self.assertEqual(B(b'mine').decode('latin-1'), 'other')
 
     @test.support.cpython_only
     def test_obsolete_write_lock(self):
@@ -2506,56 +2020,6 @@ class ByteArrayTest(BaseBytesTest, unittest.TestCase):
 
         self.assertRaises(BufferError, ba.hex, S(b':'))
 
-    def test_no_init_called(self):
-        # A bytearray created without calling bytearray.__init__
-        # should not crash the interpreter (see gh-153419).
-        def bytearray_new():
-            return bytearray.__new__(bytearray)
-
-        bytearray_new().insert(0, 1)
-        bytearray_new().extend(b"x")
-        bytearray_new().extend([1, 2, 3])
-        bytearray_new().resize(4)
-        bytearray_new().__init__(5)
-        bytearray_new().__init__(b"xyz")
-        bytearray_new().take_bytes()
-        bytearray_new().take_bytes(0)
-
-        a = bytearray_new()
-        a.append(1)
-
-        a = bytearray_new()
-        a += b"x"
-
-        a = bytearray_new()
-        a[:] = b"xyz"
-
-    def test_reinit_length(self):
-        # There is a shortcut taken when resizing, where alloc/2 < newsize.
-        # In this case, the existing buffer is reused, rather than reset.
-        # If this happens when newsize == 0 and alloc == 1, then various
-        # code assumptions can be violated.  This test should catch those
-        # in debug builds. (see gh-153419)
-        a = bytearray(1)
-        a.__init__()
-        self.assertEqual(a, b"")
-
-    def test_reinit_with_view(self):
-        a = bytearray()
-        with memoryview(a):
-            self.assertRaises(BufferError, a.__init__, "x", "ascii")
-        self.assertEqual(a, b"")
-
-    def test_reinit_error(self):
-        # A failed __init__() must not leave uninitialized bytes in the
-        # object: it must be empty afterwards.
-        for source in ([256] * 100, (-1,) * 100, [0] * 50 + [1000],
-                       (1, 2, 1 << 100)):
-            with self.subTest(source=source):
-                a = bytearray(b"abc")
-                self.assertRaises(ValueError, a.__init__, source)
-                self.assertEqual(a, b"")
-
 
 class AssortedBytesTest(unittest.TestCase):
     #
@@ -2584,7 +2048,7 @@ class AssortedBytesTest(unittest.TestCase):
         self.assertEqual(f(bytearray([7, 8, 9, 10, 11, 12, 13])),
                             r"bytearray(b'\x07\x08\t\n\x0b\x0c\r')")
         self.assertEqual(f(bytearray(b'"')), """bytearray(b'"')""") # '"'
-        self.assertEqual(f(bytearray(b"'")), '''bytearray(b"'")''') # "'"
+        self.assertEqual(f(bytearray(b"'")), r'''bytearray(b"\'")''') # "\'"
         self.assertEqual(f(bytearray(b"'\"")), r"""bytearray(b'\'"')""") # '\'"'
         self.assertEqual(f(bytearray(b"\"'\"")), r"""bytearray(b'"\'"')""") # '"\'"'
         self.assertEqual(f(bytearray(b'\'"\'')), r"""bytearray(b'\'"\'')""") # '\'"\''
@@ -2641,9 +2105,9 @@ class AssortedBytesTest(unittest.TestCase):
     @test.support.requires_docstrings
     def test_doc(self):
         self.assertIsNotNone(bytearray.__doc__)
-        self.assertStartsWith(bytearray.__doc__, "bytearray(")
+        self.assertTrue(bytearray.__doc__.startswith("bytearray("), bytearray.__doc__)
         self.assertIsNotNone(bytes.__doc__)
-        self.assertStartsWith(bytes.__doc__, "bytes(")
+        self.assertTrue(bytes.__doc__.startswith("bytes("), bytes.__doc__)
 
     def test_from_bytearray(self):
         sample = bytes(b"Hello world\n\x80\x81\xfe\xff")
@@ -2772,7 +2236,7 @@ class BytesAsStringTest(FixedStringTest, unittest.TestCase):
 class SubclassTest:
 
     def test_basic(self):
-        self.assertIsSubclass(self.type2test, self.basetype)
+        self.assertTrue(issubclass(self.type2test, self.basetype))
         self.assertIsInstance(self.type2test(), self.basetype)
 
         a, b = b"abcd", b"efgh"
@@ -2820,7 +2284,7 @@ class SubclassTest:
             self.assertEqual(a.z, b.z)
             self.assertEqual(type(a), type(b))
             self.assertEqual(type(a.z), type(b.z))
-            self.assertNotHasAttr(b, 'y')
+            self.assertFalse(hasattr(b, 'y'))
 
     def test_copy(self):
         a = self.type2test(b"abcd")
@@ -2834,7 +2298,7 @@ class SubclassTest:
             self.assertEqual(a.z, b.z)
             self.assertEqual(type(a), type(b))
             self.assertEqual(type(a.z), type(b.z))
-            self.assertNotHasAttr(b, 'y')
+            self.assertFalse(hasattr(b, 'y'))
 
     def test_fromhex(self):
         b = self.type2test.fromhex('1a2B30')
@@ -2907,432 +2371,6 @@ class BytesSubclassTest(SubclassTest, unittest.TestCase):
     basetype = bytes
     type2test = BytesSubclass
 
-
-class FreeThreadingTest(unittest.TestCase):
-    @unittest.skipUnless(support.Py_GIL_DISABLED, 'this test can only possibly fail with GIL disabled')
-    @threading_helper.reap_threads
-    @threading_helper.requires_working_threading()
-    def test_free_threading_bytearray(self):
-        # Test pretty much everything that can break under free-threading.
-        # Non-deterministic, but at least one of these things will fail if
-        # bytearray module is not free-thread safe.
-
-        def clear(b, a, *args):  # MODIFIES!
-            b.wait()
-            try: a.clear()
-            except BufferError: pass
-
-        def clear2(b, a, c):  # MODIFIES c!
-            b.wait()
-            try: c.clear()
-            except BufferError: pass
-
-        def pop1(b, a):  # MODIFIES!
-            b.wait()
-            try: a.pop()
-            except IndexError: pass
-
-        def append1(b, a):  # MODIFIES!
-            b.wait()
-            a.append(0)
-
-        def insert1(b, a):  # MODIFIES!
-            b.wait()
-            a.insert(0, 0)
-
-        def extend(b, a):  # MODIFIES!
-            c = bytearray(b'0' * 0x400000)
-            b.wait()
-            a.extend(c)
-
-        def remove(b, a):  # MODIFIES!
-            c = ord('0')
-            b.wait()
-            try: a.remove(c)
-            except ValueError: pass
-
-        def reverse(b, a):  # modifies inplace
-            b.wait()
-            a.reverse()
-
-        def reduce(b, a):
-            b.wait()
-            a.__reduce__()
-
-        def reduceex2(b, a):
-            b.wait()
-            a.__reduce_ex__(2)
-
-        def reduceex3(b, a):
-            b.wait()
-            c = a.__reduce_ex__(3)
-            assert not c[1] or 0xdd not in c[1][0]
-
-        def count0(b, a):
-            b.wait()
-            a.count(0)
-
-        def decode(b, a):
-            b.wait()
-            a.decode()
-
-        def find(b, a):
-            c = bytearray(b'0' * 0x40000)
-            b.wait()
-            a.find(c)
-
-        def hex(b, a):
-            b.wait()
-            a.hex('_')
-
-        def join(b, a):
-            b.wait()
-            a.join([b'1', b'2', b'3'])
-
-        def replace(b, a):
-            b.wait()
-            a.replace(b'0', b'')
-
-        def maketrans(b, a, c):
-            b.wait()
-            try: a.maketrans(a, c)
-            except ValueError: pass
-
-        def translate(b, a, c):
-            b.wait()
-            a.translate(c)
-
-        def copy(b, a):
-            b.wait()
-            c = a.copy()
-            if c: assert c[0] == 48  # '0'
-
-        def endswith(b, a):
-            b.wait()
-            assert not a.endswith(b'\xdd')
-
-        def index(b, a):
-            b.wait()
-            try: a.index(b'\xdd')
-            except ValueError: return
-            assert False
-
-        def lstrip(b, a):
-            b.wait()
-            assert not a.lstrip(b'0')
-
-        def partition(b, a):
-            b.wait()
-            assert not a.partition(b'\xdd')[2]
-
-        def removeprefix(b, a):
-            b.wait()
-            assert not a.removeprefix(b'0')
-
-        def removesuffix(b, a):
-            b.wait()
-            assert not a.removesuffix(b'0')
-
-        def rfind(b, a):
-            b.wait()
-            assert a.rfind(b'\xdd') == -1
-
-        def rindex(b, a):
-            b.wait()
-            try: a.rindex(b'\xdd')
-            except ValueError: return
-            assert False
-
-        def rpartition(b, a):
-            b.wait()
-            assert not a.rpartition(b'\xdd')[0]
-
-        def rsplit(b, a):
-            b.wait()
-            assert len(a.rsplit(b'\xdd')) == 1
-
-        def rstrip(b, a):
-            b.wait()
-            assert not a.rstrip(b'0')
-
-        def split(b, a):
-            b.wait()
-            assert len(a.split(b'\xdd')) == 1
-
-        def splitlines(b, a):
-            b.wait()
-            l = len(a.splitlines())
-            assert l > 1 or l == 0
-
-        def startswith(b, a):
-            b.wait()
-            assert not a.startswith(b'\xdd')
-
-        def strip(b, a):
-            b.wait()
-            assert not a.strip(b'0')
-
-        def repeat(b, a):
-            b.wait()
-            a * 2
-
-        def contains(b, a):
-            b.wait()
-            assert 0xdd not in a
-
-        def iconcat(b, a):  # MODIFIES!
-            c = bytearray(b'0' * 0x400000)
-            b.wait()
-            a += c
-
-        def subscript(b, a):
-            b.wait()
-            try: assert a[0] != 0xdd
-            except IndexError: pass
-
-        def ass_subscript(b, a):  # MODIFIES!
-            c = bytearray(b'0' * 0x400000)
-            b.wait()
-            a[:] = c
-
-        def ass_subscript2(b, a, c):  # MODIFIES!
-            b.wait()
-            a[:] = c
-            assert b'\xdd' not in a
-
-        def mod(b, a):
-            c = tuple(range(4096))
-            b.wait()
-            try: a % c
-            except TypeError: pass
-
-        def mod2(b, a, c):
-            b.wait()
-            d = a % c
-            assert b'\xdd' not in d
-
-        def repr_(b, a):
-            b.wait()
-            repr(a)
-
-        def capitalize(b, a):
-            b.wait()
-            c = a.capitalize()
-            assert not c or c[0] not in (0xdd, 0xcd)
-
-        def center(b, a):
-            b.wait()
-            c = a.center(0x60000)
-            assert not c or c[0x20000] not in (0xdd, 0xcd)
-
-        def expandtabs(b, a):
-            b.wait()
-            c = a.expandtabs()
-            assert not c or c[0] not in (0xdd, 0xcd)
-
-        def ljust(b, a):
-            b.wait()
-            c = a.ljust(0x600000)
-            assert not c or c[0] not in (0xdd, 0xcd)
-
-        def lower(b, a):
-            b.wait()
-            c = a.lower()
-            assert not c or c[0] not in (0xdd, 0xcd)
-
-        def rjust(b, a):
-            b.wait()
-            c = a.rjust(0x600000)
-            assert not c or c[-1] not in (0xdd, 0xcd)
-
-        def swapcase(b, a):
-            b.wait()
-            c = a.swapcase()
-            assert not c or c[-1] not in (0xdd, 0xcd)
-
-        def title(b, a):
-            b.wait()
-            c = a.title()
-            assert not c or c[-1] not in (0xdd, 0xcd)
-
-        def upper(b, a):
-            b.wait()
-            c = a.upper()
-            assert not c or c[-1] not in (0xdd, 0xcd)
-
-        def zfill(b, a):
-            b.wait()
-            c = a.zfill(0x400000)
-            assert not c or c[-1] not in (0xdd, 0xcd)
-
-        def resize(b, a):  # MODIFIES!
-            b.wait()
-            a.resize(10)
-
-        def take_bytes(b, a):  # MODIFIES!
-            b.wait()
-            c = a.take_bytes()
-            assert not c or c[0] == 48  # '0'
-
-        def take_bytes_n(b, a):  # MODIFIES!
-            b.wait()
-            try:
-                c = a.take_bytes(10)
-                assert c == b'0123456789'
-            except IndexError: pass
-
-        def check(funcs, a=None, *args):
-            if a is None:
-                a = bytearray(b'0' * 0x400000)
-
-            barrier = threading.Barrier(len(funcs))
-            threads = []
-
-            for func in funcs:
-                thread = threading.Thread(target=func, args=(barrier, a, *args))
-
-                threads.append(thread)
-
-            with threading_helper.start_threads(threads):
-                pass
-
-        # hard errors
-
-        check([clear] + [reduce] * 10)
-        check([clear] + [reduceex2] * 10)
-        check([clear] + [append1] * 10)
-        check([clear] * 10)
-        check([clear] + [count0] * 10)
-        check([clear] + [decode] * 10)
-        check([clear] + [extend] * 10)
-        check([clear] + [find] * 10)
-        check([clear] + [hex] * 10)
-        check([clear] + [insert1] * 10)
-        check([clear] + [join] * 10)
-        check([clear] + [pop1] * 10)
-        check([clear] + [remove] * 10)
-        check([clear] + [replace] * 10)
-        check([clear] + [reverse] * 10)
-        check([clear, clear2] + [maketrans] * 10, bytearray(range(128)), bytearray(range(128)))
-        check([clear] + [translate] * 10, None, bytearray.maketrans(bytearray(range(128)), bytearray(range(128))))
-
-        check([clear] + [repeat] * 10)
-        check([clear] + [iconcat] * 10)
-        check([clear] + [ass_subscript] * 10)
-        check([clear] + [repr_] * 10)
-        # gh-148605: Do not test "a *= 2" since it allocates up to 4 GiB using
-        # 10 threads
-
-        # value errors
-
-        check([clear] + [reduceex3] * 10, bytearray(b'a' * 0x40000))
-        check([clear] + [copy] * 10)
-        check([clear] + [endswith] * 10)
-        check([clear] + [index] * 10)
-        check([clear] + [lstrip] * 10)
-        check([clear] + [partition] * 10)
-        check([clear] + [removeprefix] * 10, bytearray(b'0'))
-        check([clear] + [removesuffix] * 10, bytearray(b'0'))
-        check([clear] + [rfind] * 10)
-        check([clear] + [rindex] * 10)
-        check([clear] + [rpartition] * 10)
-        check([clear] + [rsplit] * 10, bytearray(b'0' * 0x4000))
-        check([clear] + [rstrip] * 10)
-        check([clear] + [split] * 10, bytearray(b'0' * 0x4000))
-        check([clear] + [splitlines] * 10, bytearray(b'\n' * 0x400))
-        check([clear] + [startswith] * 10)
-        check([clear] + [strip] * 10)
-
-        check([clear] + [resize] * 10)
-
-        check([clear] + [take_bytes] * 10)
-        check([take_bytes_n] * 10, bytearray(b'0123456789' * 0x400))
-        check([take_bytes_n] * 10, bytearray(b'0123456789' * 5))
-
-        check([clear] + [contains] * 10)
-        check([clear] + [subscript] * 10)
-        check([clear2] + [ass_subscript2] * 10, None, bytearray(b'0' * 0x400000))
-        check([clear] + [mod] * 10, bytearray(b'%d' * 4096))
-        check([clear2] + [mod2] * 10, bytearray(b'%s'), bytearray(b'0' * 0x400000))
-
-        check([clear] + [capitalize] * 10, bytearray(b'a' * 0x40000))
-        check([clear] + [center] * 10, bytearray(b'a' * 0x40000))
-        check([clear] + [expandtabs] * 10, bytearray(b'0\t' * 4096))
-        check([clear] + [ljust] * 10, bytearray(b'0' * 0x400000))
-        check([clear] + [lower] * 10, bytearray(b'A' * 0x400000))
-        check([clear] + [rjust] * 10, bytearray(b'0' * 0x400000))
-        check([clear] + [swapcase] * 10, bytearray(b'aA' * 0x200000))
-        check([clear] + [title] * 10, bytearray(b'aA' * 0x200000))
-        check([clear] + [upper] * 10, bytearray(b'a' * 0x400000))
-        check([clear] + [zfill] * 10, bytearray(b'1' * 0x200000))
-
-    @unittest.skipUnless(support.Py_GIL_DISABLED, 'this test can only possibly fail with GIL disabled')
-    @threading_helper.reap_threads
-    @threading_helper.requires_working_threading()
-    def test_free_threading_bytearrayiter(self):
-        # Non-deterministic but good chance to fail if bytearrayiter is not free-threading safe.
-        # We are fishing for a "Assertion failed: object has negative ref count" and tsan races.
-
-        def iter_next(b, it):
-            b.wait()
-            list(it)
-
-        def iter_reduce(b, it):
-            b.wait()
-            it.__reduce__()
-
-        def iter_setstate(b, it):
-            b.wait()
-            it.__setstate__(0)
-
-        def check(funcs, it):
-            barrier = threading.Barrier(len(funcs))
-            threads = []
-
-            for func in funcs:
-                thread = threading.Thread(target=func, args=(barrier, it))
-
-                threads.append(thread)
-
-            with threading_helper.start_threads(threads):
-                pass
-
-        for _ in range(10):
-            ba = bytearray(b'0' * 0x4000)  # this is a load-bearing variable, do not remove
-
-            check([iter_next] * 10, iter(ba))
-            check([iter_next] + [iter_reduce] * 10, iter(ba))  # for tsan
-            check([iter_next] + [iter_setstate] * 10, iter(ba))  # for tsan
-
-    @unittest.skipUnless(support.Py_GIL_DISABLED, 'this test can only possibly fail with GIL disabled')
-    @threading_helper.reap_threads
-    @threading_helper.requires_working_threading()
-    def test_free_threading_bytearray_resize(self):
-        def resize_stress(ba):
-            for _ in range(1000):
-                try:
-                    ba.resize(1000)
-                    ba.resize(1)
-                except (BufferError, ValueError):
-                    pass
-
-        ba = bytearray(100)
-        threads = [threading.Thread(target=resize_stress, args=(ba,)) for _ in range(4)]
-        with threading_helper.start_threads(threads):
-            pass
-
-    @threading_helper.reap_threads
-    @threading_helper.requires_working_threading()
-    def test_free_threading_bytearray_resize_other_thread(self):
-        # Shrinking a bytearray whose buffer another thread owns must not
-        # adopt the immortal single-byte bytes object a the buffer.
-        ba = bytearray(b'abc')
-        thread = threading.Thread(target=ba.resize, args=(1,))
-        with threading_helper.start_threads([thread]):
-            pass
-        ba[0] = ord('X')
-        self.assertEqual(ba, bytearray(b'X'))
-        self.assertEqual(ord(b'a'), ord('a'))
 
 if __name__ == "__main__":
     unittest.main()

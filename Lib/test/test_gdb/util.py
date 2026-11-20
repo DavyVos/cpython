@@ -7,46 +7,19 @@ import sys
 import sysconfig
 import unittest
 from test import support
+from test.support.testcase import ExtraAssertions
 
 
 GDB_PROGRAM = shutil.which('gdb') or 'gdb'
 
-# First, try to use the build directory to support out-of-tree build
-for key in ('abs_builddir', 'abs_srcdir', 'srcdir'):
-    SRC_DIR = sysconfig.get_config_var(key)
-    if SRC_DIR:
-        break
-else:
-    raise Exception("unable to get the Python source directory")
-
 # Location of custom hooks file in a repository checkout.
-CHECKOUT_HOOK_PATH = os.path.join(SRC_DIR, 'python-gdb.py')
+CHECKOUT_HOOK_PATH = os.path.join(os.path.dirname(sys.executable),
+                                  'python-gdb.py')
 
 SAMPLE_SCRIPT = os.path.join(os.path.dirname(__file__), 'gdb_sample.py')
 BREAKPOINT_FN = 'builtin_id'
 
 PYTHONHASHSEED = '123'
-
-# gh-91960, bpo-40019: gdb reports these when the optimizer has dropped
-# python-frame debug info; the test can't read what's not there.
-_OPTIMIZED_OUT_PATTERNS = (
-    '(frame information optimized out)',
-    'Unable to read information on python frame',
-    '(unable to read python frame information)',
-)
-# gdb prints this when the unwinder genuinely failed to walk a frame —
-# i.e. the CFI (ours or a library's) is wrong. Treat as a hard failure,
-# not a skip, so regressions in our own unwind info don't hide.
-_UNWIND_FAILURE_PATTERNS = (
-    'Backtrace stopped: frame did not save the PC',
-)
-# gh-104736: " ?? ()" in the bt usually means the unwinder bailed early,
-# but can also be unrelated frames without debug info (e.g. libc). Tests
-# that validate the JIT-relevant part of the backtrace themselves can
-# opt out via skip_on_truncation=False.
-_TRUNCATED_BACKTRACE_PATTERNS = (
-    ' ?? ()',
-)
 
 
 def clean_environment():
@@ -180,7 +153,7 @@ def setup_module():
         print()
 
 
-class DebuggerTests(unittest.TestCase):
+class DebuggerTests(unittest.TestCase, ExtraAssertions):
 
     """Test that the debugger can debug Python."""
 
@@ -188,9 +161,7 @@ class DebuggerTests(unittest.TestCase):
                         breakpoint=BREAKPOINT_FN,
                         cmds_after_breakpoint=None,
                         import_site=False,
-                        ignore_stderr=False,
-                        skip_on_truncation=True,
-                        **env_vars):
+                        ignore_stderr=False):
         '''
         Run 'python -c SOURCE' under gdb with a breakpoint.
 
@@ -269,7 +240,7 @@ class DebuggerTests(unittest.TestCase):
             args += [script]
 
         # Use "args" to invoke gdb, capturing stdout, stderr:
-        out, err = run_gdb(*args, PYTHONHASHSEED=PYTHONHASHSEED, **env_vars)
+        out, err = run_gdb(*args, PYTHONHASHSEED=PYTHONHASHSEED)
 
         if not ignore_stderr:
             for line in err.splitlines():
@@ -285,20 +256,26 @@ class DebuggerTests(unittest.TestCase):
                                     " because the Program Counter is"
                                     " not present")
 
-        for pattern in _UNWIND_FAILURE_PATTERNS:
-            if pattern in out:
-                raise AssertionError(
-                    f"gdb unwinder failed ({pattern!r}) — CFI bug in our "
-                    f"generated code or in a linked library.\n"
-                    f"Full gdb output:\n{out}"
-                )
-
         # bpo-40019: Skip the test if gdb failed to read debug information
         # because the Python binary is optimized.
-        patterns = _OPTIMIZED_OUT_PATTERNS
-        if skip_on_truncation:
-            patterns = patterns + _TRUNCATED_BACKTRACE_PATTERNS
-        for pattern in patterns:
+        for pattern in (
+            '(frame information optimized out)',
+            'Unable to read information on python frame',
+
+            # gh-91960: On Python built with "clang -Og", gdb gets
+            # "frame=<optimized out>" for _PyEval_EvalFrameDefault() parameter
+            '(unable to read python frame information)',
+
+            # gh-104736: On Python built with "clang -Og" on ppc64le,
+            # "py-bt" displays a truncated or not traceback, but "where"
+            # logs this error message:
+            'Backtrace stopped: frame did not save the PC',
+
+            # gh-104736: When "bt" command displays something like:
+            # "#1  0x0000000000000000 in ?? ()", the traceback is likely
+            # truncated or wrong.
+            ' ?? ()',
+        ):
             if pattern in out:
                 raise unittest.SkipTest(f"{pattern!r} found in gdb output")
 

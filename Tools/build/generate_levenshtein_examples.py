@@ -13,7 +13,7 @@ _MOVE_COST = 2
 _CASE_COST = 1
 
 
-def _substitution_cost(ch_a: str, ch_b: str) -> int:
+def _substitution_cost(ch_a, ch_b):
     if ch_a == ch_b:
         return 0
     if ch_a.lower() == ch_b.lower():
@@ -22,7 +22,7 @@ def _substitution_cost(ch_a: str, ch_b: str) -> int:
 
 
 @lru_cache(None)
-def levenshtein(a: str, b: str) -> int:
+def levenshtein(a, b):
     if not a or not b:
         return (len(a) + len(b)) * _MOVE_COST
     option1 = levenshtein(a[:-1], b[:-1]) + _substitution_cost(a[-1], b[-1])
@@ -31,7 +31,7 @@ def levenshtein(a: str, b: str) -> int:
     return min(option1, option2, option3)
 
 
-def main() -> None:
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('output_path', metavar='FILE', type=str)
     parser.add_argument('--overwrite', dest='overwrite', action='store_const',
@@ -48,7 +48,7 @@ def main() -> None:
         )
         return
 
-    examples: set[tuple[str, str, int]] = set()
+    examples = set()
     # Create a lot of non-empty examples, which should end up with a Gauss-like
     # distribution for even costs (moves) and odd costs (case substitutions).
     while len(examples) < 9990:

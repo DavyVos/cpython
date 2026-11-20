@@ -13,6 +13,7 @@ import pathlib
 import re
 import shlex
 import shutil
+import struct
 import subprocess
 import sys
 import sysconfig
@@ -20,11 +21,12 @@ import tempfile
 from test.support import (captured_stdout, captured_stderr,
                           skip_if_broken_multiprocessing_synchronize, verbose,
                           requires_subprocess, is_android, is_apple_mobile,
-                          is_wasm32,
+                          is_emscripten, is_wasi,
                           requires_venv_with_pip, TEST_HOME_DIR,
                           requires_resource, copy_python_src_ignore)
 from test.support.os_helper import (can_symlink, EnvironmentVarGuard, rmtree,
                                     TESTFN, FakePath)
+from test.support.testcase import ExtraAssertions
 import unittest
 import venv
 from unittest.mock import patch, Mock
@@ -41,7 +43,7 @@ requireVenvCreate = unittest.skipUnless(
     or sys._base_executable != sys.executable,
     'cannot run venv.create from within a venv on this platform')
 
-if is_android or is_apple_mobile or is_wasm32:
+if is_android or is_apple_mobile or is_emscripten or is_wasi:
     raise unittest.SkipTest("venv is not available on this platform")
 
 @requires_subprocess()
@@ -63,7 +65,7 @@ def check_output(cmd, encoding=None):
         )
     return out, err
 
-class BaseTest(unittest.TestCase):
+class BaseTest(unittest.TestCase, ExtraAssertions):
     """Base class for venv tests."""
     maxDiff = 80 * 50
 
@@ -133,45 +135,26 @@ class BasicTest(BaseTest):
         self.run_with_capture(venv.create, FakePath(self.env_dir))
         self._check_output_of_default_create()
 
-    def test_envbuilder_symlinks(self):
-        for kwargs, expected in (
-            ({}, os.name != 'nt'),
-            ({'symlinks': None}, os.name != 'nt'),
-            ({'symlinks': True}, True),
-            ({'symlinks': False}, False),
-        ):
-            with self.subTest(kwargs=kwargs):
-                builder = venv.EnvBuilder(**kwargs)
-                self.assertIs(builder.symlinks, expected)
-
-    def test_create_symlinks(self):
-        for kwargs, expected in (
-            ({}, os.name != 'nt'),
-            ({'symlinks': None}, os.name != 'nt'),
-            ({'symlinks': True}, True),
-            ({'symlinks': False}, False),
-        ):
-            with self.subTest(kwargs=kwargs):
-                with patch.object(venv.EnvBuilder, 'create', autospec=True) as create:
-                    venv.create(self.env_dir, **kwargs)
-                builder, env_dir = create.call_args.args
-                self.assertIs(builder.symlinks, expected)
-                self.assertEqual(env_dir, self.env_dir)
-
     def _check_output_of_default_create(self):
         self.isdir(self.bindir)
         self.isdir(self.include)
         self.isdir(*self.lib)
+        # Issue 21197
         p = self.get_env_file('lib64')
-        if os.path.exists(p):
-            self.assertFalse(os.path.islink(p))
+        conditions = ((struct.calcsize('P') == 8) and (os.name == 'posix') and
+                      (sys.platform != 'darwin'))
+        if conditions:
+            self.assertTrue(os.path.islink(p))
+        else:
+            self.assertFalse(os.path.exists(p))
         data = self.get_text_file_contents('pyvenv.cfg')
         executable = sys._base_executable
         path = os.path.dirname(executable)
         self.assertIn('home = %s' % path, data)
         self.assertIn('executable = %s' %
                       os.path.realpath(sys.executable), data)
-        cmd = (f'command = {sys.executable} -m venv --without-pip '
+        copies = '' if os.name=='nt' else ' --copies'
+        cmd = (f'command = {sys.executable} -m venv{copies} --without-pip '
                f'--without-scm-ignore-files {self.env_dir}')
         self.assertIn(cmd, data)
         fn = self.get_env_file(self.bindir, self.exe)
@@ -180,7 +163,6 @@ class BasicTest(BaseTest):
             print('Contents of %r:' % bd)
             print('    %r' % os.listdir(bd))
         self.assertTrue(os.path.exists(fn), 'File %r should exist.' % fn)
-        self.assertEqual(os.path.islink(fn), os.name != 'nt' and can_symlink())
 
     def test_config_file_command_key(self):
         options = [
@@ -247,27 +229,25 @@ class BasicTest(BaseTest):
         builder = venv.EnvBuilder()
         bin_path = 'bin'
         python_exe = os.path.split(sys.executable)[1]
-        expected_exe = os.path.basename(sys._base_executable)
-
         if sys.platform == 'win32':
             bin_path = 'Scripts'
             if os.path.normcase(os.path.splitext(python_exe)[0]).endswith('_d'):
-                expected_exe = 'python_d'
+                python_exe = 'python_d.exe'
             else:
-                expected_exe = 'python'
-            python_exe = expected_exe + '.exe'
-
+                python_exe = 'python.exe'
         with tempfile.TemporaryDirectory() as fake_env_dir:
             expect_exe = os.path.normcase(
-                os.path.join(fake_env_dir, bin_path, expected_exe)
+                os.path.join(fake_env_dir, bin_path, python_exe)
             )
             if sys.platform == 'win32':
                 expect_exe = os.path.normcase(os.path.realpath(expect_exe))
 
             def pip_cmd_checker(cmd, **kwargs):
+                cmd[0] = os.path.normcase(cmd[0])
                 self.assertEqual(
-                    cmd[1:],
+                    cmd,
                     [
+                        expect_exe,
                         '-m',
                         'pip',
                         'install',
@@ -275,9 +255,6 @@ class BasicTest(BaseTest):
                         'pip',
                     ]
                 )
-                exe_dir = os.path.normcase(os.path.dirname(cmd[0]))
-                expected_dir = os.path.normcase(os.path.dirname(expect_exe))
-                self.assertEqual(exe_dir, expected_dir)
 
             fake_context = builder.ensure_directories(fake_env_dir)
             with patch('venv.subprocess.check_output', pip_cmd_checker):
@@ -301,28 +278,6 @@ class BasicTest(BaseTest):
             out, err = check_output(cmd)
             self.assertEqual(pathlib.Path(out.strip().decode()),
                              pathlib.Path(expected), prefix)
-
-    # gh-157917: the "\\?\" extended-length prefix must not leak into the prefix
-    @requireVenvCreate
-    @unittest.skipUnless(os.name == 'nt', 'only relevant on Windows')
-    def test_prefixes_extended_length_path(self):
-        """
-        Test that invoking a venv through a "\\?\" extended-length path does
-        not leave that prefix behind in the prefixes.  Windows does not
-        resolve relative components (such as ".." or "/") in such paths, so
-        they break tools that join them onto sysconfig-derived paths.
-        """
-        rmtree(self.env_dir)
-        self.run_with_capture(venv.create, self.env_dir)
-        envpy = os.path.join('\\\\?\\' + self.env_dir, self.bindir, self.exe)
-        for prefix in ('prefix', 'exec_prefix'):
-            with self.subTest(prefix):
-                out, err = check_output(
-                    [envpy, '-c', 'import sys; print(sys.%s)' % prefix],
-                    encoding='utf-8')
-                self.assertFalse(out.strip().startswith('\\\\?\\'), out)
-                self.assertEqual(pathlib.Path(out.strip()),
-                                 pathlib.Path(self.env_dir), prefix)
 
     @requireVenvCreate
     def test_sysconfig(self):
@@ -348,234 +303,14 @@ class BasicTest(BaseTest):
                 self.assertEqual(out.strip(), expected, err)
         for attr, expected in (
             ('executable', self.envpy()),
-            # Usually compare to sys.prefix, but if we're running in our own
-            # venv then we really need to compare to our base prefix
-            ('base_prefix', sys.base_prefix),
+            # Usually compare to sys.executable, but if we're running in our own
+            # venv then we really need to compare to our base executable
+            ('_base_executable', sys._base_executable),
         ):
             with self.subTest(attr):
                 cmd[2] = f'import sys; print(sys.{attr})'
                 out, err = check_output(cmd, encoding='utf-8')
                 self.assertEqual(out.strip(), expected, err)
-
-    @requireVenvCreate
-    def test_version_mismatch_warning(self):
-        """
-        Test that a warning is emitted when running a venv created for a
-        different minor Python version.
-        """
-        rmtree(self.env_dir)
-
-        wrong_minor = sys.version_info.minor + 1
-        self.run_with_capture(venv.create, self.env_dir, with_pip=False)
-
-        cfg_path = self.get_env_file('pyvenv.cfg')
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            cfg_content = f.read()
-
-        new_version = f"{sys.version_info.major}.{wrong_minor}"
-        if 'version =' in cfg_content:
-            cfg_content = re.sub(r'version = \d+\.\d+', f'version = {new_version}', cfg_content)
-
-        cfg_content += f'\nversion_info = {new_version}\n'
-
-        with open(cfg_path, 'w', encoding='utf-8') as f:
-            f.write(cfg_content)
-
-        envpy = self.envpy(real_env_dir=True)
-
-        proc = subprocess.run(
-            [envpy, '-c', 'import sys; print("done")'],
-            capture_output=True,
-            text=True,
-            env={**os.environ, "PYTHONHOME": ""}
-        )
-
-        self.assertIn(f"Python {sys.version_info.major}.{wrong_minor}", proc.stderr)
-        self.assertIn("Consider running `python -m venv --upgrade`", proc.stderr)
-
-    @requireVenvCreate
-    def test_version_info_mismatch_warning(self):
-        """
-        Test that a warning is emitted when version_info (used by virtualenv)
-        indicates a different minor version.
-        """
-        rmtree(self.env_dir)
-        wrong_minor = sys.version_info.minor + 1
-        self.run_with_capture(venv.create, self.env_dir, with_pip=False)
-
-        cfg_path = self.get_env_file('pyvenv.cfg')
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            cfg_content = f.read()
-
-        # Add only version_info, don't modify version
-        new_version = f"{sys.version_info.major}.{wrong_minor}"
-        cfg_content += f'\nversion_info = {new_version}\n'
-
-        with open(cfg_path, 'w', encoding='utf-8') as f:
-            f.write(cfg_content)
-
-        envpy = self.envpy(real_env_dir=True)
-        proc = subprocess.run(
-            [envpy, '-c', 'import sys; print("done")'],
-            capture_output=True,
-            text=True,
-            env={**os.environ, "PYTHONHOME": ""}
-        )
-
-        self.assertIn(f"Python {sys.version_info.major}.{wrong_minor}", proc.stderr)
-        self.assertIn("Consider running `python -m venv --upgrade`", proc.stderr)
-
-    @requireVenvCreate
-    def test_version_match_no_warning(self):
-        """
-        Test that no warning is emitted when the venv version matches.
-        """
-        rmtree(self.env_dir)
-
-        self.run_with_capture(venv.create, self.env_dir, with_pip=False)
-        cfg_path = self.get_env_file('pyvenv.cfg')
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            cfg_content = f.read()
-        expected_version = f"{sys.version_info.major}.{sys.version_info.minor}"
-
-        with open(cfg_path, 'w', encoding='utf-8') as f:
-            f.write(cfg_content)
-        envpy = self.envpy(real_env_dir=True)
-        proc = subprocess.run(
-            [envpy, '-c', 'import sys; print("done")'],
-            capture_output=True,
-            text=True,
-            env={**os.environ, "PYTHONHOME": ""}
-        )
-
-        self.assertNotIn("Consider running `python -m venv --upgrade`", proc.stderr)
-
-    @requireVenvCreate
-    def test_malformed_version_warning(self):
-        """
-        Test that a warning is emitted on malformed version string
-        in pyenv.cfg
-        """
-        rmtree(self.env_dir)
-
-        self.run_with_capture(venv.create, self.env_dir, with_pip=False)
-
-        cfg_path = self.get_env_file('pyvenv.cfg')
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            cfg_content = f.read()
-
-        malformed_version = "not.a.version"
-        if 'version =' in cfg_content:
-            cfg_content = re.sub(r'version = .+', f'version = {malformed_version}', cfg_content)
-
-        with open(cfg_path, 'w', encoding='utf-8') as f:
-            f.write(cfg_content)
-
-        envpy = self.envpy(real_env_dir=True)
-        proc = subprocess.run(
-            [envpy, '-c', 'import sys; print("done")'],
-            capture_output=True,
-            text=True,
-            env={**os.environ, "PYTHONHOME": ""}
-        )
-        self.assertIn("Malformed version string", proc.stderr)
-        self.assertIn(malformed_version, proc.stderr)
-
-    @requireVenvCreate
-    def test_malformed_version_info_warning(self):
-        """
-        Test that a warning is emitted on malformed version_info string
-        in pyenv.cfg
-        """
-        rmtree(self.env_dir)
-        self.run_with_capture(venv.create, self.env_dir, with_pip=False)
-
-        cfg_path = self.get_env_file('pyvenv.cfg')
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            cfg_content = f.read()
-
-        malformed_version = "invalid.version"
-        cfg_content += f'\nversion_info = {malformed_version}\n'
-
-        with open(cfg_path, 'w', encoding='utf-8') as f:
-            f.write(cfg_content)
-
-        envpy = self.envpy(real_env_dir=True)
-        proc = subprocess.run(
-            [envpy, '-c', 'import sys; print("done")'],
-            capture_output=True,
-            text=True,
-            env={**os.environ, "PYTHONHOME": ""}
-        )
-
-        self.assertIn("Malformed version_info string", proc.stderr)
-        self.assertIn(malformed_version, proc.stderr)
-
-    @requireVenvCreate
-    def test_conflicting_version_fields(self):
-        """
-        Test behavior when both version and version_info are present
-        but contain different values. Should warn based on first mismatch found.
-        """
-        rmtree(self.env_dir)
-        wrong_minor = sys.version_info.minor + 1
-        self.run_with_capture(venv.create, self.env_dir, with_pip=False)
-
-        cfg_path = self.get_env_file('pyvenv.cfg')
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            cfg_content = f.read()
-
-        version_wrong = f"{sys.version_info.major}.{wrong_minor}"
-        if 'version =' in cfg_content:
-            cfg_content = re.sub(r'version = \d+\.\d+', f'version = {version_wrong}', cfg_content)
-
-        version_info_wrong = f"{sys.version_info.major}.{wrong_minor + 1}"
-        cfg_content += f'\nversion_info = {version_info_wrong}\n'
-
-        with open(cfg_path, 'w', encoding='utf-8') as f:
-            f.write(cfg_content)
-
-        envpy = self.envpy(real_env_dir=True)
-        proc = subprocess.run(
-            [envpy, '-c', 'import sys; print("done")'],
-            capture_output=True,
-            text=True,
-            env={**os.environ, "PYTHONHOME": ""}
-        )
-
-        self.assertIn("Consider running `python -m venv --upgrade`", proc.stderr)
-        self.assertEqual(proc.stderr.count("Consider running `python -m venv --upgrade`"), 1)
-
-    @requireVenvCreate
-    def test_different_major_version_no_warning(self):
-        """
-        Test that no warning is emitted when major version differs.
-        The warning should only trigger for same major, different minor.
-        """
-        rmtree(self.env_dir)
-        self.run_with_capture(venv.create, self.env_dir, with_pip=False)
-
-        cfg_path = self.get_env_file('pyvenv.cfg')
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            cfg_content = f.read()
-
-        different_major = sys.version_info.major + 1
-        new_version = f"{different_major}.{sys.version_info.minor}"
-
-        if 'version =' in cfg_content:
-            cfg_content = re.sub(r'version = \d+\.\d+', f'version = {new_version}', cfg_content)
-        with open(cfg_path, 'w', encoding='utf-8') as f:
-            f.write(cfg_content)
-
-        envpy = self.envpy(real_env_dir=True)
-        proc = subprocess.run(
-            [envpy, '-c', 'import sys; print("done")'],
-            capture_output=True,
-            text=True,
-            env={**os.environ, "PYTHONHOME": ""}
-        )
-
-        self.assertNotIn("Consider running `python -m venv --upgrade`", proc.stderr)
 
     @requireVenvCreate
     @unittest.skipUnless(can_symlink(), 'Needs symlinks')
@@ -650,27 +385,6 @@ class BasicTest(BaseTest):
             venv.create(self.env_dir)
             listxattr_mock.assert_not_called()
 
-    @unittest.skipIf(os.name == 'nt', 'POSIX-specific permission test')
-    def test_install_scripts_honors_umask(self):
-        """
-        gh-127172: Activation scripts must inherit the process umask (and any
-        default ACL) like every other created file, rather than a fixed mode
-        copied from the source template.
-        """
-        old_umask = os.umask(0o002)
-        try:
-            venv.create(self.env_dir, with_pip=False)
-            bindir = os.path.join(self.env_dir, self.bindir)
-            control = os.path.join(bindir, 'control')
-            with open(control, 'w'):
-                pass
-            expected = os.stat(control).st_mode & 0o777
-            for name in ('activate', 'activate.csh', 'activate.fish'):
-                mode = os.stat(os.path.join(bindir, name)).st_mode & 0o777
-                self.assertEqual(mode, expected)
-        finally:
-            os.umask(old_umask)
-
     def test_overwrite_existing(self):
         """
         Test creating environment in an existing directory.
@@ -705,24 +419,6 @@ class BasicTest(BaseTest):
                 f.write(b'')
             self.assertRaises((ValueError, OSError), venv.create, self.env_dir)
             self.clear_directory(self.env_dir)
-
-    @unittest.skipUnless(can_symlink(), 'Needs symlinks')
-    def test_symlinked_directory_error(self):
-        """
-        Test that venv creation fails when a directory inside the target
-        directory is a symlink.
-        """
-        outside = tempfile.mkdtemp()
-        self.addCleanup(rmtree, outside)
-        for n in range(1, len(self.lib) + 1):
-            subdirs = self.lib[:n]
-            with self.subTest(subdirs=subdirs):
-                rmtree(self.env_dir)
-                os.makedirs(os.path.join(self.env_dir, *subdirs[:-1]))
-                os.symlink(outside, os.path.join(self.env_dir, *subdirs),
-                           target_is_directory=True)
-                self.assertRaises(ValueError, venv.create, self.env_dir)
-                self.assertEqual(os.listdir(outside), [])
 
     def test_upgrade(self):
         """
@@ -806,7 +502,6 @@ class BasicTest(BaseTest):
 
     # gh-124651: test quoted strings
     @unittest.skipIf(os.name == 'nt', 'contains invalid characters on Windows')
-    @unittest.skipIf(sys.platform == 'cygwin', 'fail to locate cygpython DLL')
     def test_special_chars_bash(self):
         """
         Test that the template strings are quoted properly (bash)
@@ -858,66 +553,6 @@ class BasicTest(BaseTest):
         lines = out.splitlines()
         self.assertTrue(env_name.encode() in lines[0])
         self.assertEndsWith(lines[1], env_name.encode())
-
-    # gh-140006: the fish prompt override must keep working when a user
-    # function shadows a builtin it relies on.
-    @unittest.skipIf(os.name == 'nt', 'fish is not available on Windows')
-    def test_fish_activate_shadowed_builtins(self):
-        """
-        The fish prompt override restores the exit status through `source` and
-        prints through `printf`/`echo`/`set_color`.  A user function that
-        shadows one of those builtins (a common pattern for `.`-style directory
-        navigators) must not hijack the prompt or break status restoration.
-        """
-        # Some systems have an unrelated "fish" game (see fish(6)), which
-        # can precede the fish shell in PATH.
-        for dirname in None, *os.get_exec_path():
-            fish = shutil.which('fish', path=dirname)
-            if fish is not None and subprocess.run(
-                    [fish, '-c', 'echo $FISH_VERSION'],
-                    stdin=subprocess.DEVNULL,
-                    capture_output=True).stdout.strip():
-                break
-        else:
-            self.skipTest('fish required for this test')
-        rmtree(self.env_dir)
-        builder = venv.EnvBuilder(clear=True)
-        builder.create(self.env_dir)
-        activate = os.path.join(self.env_dir, self.bindir, 'activate.fish')
-        test_script = os.path.join(self.env_dir, 'test_shadowed_builtins.fish')
-        with open(test_script, "w") as f:
-            f.write(
-                # The pre-existing prompt reports the status it receives;
-                # activation copies it to _old_fish_prompt.
-                'function fish_prompt; builtin echo "OLDSTATUS=$status"; end\n'
-                f'source {shlex.quote(activate)}\n'
-                # Shadow every builtin the override uses.  A dot-navigator that
-                # lists the directory is the reported failure.
-                'function .; builtin echo DOT_LEAK; end\n'
-                'function source; builtin echo SOURCE_LEAK; end\n'
-                'function echo; command echo ECHO_LEAK; end\n'
-                'function printf; command printf PRINTF_LEAK; end\n'
-                'function set_color; command true; end\n'
-                'function _exit7; return 7; end\n'
-                '_exit7\n'
-                'fish_prompt\n'
-            )
-        out, err = check_output([fish, '--no-config', test_script])
-        text = out.decode()
-        self.assertNotIn('LEAK', text)
-        self.assertIn('OLDSTATUS=7', text)
-
-    def test_fish_quoting(self):
-        """
-        Test that the template strings are quoted properly (fish)
-        """
-        builder = venv.EnvBuilder()
-        context = builder.ensure_directories(self.env_dir)
-        context.script_path = 'activate.fish'
-        context.prompt = r"x\'$(echo PWNED)'\'"
-        self.assertEqual(
-            builder.replace_variables('__VENV_PROMPT__', context),
-            r"'x\\\'$(echo PWNED)\'\\\''")
 
     # gh-124651: test quoted strings on Windows
     @unittest.skipUnless(os.name == 'nt', 'only relevant on Windows')
@@ -1018,33 +653,6 @@ class BasicTest(BaseTest):
             _, err = self.run_with_capture(builder.create, env_dir)
             filepath_regex = r"'[A-Z]:\\\\(?:[^\\\\]+\\\\)*[^\\\\]+'"
             self.assertRegex(err, rf"Unable to symlink {filepath_regex} to {filepath_regex}")
-
-    @requireVenvCreate
-    @unittest.skipIf(os.name == 'nt', 'not relevant on Windows')
-    @unittest.skipUnless(can_symlink(), 'Needs symlinks')
-    def test_broken_symlink_in_existing_venv(self):
-        """
-        Test creating a venv when a stale venv with broken symlinks exists.
-        """
-        bindir = os.path.join(self.env_dir, self.bindir)
-        os.makedirs(bindir)
-        python = os.path.join(bindir, 'python3')
-        os.symlink('/path/to/deleted/env/bin/python3', python)
-        self.assertTrue(os.path.islink(python))
-        self.assertFalse(os.path.exists(python))
-
-        builder = venv.EnvBuilder(with_pip=False, symlinks=True)
-        self.run_with_capture(builder.create, self.env_dir)
-        self.assertTrue(os.path.islink(python))
-        self.assertTrue(os.path.exists(python))
-
-        rmtree(self.env_dir)
-        os.makedirs(bindir)
-        os.symlink('/path/to/deleted/env/bin/python3', python)
-        builder = venv.EnvBuilder(with_pip=False, symlinks=False)
-        self.run_with_capture(builder.create, self.env_dir)
-        self.assertFalse(os.path.islink(python))
-        self.assertTrue(os.path.exists(python))
 
     @requireVenvCreate
     def test_multiprocessing(self):
@@ -1151,14 +759,7 @@ class BasicTest(BaseTest):
         self.addCleanup(rmtree, non_installed_dir)
         bindir = os.path.join(non_installed_dir, self.bindir)
         os.mkdir(bindir)
-        python_exe = os.path.basename(sys.executable)
-        shutil.copy2(sys.executable, os.path.join(bindir, python_exe))
-        if sys.platform == 'cygwin':
-            # Copy libpython DLL
-            exe_path = os.path.dirname(sys.executable)
-            libpython_dll = sysconfig.get_config_var('DLLLIBRARY')
-            shutil.copy2(os.path.join(exe_path, libpython_dll),
-                         os.path.join(bindir, libpython_dll))
+        shutil.copy2(sys.executable, bindir)
         libdir = os.path.join(non_installed_dir, platlibdir, self.lib[1])
         os.makedirs(libdir)
         landmark = os.path.join(libdir, "os.py")
@@ -1194,7 +795,7 @@ class BasicTest(BaseTest):
             else:
                 additional_pythonpath_for_non_installed.append(
                     eachpath)
-        cmd = [os.path.join(non_installed_dir, self.bindir, python_exe),
+        cmd = [os.path.join(non_installed_dir, self.bindir, self.exe),
                "-m",
                "venv",
                "--without-pip",
@@ -1225,8 +826,7 @@ class BasicTest(BaseTest):
         subprocess.check_call(cmd, env=child_env)
         # Now check the venv created from the non-installed python has
         # correct zip path in pythonpath.
-        target_python = os.path.join(self.env_dir, self.bindir, python_exe)
-        cmd = [target_python, '-S', '-c', 'import sys; print(sys.path)']
+        cmd = [self.envpy(), '-S', '-c', 'import sys; print(sys.path)']
         out, err = check_output(cmd)
         self.assertTrue(zip_landmark.encode() in out)
 
@@ -1245,7 +845,7 @@ class BasicTest(BaseTest):
         with open(script_path, 'rb') as script:
             for i, line in enumerate(script, 1):
                 error_message = f"CR LF found in line {i}"
-                self.assertNotEndsWith(line, b'\r\n', error_message)
+                self.assertFalse(line.endswith(b'\r\n'), error_message)
 
     @requireVenvCreate
     def test_scm_ignore_files_git(self):
@@ -1361,10 +961,10 @@ class BasicTest(BaseTest):
             exename = exename.replace("python", "pythonw")
         envpyw = os.path.join(self.env_dir, self.bindir, exename)
         try:
-            subprocess.check_call([envpyw, "-c", "import fnmatch, sys; "
-                "assert fnmatch.fnmatch(sys._base_executable, '**/pythonw*.exe')"])
+            subprocess.check_call([envpyw, "-c", "import sys; "
+                "assert sys._base_executable.endswith('%s')" % exename])
         except subprocess.CalledProcessError:
-            self.fail("venvwlauncher.exe did not run pythonw.exe")
+            self.fail("venvwlauncher.exe did not run %s" % exename)
 
 
 @requireVenvCreate
@@ -1403,13 +1003,7 @@ class EnsurePipTest(BaseTest):
 
     def do_test_with_pip(self, system_site_packages):
         rmtree(self.env_dir)
-        os.mkdir(self.env_dir)
-        # Both ensurepip and its pip subprocess run with the venv as cwd.
-        for name in ('ensurepip.py', 'subprocess.py'):
-            pathlib.Path(self.env_dir, name).write_text(
-                'raise AssertionError(__file__)\n', encoding='utf-8')
         with EnvironmentVarGuard() as envvars:
-            envvars["PYTHONSAFEPATH"] = ""
             # pip's cross-version compatibility may trigger deprecation
             # warnings in current versions of Python. Ensure related
             # environment settings don't cause venv to fail.
@@ -1455,7 +1049,7 @@ class EnsurePipTest(BaseTest):
         self.assertEqual(err, "")
         out = out.decode("latin-1") # Force to text, prevent decoding errors
         expected_version = "pip {}".format(ensurepip.version())
-        self.assertStartsWith(out, expected_version)
+        self.assertEqual(out[:len(expected_version)], expected_version)
         env_dir = os.fsencode(self.env_dir).decode("latin-1")
         self.assertIn(env_dir, out)
 
@@ -1485,7 +1079,7 @@ class EnsurePipTest(BaseTest):
                      err, flags=re.MULTILINE)
         # Ignore warning about missing optional module:
         try:
-            import ssl  # noqa: F401
+            import ssl
         except ImportError:
             err = re.sub(
                 "^WARNING: Disabling truststore since ssl support is missing$",

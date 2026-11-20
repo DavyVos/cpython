@@ -1,11 +1,12 @@
 import os
 import stat
 import sys
+import test.support
 import unittest
 from contextlib import closing
 from functools import partial
 from pathlib import Path
-from test.support import import_helper, os_helper
+from test.support import cpython_only, import_helper, os_helper
 
 dbm_sqlite3 = import_helper.import_module("dbm.sqlite3")
 # N.B. The test will fail on some platforms without sqlite3
@@ -43,7 +44,7 @@ class URI(unittest.TestCase):
         )
         for path, normalized in dataset:
             with self.subTest(path=path, normalized=normalized):
-                self.assertEndsWith(_normalize_uri(path), normalized)
+                self.assertTrue(_normalize_uri(path).endswith(normalized))
 
     @unittest.skipUnless(sys.platform == "win32", "requires Windows")
     def test_uri_windows(self):
@@ -62,7 +63,7 @@ class URI(unittest.TestCase):
             with self.subTest(path=path, normalized=normalized):
                 if not Path(path).is_absolute():
                     self.skipTest(f"skipping relative path: {path!r}")
-                self.assertEndsWith(_normalize_uri(path), normalized)
+                self.assertTrue(_normalize_uri(path).endswith(normalized))
 
 
 class ReadOnly(_SQLiteDbmTests):
@@ -267,10 +268,6 @@ class DataTypes(_SQLiteDbmTests):
         (3.14, b"3.14"),
         ("string", b"string"),
         (b"bytes", b"bytes"),
-        (True, b"1"),
-        (False, b"0"),
-        (bytearray(b"bytearray"), b"bytearray"),
-        (memoryview(b"memoryview"), b"memoryview"),
     )
 
     def setUp(self):

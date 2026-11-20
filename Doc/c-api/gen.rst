@@ -6,8 +6,8 @@ Generator Objects
 -----------------
 
 Generator objects are what Python uses to implement generator iterators. They
-are normally created by calling a generator function, rather than explicitly
-calling :c:func:`PyGen_New` or :c:func:`PyGen_NewWithQualName`.
+are normally created by iterating over a function that yields values, rather
+than explicitly calling :c:func:`PyGen_New` or :c:func:`PyGen_NewWithQualName`.
 
 
 .. c:type:: PyGenObject
@@ -38,25 +38,12 @@ calling :c:func:`PyGen_New` or :c:func:`PyGen_NewWithQualName`.
    A reference to *frame* is ":term:`stolen <steal>`" by this function (even
    on error). The argument must not be ``NULL``.
 
-   .. deprecated-removed:: 3.16 3.18
-
-      This function has not been used since 3.10.
-      It is also impossible to construct a proper *frame*
-      object to call this function.
-
 .. c:function:: PyObject* PyGen_NewWithQualName(PyFrameObject *frame, PyObject *name, PyObject *qualname)
 
    Create and return a new generator object based on the *frame* object,
    with ``__name__`` and ``__qualname__`` set to *name* and *qualname*.
    A reference to *frame* is ":term:`stolen <steal>`" by this function (even
    on error).  The *frame* argument must not be ``NULL``.
-
-   .. deprecated-removed:: 3.16 3.18
-
-      This function has not been used since 3.10.
-      It is also impossible to construct a proper *frame*
-      object to call this function.
-
 
 .. c:function:: PyCodeObject* PyGen_GetCode(PyGenObject *gen)
 
@@ -90,28 +77,9 @@ Asynchronous Generator Objects
 
    .. versionadded:: 3.6
 
-   .. deprecated-removed:: 3.16 3.18
-
-      This function has not been used since 3.10.
-      It is also impossible to construct a proper *frame*
-      object to call this function.
-
 .. c:function:: int PyAsyncGen_CheckExact(PyObject *op)
 
    Return true if *op* is an asynchronous generator object, false otherwise.
    This function always succeeds.
 
    .. versionadded:: 3.6
-
-
-Deprecated API
-^^^^^^^^^^^^^^
-
-.. c:macro:: PyAsyncGenASend_CheckExact(op)
-
-   This is an API that was included in Python's C API
-   by mistake.
-
-   It is solely here for completeness; do not use this API.
-
-   .. soft-deprecated:: 3.14

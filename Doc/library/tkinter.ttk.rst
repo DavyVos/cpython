@@ -4,6 +4,8 @@
 .. module:: tkinter.ttk
    :synopsis: Tk themed widget set
 
+.. sectionauthor:: Guilherme Polo <ggpolo@gmail.com>
+
 **Source code:** :source:`Lib/tkinter/ttk.py`
 
 .. index:: single: ttk
@@ -16,7 +18,7 @@ Its widgets adapt their appearance to the platform's native theme,
 giving an application a better and more consistent look and feel
 than the classic :mod:`tkinter` widgets, whose appearance is fixed.
 
-The basic idea for :mod:`!tkinter.ttk` is to separate, to the extent possible,
+The basic idea for :mod:`tkinter.ttk` is to separate, to the extent possible,
 the code implementing a widget's behavior from the code implementing its
 appearance.
 
@@ -47,7 +49,7 @@ To override the basic Tk widgets, the import should follow the Tk import::
    from tkinter import *
    from tkinter.ttk import *
 
-That code causes several :mod:`!tkinter.ttk` widgets (:class:`Button`,
+That code causes several :mod:`tkinter.ttk` widgets (:class:`Button`,
 :class:`Checkbutton`, :class:`Entry`, :class:`Frame`, :class:`Label`,
 :class:`LabelFrame`, :class:`Menubutton`, :class:`OptionMenu`,
 :class:`PanedWindow`, :class:`Radiobutton`, :class:`Scale`,
@@ -1208,9 +1210,8 @@ ttk.Treeview
 
    .. method:: next(item)
 
-      Returns the identifier of *item*'s next sibling,
-      or '' if *item* is the last child of its parent.
-      Equivalent to ``after_item(item, hidden=True, recurse=False)``.
+      Returns the identifier of *item*'s next sibling, or '' if *item* is the
+      last child of its parent.
 
 
    .. method:: parent(item)
@@ -1221,412 +1222,8 @@ ttk.Treeview
 
    .. method:: prev(item)
 
-      Returns the identifier of *item*'s previous sibling,
-      or '' if *item* is the first child of its parent.
-      Equivalent to ``before_item(item, hidden=True, recurse=False)``.
-
-
-   .. method:: after_item(item, *, hidden=False, recurse=True)
-
-      Returns the identifier of the item after *item*
-      (the first child, a next sibling, or a next sibling of an ancestor),
-      or '' if there is none.
-      By default only visible items are considered;
-      if *hidden* is true, hidden items are included too.
-      If *recurse* is false, only siblings of *item* are considered
-      (see :meth:`next`).
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: before_item(item, *, hidden=False, recurse=True)
-
-      Returns the identifier of the item before *item*
-      (a previous sibling or the parent of *item*),
-      or '' if there is none.
-      By default only visible items are considered;
-      if *hidden* is true, hidden items are included too.
-      If *recurse* is false, only siblings of *item* are considered
-      (see :meth:`prev`).
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: depth(item)
-
-      Returns the number of levels between *item* and the root item.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: haschildren(item)
-
-      Returns ``True`` if *item* has children, ``False`` otherwise.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: visible(item)
-
-      Returns ``True`` if *item* is visible, ``False`` otherwise.
-      An item is visible if it is not detached, not hidden,
-      and all of its ancestors are open and not hidden.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: size(item, *, hidden=False, recurse=False)
-
-      Returns the number of children of *item*.
-      If *hidden* is true, hidden items are included.
-      If *recurse* is true, all descendants of *item* are included.
-      Use ``''`` for the root item.
-      ``size(item, hidden=True)`` equals ``len(get_children(item))``
-      (which always includes hidden items).
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: range(first, last, *, hidden=False, recurse=True)
-
-      Returns a tuple of items from *first* through *last*, inclusive.
-      If *hidden* is true, hidden items are included.
-      If *recurse* is false, descendants and ancestors are excluded.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: identifier(item, index)
-
-      Returns the identifier of the item at *index*
-      within *item*'s list of children.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: current()
-
-      Returns the current item id and column id as a 2-tuple,
-      or an empty tuple if there is none.
-      The current item is the item under the mouse pointer.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: expand(*items, recurse=False)
-
-      Set all of the specified items to the open state.
-      If *recurse* is true, also open all of their descendants;
-      this requires Tk 9.1.
-      Use ``''`` for the root item.
-      ``expand(item)`` is equivalent to ``item(item, open=True)``.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: collapse(*items, recurse=False)
-
-      Set all of the specified items to the closed state.
-      If *recurse* is true, also close all of their descendants;
-      this requires Tk 9.1.
-      Use ``''`` for the root item.
-      ``collapse(item)`` is equivalent to ``item(item, open=False)``.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: hide(*items, recurse=False)
-
-      Hide all of the specified items and all of their child items.
-      If *recurse* is true, also hide all of their descendants.
-      Use ``''`` for the root item.
-      ``hide(item)`` is equivalent to ``item(item, hidden=True)``.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: unhide(*items, recurse=False)
-
-      Unhide all of the specified items.
-      If *recurse* is true, also unhide all of their descendants.
-      Use ``''`` for the root item.
-      ``unhide(item)`` is equivalent to ``item(item, hidden=False)``.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: detached(item=None)
-
-      Returns information about detached items
-      (see :meth:`detach`).
-      Without arguments, returns a tuple of all detached items,
-      but not their descendants (see :meth:`detached_all`).
-      With *item*, returns whether *item* is detached; since Tk 9.1, also
-      returns ``True`` if an ancestor of *item* is detached.
-
-      Requires Tk 9.0 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: detached_all()
-
-      Returns a tuple of all detached items and all of their descendants
-      (see :meth:`detach`).
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: cellfocus(cell=None)
-
-      Get or set the focus cell.
-      Without *cell*, returns the focus cell as an ``(item, column)`` 2-tuple,
-      or an empty tuple if there is none.
-      With *cell*, sets the focus cell; use ``''`` to clear it.
-      A cell is specified as an ``(item, column)`` pair.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: sort(parent, *, column=None, command=None, dictionary=False, integer=False, real=False, nocase=False, decreasing=False, ignoreempty=False, recurse=False)
-
-      Sort the children of *parent*.
-      By default the children are sorted by the value of the first display
-      column, as Unicode strings, in increasing order.
-      *column* selects the column to sort on.
-      *dictionary*, *integer* and *real* select the comparison type;
-      *nocase* makes string comparison case-insensitive.
-      *command* is a function of two values
-      returning a negative, zero or positive number.
-      *decreasing* reverses the order.
-      *ignoreempty* skips empty values (with *integer* or *real*).
-      *recurse* also sorts all descendants.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: search(parent, pattern, *, columns=None, start=None, stop=None, dictionary=False, integer=False, real=False, nocase=False, glob=False, regexp=False, backwards=False, hidden=False, recurse=False, wraparound=False)
-
-      Search *parent*'s children for *pattern*
-      and return the identifier of the first matching item,
-      or ``''`` if there is no match.
-      By default *pattern* is matched for exact equality
-      against the value of each displayed column, as Unicode strings,
-      searching forwards through the direct children of *parent*.
-      *glob* or *regexp* select glob-style or regular expression matching;
-      *dictionary*, *integer* and *real* select the comparison type;
-      *nocase* makes it case-insensitive.
-      *columns* limits the search to the given columns.
-      *start* and *stop* bound the search;
-      *backwards* reverses its direction;
-      *wraparound* continues from the other end.
-      *hidden* also searches hidden and closed items;
-      *recurse* searches all descendants.
-
-      See :meth:`search_all`, :meth:`search_cell` and :meth:`search_all_cells`.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: search_all(parent, pattern, **kwargs)
-
-      Like :meth:`search`,
-      but returns a tuple of the identifiers of all matching items.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: search_cell(parent, pattern, **kwargs)
-
-      Like :meth:`search`,
-      but returns the first matching cell as an ``(item, column)`` 2-tuple,
-      or an empty tuple if there is no match.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: search_all_cells(parent, pattern, **kwargs)
-
-      Like :meth:`search`,
-      but returns a tuple of all matching cells,
-      each an ``(item, column)`` 2-tuple.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: cellselection()
-
-      Returns a tuple of the selected cells, each an ``(item, column)``
-      2-tuple.
-      The cell selection is independent from the item selection
-      (see :meth:`selection`).
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: cellselection_set(*cells)
-
-      The specified cells become the new cell selection.
-      Each cell is an ``(item, column)`` pair.
-      Call without arguments to clear the cell selection.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: cellselection_add(*cells)
-
-      Add the specified cells to the cell selection.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: cellselection_remove(*cells)
-
-      Remove the specified cells from the cell selection.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: cellselection_set_range(first, last, *, hidden=True, recurse=True)
-
-      Set the cell selection to the rectangle of cells from *first* to *last*.
-      *first* and *last* are the opposite corner cells,
-      each an ``(item, column)`` pair, and must be in displayed columns.
-      All other cells are unselected.
-      If *hidden* is false, hidden cells are excluded;
-      if *recurse* is false, cells in descendant items are excluded.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: cellselection_add_range(first, last, *, hidden=True, recurse=True)
-
-      Like :meth:`cellselection_set_range`,
-      but adds the rectangle of cells to the cell selection
-      instead of replacing it.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: cellselection_remove_range(first, last, *, hidden=True, recurse=True)
-
-      Like :meth:`cellselection_set_range`,
-      but removes the rectangle of cells from the cell selection.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: cellselection_anchor(cell=None)
-
-      Get or set the cell selection anchor.
-      Without *cell*, returns the anchor as an ``(item, column)`` 2-tuple,
-      or an empty tuple if it is unset.
-      With *cell*, sets the anchor; use ``''`` to unset it.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: cellselection_includes(*cells)
-
-      Returns whether all of the specified cells are selected.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: cellselection_present()
-
-      Returns whether any cell is selected.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: tag_cell_add(tagname, *cells)
-
-      Add the given tag to each of the specified cells.
-      Each cell is an ``(item, column)`` pair.
-      Cell tags are independent from item tags.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: tag_cell_remove(tagname, *cells)
-
-      Remove the given tag from each of the specified cells.
-      If no cell is specified, the tag is removed from all cells.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
-
-
-   .. method:: tag_cell_has(tagname, cell=None)
-
-      Test for a cell tag, or list the cells that have it.
-      If *cell* is specified, returns whether that cell has the given tag.
-      Otherwise returns a tuple of all cells (as ``(item, column)`` 2-tuples)
-      that have the tag.
-
-      Requires Tk 9.1 or newer.
-
-      .. versionadded:: 3.16
+      Returns the identifier of *item*'s previous sibling, or '' if *item* is
+      the first child of its parent.
 
 
    .. method:: see(item)
@@ -1898,8 +1495,8 @@ If you don't know the class name of a widget, use the method
       Example::
 
          img1 = tkinter.PhotoImage(master=root, file='button.png')
-         img2 = tkinter.PhotoImage(master=root, file='button-pressed.png')
-         img3 = tkinter.PhotoImage(master=root, file='button-active.png')
+         img1 = tkinter.PhotoImage(master=root, file='button-pressed.png')
+         img1 = tkinter.PhotoImage(master=root, file='button-active.png')
          style = ttk.Style(root)
          style.element_create('Button.button', 'image',
                               img1, ('pressed', img2), ('active', img3),
@@ -2035,16 +1632,6 @@ If you don't know the class name of a widget, use the method
    .. method:: theme_names()
 
       Returns a tuple of all known themes.
-
-
-   .. method:: theme_styles(themename=None)
-
-      Returns a tuple of all styles in *themename*.
-      If *themename* is not given, the current theme is used.
-
-      .. versionadded:: 3.16
-
-      Availability: Tk 9.0.
 
 
    .. method:: theme_use(themename=None)
@@ -2184,11 +1771,10 @@ and inherits the common methods of :class:`Widget`.
    display in the menu.
    A *command* keyword argument may be given to specify a callable that is
    invoked with the selected value whenever the selection changes; the *style*
-   keyword argument sets the style used by the underlying menubutton; the
+   keyword argument sets the style used by the underlying menubutton; and the
    *direction* keyword argument sets where the menu is posted relative to the
    menubutton (one of ``'above'``, ``'below'`` (the default), ``'left'``,
-   ``'right'`` or ``'flush'``); and the *name* keyword argument sets the Tk
-   widget name.
+   ``'right'`` or ``'flush'``).
 
    .. method:: set_menu(default=None, *values)
 
@@ -2199,9 +1785,6 @@ and inherits the common methods of :class:`Widget`.
    .. method:: destroy()
 
       Destroy this widget and its associated menu.
-
-   .. versionchanged:: 3.14
-      Added support for the *name* keyword argument.
 
 
 

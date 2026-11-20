@@ -14,24 +14,21 @@ to modify the meaning of the API call itself.
 """
 
 import collections
-import contextvars
 import collections.abc
 import concurrent.futures
 import errno
 import heapq
 import itertools
-import math
 import os
 import socket
 import stat
 import subprocess
-import sys
 import threading
 import time
 import traceback
+import sys
 import warnings
 import weakref
-import inspect
 
 try:
     import ssl
@@ -196,13 +193,7 @@ if hasattr(socket, 'TCP_NODELAY'):
         if (sock.family in {socket.AF_INET, socket.AF_INET6} and
                 sock.type == socket.SOCK_STREAM and
                 sock.proto == socket.IPPROTO_TCP):
-            try:
-                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            except OSError:
-                # TCP_NODELAY is only a latency optimization.  It can fail
-                # on a connection already reset by the peer (e.g. EINVAL
-                # on macOS); the error will surface on the next I/O.
-                pass
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 else:
     def _set_nodelay(sock):
         pass
@@ -298,7 +289,6 @@ class Server(events.AbstractServer):
         self._ssl_shutdown_timeout = ssl_shutdown_timeout
         self._serving = False
         self._serving_forever_fut = None
-        self._context = contextvars.copy_context()
 
     def __repr__(self):
         return f'<{self.__class__.__name__} sockets={self.sockets!r}>'
@@ -328,7 +318,7 @@ class Server(events.AbstractServer):
             self._loop._start_serving(
                 self._protocol_factory, sock, self._ssl_context,
                 self, self._backlog, self._ssl_handshake_timeout,
-                self._ssl_shutdown_timeout, context=self._context)
+                self._ssl_shutdown_timeout)
 
     def get_loop(self):
         return self._loop
@@ -438,6 +428,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         # Identifier of the thread running the event loop, or None if the
         # event loop is not running
         self._thread_id = None
+        self._clock_resolution = time.get_clock_info('monotonic').resolution
         self._exception_handler = None
         self.set_debug(coroutines._is_debug_mode())
         # The preserved state of async generator hooks.
@@ -468,18 +459,24 @@ class BaseEventLoop(events.AbstractEventLoop):
         """Create a Future object attached to the loop."""
         return futures.Future(loop=self)
 
-    def create_task(self, coro, **kwargs):
-        """Schedule or begin executing a coroutine object.
+    def create_task(self, coro, *, name=None, context=None, **kwargs):
+        """Schedule a coroutine object.
 
         Return a task object.
         """
         self._check_closed()
         if self._task_factory is not None:
-            return self._task_factory(self, coro, **kwargs)
+            if context is not None:
+                kwargs["context"] = context
 
-        task = tasks.Task(coro, loop=self, **kwargs)
-        if task._source_traceback:
-            del task._source_traceback[-1]
+            task = self._task_factory(self, coro, **kwargs)
+            task.set_name(name)
+
+        else:
+            task = tasks.Task(coro, loop=self, name=name, context=context, **kwargs)
+            if task._source_traceback:
+                del task._source_traceback[-1]
+
         try:
             return task
         finally:
@@ -517,8 +514,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             extra=None, server=None,
             ssl_handshake_timeout=None,
             ssl_shutdown_timeout=None,
-            call_connection_made=True,
-            context=None):
+            call_connection_made=True):
         """Create SSL transport."""
         raise NotImplementedError
 
@@ -595,7 +591,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             return_exceptions=True)
 
         for result, agen in zip(results, closing_agens):
-            if isinstance(result, BaseException):
+            if isinstance(result, Exception):
                 self.call_exception_handler({
                     'message': f'an error occurred during closing of '
                                f'asynchronous generator {agen!r}',
@@ -846,7 +842,7 @@ class BaseEventLoop(events.AbstractEventLoop):
 
     def _check_callback(self, callback, method):
         if (coroutines.iscoroutine(callback) or
-                inspect.iscoroutinefunction(callback)):
+                coroutines.iscoroutinefunction(callback)):
             raise TypeError(
                 f"coroutines cannot be used with {method}()")
         if not callable(callback):
@@ -883,10 +879,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._check_closed()
         if self._debug:
             self._check_callback(callback, 'call_soon_threadsafe')
-        handle = events._ThreadSafeHandle(callback, args, self, context)
-        self._ready.append(handle)
-        if handle._source_traceback:
-            del handle._source_traceback[-1]
+        handle = self._call_soon(callback, args, context)
         if handle._source_traceback:
             del handle._source_traceback[-1]
         self._write_to_self()
@@ -960,7 +953,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         try:
             return await self._sock_sendfile_native(sock, file,
                                                     offset, count)
-        except exceptions.SendfileNotAvailableError:
+        except exceptions.SendfileNotAvailableError as exc:
             if not fallback:
                 raise
         return await self._sock_sendfile_fallback(sock, file,
@@ -1222,34 +1215,26 @@ class BaseEventLoop(events.AbstractEventLoop):
             self, sock, protocol_factory, ssl,
             server_hostname, server_side=False,
             ssl_handshake_timeout=None,
-            ssl_shutdown_timeout=None, context=None):
+            ssl_shutdown_timeout=None):
 
-        try:
-            sock.setblocking(False)
-            context = context if context is not None else contextvars.copy_context()
+        sock.setblocking(False)
 
-            protocol = protocol_factory()
-            waiter = self.create_future()
-            if ssl:
-                sslcontext = None if isinstance(ssl, bool) else ssl
-                transport = self._make_ssl_transport(
-                    sock, protocol, sslcontext, waiter,
-                    server_side=server_side, server_hostname=server_hostname,
-                    ssl_handshake_timeout=ssl_handshake_timeout,
-                    ssl_shutdown_timeout=ssl_shutdown_timeout,
-                    context=context)
-            else:
-                transport = self._make_socket_transport(sock, protocol, waiter, context=context)
-        except:
-            # gh-153133: close the socket if the transport is never created.
-            sock.close()
-            raise
+        protocol = protocol_factory()
+        waiter = self.create_future()
+        if ssl:
+            sslcontext = None if isinstance(ssl, bool) else ssl
+            transport = self._make_ssl_transport(
+                sock, protocol, sslcontext, waiter,
+                server_side=server_side, server_hostname=server_hostname,
+                ssl_handshake_timeout=ssl_handshake_timeout,
+                ssl_shutdown_timeout=ssl_shutdown_timeout)
+        else:
+            transport = self._make_socket_transport(sock, protocol, waiter)
 
         try:
             await waiter
         except:
             transport.close()
-            waiter = None
             raise
 
         return transport, protocol
@@ -1289,12 +1274,12 @@ class BaseEventLoop(events.AbstractEventLoop):
             try:
                 return await self._sendfile_native(transport, file,
                                                    offset, count)
-            except exceptions.SendfileNotAvailableError:
+            except exceptions.SendfileNotAvailableError as exc:
                 if not fallback:
                     raise
 
         if not fallback:
-            raise exceptions.SendfileNotAvailableError(
+            raise RuntimeError(
                 f"fallback is disabled and native sendfile is not "
                 f"supported for transport {transport!r}")
         return await self._sendfile_fallback(transport, file,
@@ -1307,10 +1292,7 @@ class BaseEventLoop(events.AbstractEventLoop):
     async def _sendfile_fallback(self, transp, file, offset, count):
         if hasattr(file, 'seek'):
             file.seek(offset)
-        blocksize = (
-            min(count, constants.SENDFILE_FALLBACK_READBUFFER_SIZE)
-            if count else constants.SENDFILE_FALLBACK_READBUFFER_SIZE
-        )
+        blocksize = min(count, 16384) if count else 16384
         buf = bytearray(blocksize)
         total_sent = 0
         proto = _SendfileFallbackProtocol(transp)
@@ -1387,7 +1369,6 @@ class BaseEventLoop(events.AbstractEventLoop):
             transport.close()
             conmade_cb.cancel()
             resume_cb.cancel()
-            waiter = None
             raise
 
         return ssl_protocol._app_transport
@@ -1504,12 +1485,7 @@ class BaseEventLoop(events.AbstractEventLoop):
             else:
                 raise exceptions[0]
 
-        try:
-            protocol = protocol_factory()
-        except:
-            # gh-156400: no transport owns the socket yet, so close it.
-            sock.close()
-            raise
+        protocol = protocol_factory()
         waiter = self.create_future()
         transport = self._make_datagram_transport(
             sock, protocol, r_addr, waiter)
@@ -1712,7 +1688,8 @@ class BaseEventLoop(events.AbstractEventLoop):
             raise ValueError(
                 'ssl_shutdown_timeout is only meaningful with ssl')
 
-        _check_ssl_socket(sock)
+        if sock is not None:
+            _check_ssl_socket(sock)
 
         transport, protocol = await self._create_connection_transport(
             sock, protocol_factory, ssl, '', server_side=True,
@@ -1726,12 +1703,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         return transport, protocol
 
     async def connect_read_pipe(self, protocol_factory, pipe):
-        try:
-            protocol = protocol_factory()
-        except:
-            # gh-156400: no transport owns the pipe yet, so close it.
-            pipe.close()
-            raise
+        protocol = protocol_factory()
         waiter = self.create_future()
         transport = self._make_read_pipe_transport(pipe, protocol, waiter)
 
@@ -1747,12 +1719,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         return transport, protocol
 
     async def connect_write_pipe(self, protocol_factory, pipe):
-        try:
-            protocol = protocol_factory()
-        except:
-            # gh-156400: no transport owns the pipe yet, so close it.
-            pipe.close()
-            raise
+        protocol = protocol_factory()
         waiter = self.create_future()
         transport = self._make_write_pipe_transport(pipe, protocol, waiter)
 
@@ -2059,10 +2026,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         event_list = None
 
         # Handle 'later' callbacks that are ready.
-        now = self.time()
-        # Ensure that `end_time` is strictly increasing
-        # when the clock resolution is too small.
-        end_time = now + max(constants.CLOCK_RESOLUTION, math.ulp(now))
+        end_time = self.time() + self._clock_resolution
         while self._scheduled:
             handle = self._scheduled[0]
             if handle._when >= end_time:

@@ -8,7 +8,7 @@ from unittest import mock
 
 
 def tearDownModule():
-    asyncio.set_event_loop(None)
+    asyncio.set_event_loop_policy(None)
 
 
 class ToThreadTests(unittest.IsolatedAsyncioTestCase):

@@ -28,7 +28,7 @@ struct _PyInterpreterFrame;
  * Does not raise an exception. */
 PyAPI_FUNC(PyObject *) PyUnstable_InterpreterFrame_GetCode(struct _PyInterpreterFrame *frame);
 
-/* Returns a byte offset into the last executed instruction.
+/* Returns a byte ofsset into the last executed instruction.
  * Does not raise an exception. */
 PyAPI_FUNC(int) PyUnstable_InterpreterFrame_GetLasti(struct _PyInterpreterFrame *frame);
 
@@ -36,7 +36,10 @@ PyAPI_FUNC(int) PyUnstable_InterpreterFrame_GetLasti(struct _PyInterpreterFrame 
  * Does not raise an exception. */
 PyAPI_FUNC(int) PyUnstable_InterpreterFrame_GetLine(struct _PyInterpreterFrame *frame);
 
-/* Returns a new (strong) reference to the local variable at `index` in the
- * frame's localsplus array. */
-PyAPI_FUNC(int) PyUnstable_InterpreterFrame_GetLocal(
-    struct _PyInterpreterFrame *frame, Py_ssize_t index, PyObject **result);
+#define PyUnstable_EXECUTABLE_KIND_SKIP 0
+#define PyUnstable_EXECUTABLE_KIND_PY_FUNCTION 1
+#define PyUnstable_EXECUTABLE_KIND_BUILTIN_FUNCTION 3
+#define PyUnstable_EXECUTABLE_KIND_METHOD_DESCRIPTOR 4
+#define PyUnstable_EXECUTABLE_KINDS 5
+
+PyAPI_DATA(const PyTypeObject *) const PyUnstable_ExecutableKinds[PyUnstable_EXECUTABLE_KINDS+1];

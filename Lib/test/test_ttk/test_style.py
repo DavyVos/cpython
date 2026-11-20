@@ -6,8 +6,7 @@ from tkinter import TclError
 from test import support
 from test.support import requires
 from test.test_tkinter.support import setUpModule  # noqa: F401
-from test.test_tkinter.support import (AbstractTkTest, get_tk_patchlevel,
-                                       requires_tk)
+from test.test_tkinter.support import AbstractTkTest, get_tk_patchlevel
 
 requires('gui')
 
@@ -125,25 +124,6 @@ class StyleTest(AbstractTkTest, unittest.TestCase):
 
         self.style.theme_use(curr_theme)
 
-    @requires_tk(9, 0)
-    def test_theme_styles(self):
-        # The 'default' theme is always available and defines the base styles.
-        default_styles = self.style.theme_styles('default')
-        self.assertIsInstance(default_styles, tuple)
-        self.assertIn('.', default_styles)
-        self.assertIn('TButton', default_styles)
-
-        # Without an argument the current theme is used.
-        styles = self.style.theme_styles()
-        self.assertIsInstance(styles, tuple)
-        self.assertIn('.', styles)
-
-        for theme in self.style.theme_names():
-            self.assertIsInstance(self.style.theme_styles(theme), tuple)
-
-        self.assertRaises(tkinter.TclError,
-                          self.style.theme_styles, 'nonexistingname')
-
     def test_theme_settings(self):
         style = self.style
         theme = style.theme_use()
@@ -181,9 +161,16 @@ class StyleTest(AbstractTkTest, unittest.TestCase):
                     newname = f'C.{name}'
                     self.assertEqual(style.configure(newname), None)
                     style.configure(newname, **default)
-                    self.assertEqual(style.configure(newname), default)
+                    # gh-128846: the aqua theme with Tk 9 reports an unset
+                    # option as an empty tuple, while the copy reports it as an
+                    # empty string.
+                    def norm(value):
+                        return '' if value == () else value
+                    self.assertEqual(style.configure(newname),
+                                     {k: norm(v) for k, v in default.items()})
                     for key, value in default.items():
-                        self.assertEqual(style.configure(newname, key), value)
+                        self.assertEqual(style.configure(newname, key),
+                                         norm(value))
 
 
     def test_map_custom_copy(self):

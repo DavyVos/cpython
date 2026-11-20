@@ -2,7 +2,7 @@ r"""plistlib.py -- a tool to generate and parse MacOSX .plist files.
 
 The property list (.plist) file format is a simple XML pickle supporting
 basic object types, like dictionaries, lists, numbers and strings.
-Usually the top level object is a dictionary or a frozen dictionary.
+Usually the top level object is a dictionary.
 
 To write out a plist file, use the dump(value, file)
 function. 'value' is the top level object, 'file' is
@@ -122,7 +122,13 @@ _controlCharPat = re.compile(
     r"\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f]")
 
 def _encode_base64(s, maxlinelength=76):
-    return binascii.b2a_base64(s, wrapcol=maxlinelength, newline=False)
+    # copied from base64.encodebytes(), with added maxlinelength argument
+    maxbinsize = (maxlinelength//4)*3
+    pieces = []
+    for i in range(0, len(s), maxbinsize):
+        chunk = s[i : i + maxbinsize]
+        pieces.append(binascii.b2a_base64(chunk))
+    return b''.join(pieces)
 
 def _decode_base64(s):
     if isinstance(s, str):
@@ -376,7 +382,7 @@ class _PlistWriter(_DumbXMLWriter):
         elif isinstance(value, float):
             self.simple_element("real", repr(value))
 
-        elif isinstance(value, (dict, frozendict)):
+        elif isinstance(value, dict):
             self.write_dict(value)
 
         elif isinstance(value, (bytes, bytearray)):
@@ -395,10 +401,11 @@ class _PlistWriter(_DumbXMLWriter):
     def write_bytes(self, data):
         self.begin_element("data")
         self._indent_level -= 1
-        wrapcol = 76 - len((self.indent * self._indent_level).expandtabs())
-        wrapcol = max(16, wrapcol)
-        encoded = binascii.b2a_base64(data, wrapcol=wrapcol, newline=False)
-        for line in encoded.split(b"\n"):
+        maxlinelength = max(
+            16,
+            76 - len((self.indent * self._indent_level).expandtabs()))
+
+        for line in _encode_base64(data, maxlinelength).split(b"\n"):
             if line:
                 self.writeln(line)
         self._indent_level += 1
@@ -468,7 +475,7 @@ class InvalidFileException (ValueError):
     def __init__(self, message="Invalid file"):
         ValueError.__init__(self, message)
 
-_BINARY_FORMAT = frozendict({1: 'B', 2: 'H', 4: 'L', 8: 'Q'})
+_BINARY_FORMAT = {1: 'B', 2: 'H', 4: 'L', 8: 'Q'}
 
 _undefined = object()
 
@@ -699,7 +706,7 @@ class _BinaryPlistWriter (object):
         top_object = self._getrefnum(value)
         offset_table_offset = self._fp.tell()
         offset_size = _count_to_size(offset_table_offset)
-        offset_format = f'>{num_objects}{_BINARY_FORMAT[offset_size]}'
+        offset_format = '>' + _BINARY_FORMAT[offset_size] * num_objects
         self._fp.write(struct.pack(offset_format, *self._object_offsets))
 
         # Write trailer
@@ -730,7 +737,7 @@ class _BinaryPlistWriter (object):
             self._objidtable[id(value)] = refnum
 
         # And finally recurse into containers
-        if isinstance(value, (dict, frozendict)):
+        if isinstance(value, dict):
             keys = []
             values = []
             items = _dict_items(value, self._sort_keys, self._skipkeys)
@@ -846,9 +853,9 @@ class _BinaryPlistWriter (object):
             refs = [self._getrefnum(o) for o in value]
             s = len(refs)
             self._write_size(0xA0, s)
-            self._fp.write(struct.pack(f'>{s}{self._ref_format}', *refs))
+            self._fp.write(struct.pack('>' + self._ref_format * s, *refs))
 
-        elif isinstance(value, (dict, frozendict)):
+        elif isinstance(value, dict):
             keyRefs, valRefs = [], []
 
             rootItems = _dict_items(value, self._sort_keys, self._skipkeys)
@@ -862,8 +869,8 @@ class _BinaryPlistWriter (object):
 
             s = len(keyRefs)
             self._write_size(0xD0, s)
-            self._fp.write(struct.pack(f'>{s}{self._ref_format}', *keyRefs))
-            self._fp.write(struct.pack(f'>{s}{self._ref_format}', *valRefs))
+            self._fp.write(struct.pack('>' + self._ref_format * s, *keyRefs))
+            self._fp.write(struct.pack('>' + self._ref_format * s, *valRefs))
 
         else:
             raise TypeError(value)
@@ -877,18 +884,18 @@ def _is_fmt_binary(header):
 # Generic bits
 #
 
-_FORMATS=frozendict({
-    FMT_XML: frozendict(
+_FORMATS={
+    FMT_XML: dict(
         detect=_is_fmt_xml,
         parser=_PlistParser,
         writer=_PlistWriter,
     ),
-    FMT_BINARY: frozendict(
+    FMT_BINARY: dict(
         detect=_is_fmt_binary,
         parser=_BinaryPlistParser,
         writer=_BinaryPlistWriter,
     )
-})
+}
 
 
 def load(fp, *, fmt=None, dict_type=dict, aware_datetime=False):

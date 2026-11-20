@@ -36,7 +36,7 @@ the :mod:`glob` module.)
 
    Since different operating systems have different path name conventions, there
    are several versions of this module in the standard library.  The
-   :mod:`!os.path` module is always the path module suitable for the operating
+   :mod:`os.path` module is always the path module suitable for the operating
    system Python is running on, and therefore usable for local paths.  However,
    you can also import and use the individual modules if you want to manipulate
    a path that is *always* in one of the different formats.  They all have the
@@ -131,14 +131,6 @@ the :mod:`glob` module.)
 
    .. versionchanged:: 3.6
       Accepts a :term:`path-like object`.
-
-   .. deprecated:: 3.15
-      Deprecated in favor of :func:`os.path.commonpath` for path prefixes.
-      The :func:`os.path.commonprefix` function is being deprecated due to
-      having a misleading name and module. The function is not safe to use for
-      path prefixes despite being included in a module about path manipulation,
-      meaning it is easy to accidentally introduce path traversal
-      vulnerabilities into Python programs by using this function.
 
 
 .. function:: dirname(path, /)
@@ -466,8 +458,6 @@ the :mod:`glob` module.)
    re-raised.
    In particular, :exc:`FileNotFoundError` is raised if *path* does not exist,
    or another :exc:`OSError` if it is otherwise inaccessible.
-   If *strict* is :data:`ALL_BUT_LAST`, the last component of the path
-   is allowed to be missing, but all other errors are raised.
 
    If *strict* is :py:data:`os.path.ALLOW_MISSING`, errors other than
    :exc:`FileNotFoundError` are re-raised (as with ``strict=True``).
@@ -491,22 +481,15 @@ the :mod:`glob` module.)
    .. versionchanged:: 3.10
       The *strict* parameter was added.
 
-   .. versionchanged:: 3.15
-      The :data:`ALL_BUT_LAST` and :data:`ALLOW_MISSING` values for
-      the *strict* parameter was added.
-
-.. data:: ALL_BUT_LAST
-
-   Special value used for the *strict* argument in :func:`realpath`.
-
-   .. versionadded:: 3.15
+   .. versionchanged:: 3.13.4
+      The :py:data:`~os.path.ALLOW_MISSING` value for the *strict* parameter
+      was added.
 
 .. data:: ALLOW_MISSING
 
    Special value used for the *strict* argument in :func:`realpath`.
 
-   .. versionadded:: 3.15
-
+   .. versionadded:: 3.13.4
 
 .. function:: relpath(path, start=os.curdir)
 

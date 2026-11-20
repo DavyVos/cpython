@@ -125,14 +125,9 @@ class TestVariable(TestBase):
             trace.append(('read',) + args)
         def write_tracer(*args):
             trace.append(('write',) + args)
-        with self.assertWarns(DeprecationWarning) as cm:
-            cb1 = v.trace_variable('r', read_tracer)
-        self.assertEqual(cm.filename, __file__)
-        with self.assertWarns(DeprecationWarning):
-            cb2 = v.trace_variable('wu', write_tracer)
-        with self.assertWarns(DeprecationWarning) as cm:
-            self.assertEqual(sorted(v.trace_vinfo()), [('r', cb1), ('wu', cb2)])
-        self.assertEqual(cm.filename, __file__)
+        cb1 = v.trace_variable('r', read_tracer)
+        cb2 = v.trace_variable('wu', write_tracer)
+        self.assertEqual(sorted(v.trace_vinfo()), [('r', cb1), ('wu', cb2)])
         self.assertEqual(trace, [])
 
         v.set('spam')
@@ -143,30 +138,20 @@ class TestVariable(TestBase):
         self.assertEqual(trace, [('read', vname, '', 'r')])
 
         trace = []
-        with self.assertWarns(DeprecationWarning):
-            info = sorted(v.trace_vinfo())
-        with self.assertWarns(DeprecationWarning):
-            v.trace_vdelete('w', cb1)  # Wrong mode
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(sorted(v.trace_vinfo()), info)
+        info = sorted(v.trace_vinfo())
+        v.trace_vdelete('w', cb1)  # Wrong mode
+        self.assertEqual(sorted(v.trace_vinfo()), info)
         with self.assertRaises(TclError):
-            with self.assertWarns(DeprecationWarning):
-                v.trace_vdelete('r', 'spam')  # Wrong command name
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(sorted(v.trace_vinfo()), info)
-        with self.assertWarns(DeprecationWarning):
-            v.trace_vdelete('r', (cb1, 43)) # Wrong arguments
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(sorted(v.trace_vinfo()), info)
+            v.trace_vdelete('r', 'spam')  # Wrong command name
+        self.assertEqual(sorted(v.trace_vinfo()), info)
+        v.trace_vdelete('r', (cb1, 43)) # Wrong arguments
+        self.assertEqual(sorted(v.trace_vinfo()), info)
         v.get()
         self.assertEqual(trace, [('read', vname, '', 'r')])
 
         trace = []
-        with self.assertWarns(DeprecationWarning) as cm:
-            v.trace_vdelete('r', cb1)
-        self.assertEqual(cm.filename, __file__)
-        with self.assertWarns(DeprecationWarning):
-            self.assertEqual(v.trace_vinfo(), [('wu', cb2)])
+        v.trace_vdelete('r', cb1)
+        self.assertEqual(v.trace_vinfo(), [('wu', cb2)])
         v.get()
         self.assertEqual(trace, [])
 

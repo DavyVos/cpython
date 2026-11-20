@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import unittest
-from test import support
-from test.support import script_helper
-from test.support.os_helper import TESTFN, TESTFN_ASCII, unlink, rmtree
-from test.support.import_helper import import_module, unload
+from test.support import script_helper, captured_stdout, requires_subprocess, requires_resource
+from test.support.os_helper import TESTFN, unlink, rmtree
+from test.support.import_helper import unload
 import importlib
 import os
 import sys
@@ -28,30 +27,6 @@ class MiscSourceEncodingTest(unittest.TestCase):
         d = {}
         exec(c, d)
         self.assertEqual(d['u'], '\xf3')
-
-    def test_compilestring_line_endings(self):
-        for newline in ('\n', '\r', '\r\n', '\r\r\n'):
-            expected = 'é\n\ntext' if newline == '\r\r\n' else 'é\ntext'
-            for suffix in ('', newline):
-                for mode in ('exec', 'eval'):
-                    source = f"'''é{newline}text'''{suffix}"
-                    if mode == 'exec':
-                        source = 'value = ' + source
-                    for encoding in (None, 'utf-8', 'latin-1'):
-                        with self.subTest(newline=newline, suffix=suffix,
-                                          mode=mode, encoding=encoding):
-                            input = source
-                            if encoding is not None:
-                                input = (f'# coding: {encoding}{newline}'
-                                         + source).encode(encoding)
-                            code = compile(input, '<test>', mode)
-                            if mode == 'exec':
-                                namespace = {}
-                                exec(code, namespace)
-                                value = namespace['value']
-                            else:
-                                value = eval(code)
-                            self.assertEqual(value, expected)
 
     def test_issue2301(self):
         try:
@@ -106,70 +81,7 @@ class MiscSourceEncodingTest(unittest.TestCase):
             with self.subTest(seq=seq):
                 self.assertRaises(SyntaxError, compile, seq, '<test>', 'exec')
 
-    def test_invalid_utf8_offset_after_non_ascii(self):
-        for name in ('é', 'éé', '𝒜'):
-            with self.subTest(name=name):
-                source = ('x = ' + name).encode() + b'\xff\n'
-                with self.assertRaises(SyntaxError) as caught:
-                    compile(source, '<test>', 'exec')
-                error = caught.exception
-                self.assertEqual(
-                    (error.lineno, error.offset, error.end_lineno, error.end_offset),
-                    (1, 5 + len(name), 1, 5 + len(name)),
-                )
-
-    @support.cpython_only
-    def test_invalid_utf8_file_offset_after_non_ascii(self):
-        _testcapi = import_module('_testcapi')
-        self.addCleanup(unlink, TESTFN_ASCII)
-        with open(TESTFN_ASCII, 'wb') as f:
-            f.write(b'\nx = \xc3\xa9\xc3\xa9\xff\n')
-        with self.assertRaises(SyntaxError) as caught:
-            _testcapi.run_file(
-                os.fsencode(TESTFN_ASCII), _testcapi.Py_file_input, {})
-        error = caught.exception
-        self.assertEqual(
-            (error.lineno, error.offset, error.end_lineno, error.end_offset),
-            (2, 7, 2, 7),
-        )
-
-    def test_long_bom_conflict_message_is_not_truncated(self):
-        encoding = "x" * 400
-        source = b"\xef\xbb\xbf# coding:" + encoding.encode() + b"\n"
-        with self.assertRaises(SyntaxError) as caught:
-            compile(source, "<test>", "exec")
-        self.assertEqual(
-            caught.exception.msg,
-            f"encoding problem: {encoding} with BOM",
-        )
-
-    def _assert_python_file_ok(self, source):
-        with tempfile.TemporaryDirectory() as directory:
-            filename = script_helper.make_script(directory, "source", source)
-            script_helper.assert_python_ok(filename)
-
-    @support.requires_subprocess()
-    def test_stateful_file_decoder_spans_lines(self):
-        encoded_name = "変数".encode("iso2022_jp")
-        payload = encoded_name[3:-3]
-        source = (
-            b"# coding: iso2022_jp\n"
-            b"# \x1b$B" + payload + b"\n"
-            + payload + b"\x1b(B = 1\n"
-        )
-        self._assert_python_file_ok(source)
-
-    @support.requires_subprocess()
-    def test_stateful_file_decoder_preserves_buffered_text(self):
-        source = b"# coding: hz\nx~\ny = 1\nassert xy == 1\n"
-        self._assert_python_file_ok(source)
-
-    @support.requires_subprocess()
-    def test_stateful_file_decoder_finalizes_before_implicit_newline(self):
-        source = b"# coding: hz\n# ~{1dA?"
-        self._assert_python_file_ok(source)
-
-    @support.requires_subprocess()
+    @requires_subprocess()
     def test_20731(self):
         sub = subprocess.Popen([sys.executable,
                         os.path.join(os.path.dirname(__file__),
@@ -250,7 +162,8 @@ class MiscSourceEncodingTest(unittest.TestCase):
             compile(input, "<string>", "exec")
         expected = "'ascii' codec can't decode byte 0xe2 in position 16: " \
                    "ordinal not in range(128)"
-        self.assertStartsWith(c.exception.args[0], expected)
+        self.assertTrue(c.exception.args[0].startswith(expected),
+                        msg=c.exception.args[0])
 
     def test_file_parse_error_multiline(self):
         # gh96611:
@@ -372,17 +285,6 @@ class AbstractSourceEncodingTest:
                b'print(ascii("\xc3\xa4"))\n')
         self.check_script_output(src, br"'\xc3\u20ac'")
 
-    def test_first_utf8_coding_line_error(self):
-        src = (b'#coding:ascii \xc3\xa4\n'
-               b'raise RuntimeError\n')
-        self.check_script_error(src, br"(\(unicode error\) )?'ascii' codec can't decode byte")
-
-    def test_second_utf8_coding_line_error(self):
-        src = (b'#!/usr/bin/python\n'
-               b'#coding:ascii \xc3\xa4\n'
-               b'raise RuntimeError\n')
-        self.check_script_error(src, br"(\(unicode error\) )?'ascii' codec can't decode byte")
-
     def test_utf8_bom(self):
         src = (b'\xef\xbb\xbfprint(ascii("\xc3\xa4"))\n')
         self.check_script_output(src, br"'\xe4'")
@@ -398,83 +300,14 @@ class AbstractSourceEncodingTest:
                b'print(ascii("\xc3\xa4"))\n')
         self.check_script_output(src, br"'\xe4'")
 
-    def test_utf8_bom_and_non_utf8_first_coding_line(self):
-        src = (b'\xef\xbb\xbf#coding:iso-8859-15\n'
-               b'raise RuntimeError\n')
-        self.check_script_error(src,
-                br"encoding problem: iso-8859-15 with BOM",
-                lineno=1)
-
-    def test_utf8_bom_and_non_utf8_second_coding_line(self):
-        src = (b'\xef\xbb\xbf#first\n'
-               b'#coding:iso-8859-15\n'
-               b'raise RuntimeError\n')
-        self.check_script_error(src,
-                br"encoding problem: iso-8859-15 with BOM",
-                lineno=2)
-
-    def test_non_utf8_shebang(self):
-        src = (b'#!/home/\xa4/bin/python\n'
-               b'#coding:iso-8859-15\n'
-               b'print(ascii("\xc3\xa4"))\n')
-        self.check_script_output(src, br"'\xc3\u20ac'")
-
-    def test_utf8_shebang_error(self):
-        src = (b'#!/home/\xc3\xa4/bin/python\n'
-               b'#coding:ascii\n'
-               b'raise RuntimeError\n')
-        self.check_script_error(src, br"(\(unicode error\) )?'ascii' codec can't decode byte")
-
-    def test_non_utf8_shebang_error(self):
-        src = (b'#!/home/\xa4/bin/python\n'
-               b'raise RuntimeError\n')
-        self.check_script_error(src, br"Non-UTF-8 code starting with .* on line 1",
-                                lineno=1)
-
-    def test_non_utf8_second_line_error(self):
-        src = (b'#first\n'
-               b'#second\xa4\n'
-               b'raise RuntimeError\n')
-        self.check_script_error(src,
-                br"Non-UTF-8 code starting with .* on line 2",
-                lineno=2)
-
-    def test_non_utf8_third_line_error(self):
-        src = (b'#first\n'
-               b'#second\n'
-               b'#third\xa4\n'
-               b'raise RuntimeError\n')
-        self.check_script_error(src,
-                br"Non-UTF-8 code starting with .* on line 3",
-                lineno=3)
-
-    def test_utf8_bom_non_utf8_third_line_error(self):
-        src = (b'\xef\xbb\xbf#first\n'
-               b'#second\n'
-               b'#third\xa4\n'
-               b'raise RuntimeError\n')
-        self.check_script_error(src,
-                br"Non-UTF-8 code starting with .* on line 3|"
-                br"'utf-8' codec can't decode byte",
-                lineno=3)
-
-    def test_utf_8_non_utf8_third_line_error(self):
-        src = (b'#coding: utf-8\n'
-               b'#second\n'
-               b'#third\xa4\n'
-               b'raise RuntimeError\n')
-        self.check_script_error(src,
-                br"Non-UTF-8 code starting with .* on line 3|"
-                br"'utf-8' codec can't decode byte",
-                lineno=3)
-
-    def test_utf8_non_utf8_third_line_error(self):
+    def test_utf8_non_utf8_comment_line_error(self):
         src = (b'#coding: utf8\n'
-               b'#second\n'
-               b'#third\xa4\n'
+               b'#\n'
+               b'#\xa4\n'
                b'raise RuntimeError\n')
         self.check_script_error(src,
-                br"'utf-8' codec can't decode byte")
+                br"'utf-8' codec can't decode byte|"
+                br"encoding problem: utf8")
 
     def test_crlf(self):
         src = (b'print(ascii("""\r\n"""))\n')
@@ -511,7 +344,7 @@ class AbstractSourceEncodingTest:
 class UTF8ValidatorTest(unittest.TestCase):
     @unittest.skipIf(not sys.platform.startswith("linux"),
                      "Too slow to run on non-Linux platforms")
-    @support.requires_resource('cpu')
+    @requires_resource('cpu')
     def test_invalid_utf8(self):
         # This is a port of test_utf8_decode_invalid_sequences in
         # test_unicode.py to exercise the separate utf8 validator in
@@ -577,29 +410,19 @@ class UTF8ValidatorTest(unittest.TestCase):
             check(b'\xF4'+cb+b'\xBF\xBF')
 
 
-@support.force_not_colorized_test_class
 class BytesSourceEncodingTest(AbstractSourceEncodingTest, unittest.TestCase):
 
     def check_script_output(self, src, expected):
-        with support.captured_stdout() as stdout:
+        with captured_stdout() as stdout:
             exec(src)
         out = stdout.getvalue().encode('latin1')
         self.assertEqual(out.rstrip(), expected)
 
-    def check_script_error(self, src, expected, lineno=...):
-        with self.assertRaises(SyntaxError) as cm:
+    def check_script_error(self, src, expected):
+        with self.assertRaisesRegex(SyntaxError, expected.decode()) as cm:
             exec(src)
-        exc = cm.exception
-        self.assertRegex(str(exc), expected.decode())
-        if lineno is not ...:
-            self.assertEqual(exc.lineno, lineno)
-            line = src.splitlines()[lineno-1].decode(errors='replace')
-            if lineno == 1:
-                line = line.removeprefix('\ufeff')
-            self.assertEqual(line, exc.text)
 
 
-@support.force_not_colorized_test_class
 class FileSourceEncodingTest(AbstractSourceEncodingTest, unittest.TestCase):
 
     def check_script_output(self, src, expected):
@@ -610,36 +433,13 @@ class FileSourceEncodingTest(AbstractSourceEncodingTest, unittest.TestCase):
             res = script_helper.assert_python_ok(fn)
         self.assertEqual(res.out.rstrip(), expected)
 
-    def check_script_error(self, src, expected, lineno=...):
+    def check_script_error(self, src, expected):
         with tempfile.TemporaryDirectory() as tmpd:
             fn = os.path.join(tmpd, 'test.py')
             with open(fn, 'wb') as fp:
                 fp.write(src)
             res = script_helper.assert_python_failure(fn)
-        err = res.err.rstrip()
-        self.assertRegex(err.splitlines()[-1], b'SyntaxError: ' + expected)
-        if lineno is not ...:
-            self.assertIn(f', line {lineno}\n'.encode(),
-                          err.replace(os.linesep.encode(), b'\n'))
-            line = src.splitlines()[lineno-1].decode(errors='replace')
-            if lineno == 1:
-                line = line.removeprefix('\ufeff')
-            self.assertIn(line.encode(), err)
-
-    def test_coding_spec_unknown_encoding(self):
-        src = (b'# coding: c1252\n'
-               b'print("Hi!")\n')
-        self.check_script_error(src, br"unknown encoding: c1252")
-
-    def test_coding_spec_decode_error(self):
-        src = (b'# coding: shift-jis\n'
-               b'print("\xc4\x85")\n')
-        self.check_script_error(src, br"'shift_jis' codec can't decode byte")
-
-    def test_coding_spec_non_text_encoding(self):
-        src = (b'# coding: hex_codec\n'
-               b'print("eggs")\n')
-        self.check_script_error(src, br"'hex_codec' is not a text encoding")
+        self.assertRegex(res.err.rstrip().splitlines()[-1], b'SyntaxError.*?' + expected)
 
 
 if __name__ == "__main__":

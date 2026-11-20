@@ -4,6 +4,9 @@
 .. module:: venv
    :synopsis: Creation of virtual environments.
 
+.. moduleauthor:: Vinay Sajip <vinay_sajip@yahoo.co.uk>
+.. sectionauthor:: Vinay Sajip <vinay_sajip@yahoo.co.uk>
+
 .. versionadded:: 3.3
 
 **Source code:** :source:`Lib/venv/`
@@ -20,11 +23,8 @@ each with their own independent set of Python packages installed in
 their :mod:`site` directories.
 A virtual environment is created on top of an existing
 Python installation, known as the virtual environment's "base" Python, and by
-default is isolated from the packages in the base environment,
-so that only those explicitly installed in the virtual environment are
-available. See :ref:`sys-path-init-virtual-environments` and :mod:`site`'s
-:ref:`virtual environments documentation <site-virtual-environments-configuration>`
-for more information.
+default is isolated from the packages in the base environment, so
+that only those explicitly installed in the virtual environment are available.
 
 When used from within a virtual environment, common installation tools such as
 :pypi:`pip` will install Python packages into a virtual environment
@@ -77,9 +77,6 @@ containing a copy or symlink of the Python executable
 It also creates a :file:`lib/pythonX.Y/site-packages` subdirectory
 (on Windows, this is :file:`Lib\\site-packages`).
 If an existing directory is specified, it will be re-used.
-Reusing an existing directory does not leave it unchanged: ``venv`` may create,
-update, or replace files in the target directory. Use a dedicated directory for
-the virtual environment, and avoid placing project files directly inside it.
 
 .. versionchanged:: 3.5
    The use of ``venv`` is now recommended for creating virtual environments.
@@ -129,9 +126,7 @@ The command, if run with ``-h``, will show the available options::
 
 .. option:: --clear
 
-   Delete all contents of the environment directory if it already exists,
-   including files that were not created by ``venv``,
-   before environment creation.
+   Delete the contents of the environment directory if it already exists, before environment creation.
 
 .. option:: --upgrade
 
@@ -302,7 +297,7 @@ mechanisms for third-party virtual environment creators to customize environment
 creation according to their needs, the :class:`EnvBuilder` class.
 
 .. class:: EnvBuilder(system_site_packages=False, clear=False, \
-                      symlinks=None, upgrade=False, with_pip=False, \
+                      symlinks=False, upgrade=False, with_pip=False, \
                       prompt=None, upgrade_deps=False, \
                       *, scm_ignore_files=frozenset())
 
@@ -316,8 +311,7 @@ creation according to their needs, the :class:`EnvBuilder` class.
       any existing target directory, before creating the environment.
 
     * *symlinks* -- a boolean value indicating whether to attempt to symlink the
-      Python binary rather than copying. If ``None``, the default is ``False`` on
-      Windows and ``True`` on other platforms, matching the :ref:`CLI <venv-cli>`.
+      Python binary rather than copying.
 
     * *upgrade* -- a boolean value which, if true, will upgrade an existing
       environment with the running Python - for use when that Python has been
@@ -351,9 +345,6 @@ creation according to their needs, the :class:`EnvBuilder` class.
 
     .. versionchanged:: 3.13
        Added the ``scm_ignore_files`` parameter
-
-    .. versionchanged:: 3.16
-       The default value of *symlinks* is now platform-dependent.
 
     :class:`EnvBuilder` may be used as a base class.
 
@@ -413,8 +404,6 @@ creation according to their needs, the :class:`EnvBuilder` class.
 
         * ``lib_path`` - The purelib path for the virtual environment.
 
-        * ``platlib_path`` - The platlib path for the virtual environment.
-
         * ``bin_path`` - The script path for the virtual environment.
 
         * ``bin_name`` - The name of the script path relative to the virtual
@@ -439,9 +428,6 @@ creation according to their needs, the :class:`EnvBuilder` class.
            The attribute ``lib_path`` was added to the context, and the context
            object was documented.
 
-        .. versionchanged:: 3.15
-           The attribute ``platlib_path`` was added to the context.
-
     .. method:: create_configuration(context)
 
         Creates the ``pyvenv.cfg`` configuration file in the environment.
@@ -452,12 +438,6 @@ creation according to their needs, the :class:`EnvBuilder` class.
         On POSIX systems, if a specific executable ``python3.x`` was used,
         symlinks to ``python`` and ``python3`` will be created pointing to that
         executable, unless files with those names already exist.
-        On POSIX systems, a broken symlink at a destination path is removed
-        before the copy or symlink is created.
-
-        .. versionchanged:: 3.16
-           A broken symlink at a destination path is now removed and replaced.
-           Previously it was left in place, or it made the copy fail.
 
     .. method:: setup_scripts(context)
 
@@ -531,7 +511,7 @@ creation according to their needs, the :class:`EnvBuilder` class.
 There is also a module-level convenience function:
 
 .. function:: create(env_dir, system_site_packages=False, clear=False, \
-                     symlinks=None, with_pip=False, prompt=None, \
+                     symlinks=False, with_pip=False, prompt=None, \
                      upgrade_deps=False, *, scm_ignore_files=frozenset())
 
     Create an :class:`EnvBuilder` with the given keyword arguments, and call its
@@ -550,9 +530,6 @@ There is also a module-level convenience function:
 
     .. versionchanged:: 3.13
        Added the *scm_ignore_files* parameter
-
-    .. versionchanged:: 3.16
-       The default value of *symlinks* is now platform-dependent.
 
 An example of extending ``EnvBuilder``
 --------------------------------------
@@ -584,11 +561,10 @@ subclass which installs setuptools and pip into a created virtual environment::
                          arguments: a string indicating some progress, and a
                          context indicating where the string is coming from.
                          The context argument can have one of three values:
-                         'main', indicating that it is called from
-                         install_script() itself, and 'stdout' and 'stderr',
-                         which are obtained by reading lines from the output
-                         streams of a subprocess which is used to install
-                         the app.
+                         'main', indicating that it is called from virtualize()
+                         itself, and 'stdout' and 'stderr', which are obtained
+                         by reading lines from the output streams of a subprocess
+                         which is used to install the app.
 
                          If a callable is not specified, default progress
                          information is output to sys.stderr.

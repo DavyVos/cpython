@@ -15,7 +15,6 @@ Here is the definition of :c:type:`PyTypeObject`, with some fields only used in
 :ref:`debug builds <debug-build>` omitted:
 
 .. literalinclude:: ../includes/typestruct.h
-   :end-at: } PyTypeObject;
 
 
 Now that's a *lot* of methods.  Don't worry too much though -- if you have
@@ -71,24 +70,22 @@ object itself needs to be freed here as well.  Here is an example of this
 function::
 
    static void
-   newdatatype_dealloc(PyObject *op)
+   newdatatype_dealloc(newdatatypeobject *obj)
    {
-       newdatatypeobject *self = (newdatatypeobject *) op;
-       free(self->obj_UnderlyingDatatypePtr);
-       Py_TYPE(self)->tp_free(self);
+       free(obj->obj_UnderlyingDatatypePtr);
+       Py_TYPE(obj)->tp_free((PyObject *)obj);
    }
 
 If your type supports garbage collection, the destructor should call
 :c:func:`PyObject_GC_UnTrack` before clearing any member fields::
 
    static void
-   newdatatype_dealloc(PyObject *op)
+   newdatatype_dealloc(newdatatypeobject *obj)
    {
-       newdatatypeobject *self = (newdatatypeobject *) op;
-       PyObject_GC_UnTrack(op);
-       Py_CLEAR(self->other_obj);
+       PyObject_GC_UnTrack(obj);
+       Py_CLEAR(obj->other_obj);
        ...
-       Py_TYPE(self)->tp_free(self);
+       Py_TYPE(obj)->tp_free((PyObject *)obj);
    }
 
 .. index::
@@ -120,19 +117,17 @@ done.  This can be done using the :c:func:`PyErr_Fetch` and
            PyErr_Fetch(&err_type, &err_value, &err_traceback);
 
            cbresult = PyObject_CallNoArgs(self->my_callback);
-           if (cbresult == NULL) {
-              PyErr_WriteUnraisable(self->my_callback);
-           }
-           else {
+           if (cbresult == NULL)
+               PyErr_WriteUnraisable(self->my_callback);
+           else
                Py_DECREF(cbresult);
-           }
 
            /* This restores the saved exception state */
            PyErr_Restore(err_type, err_value, err_traceback);
 
            Py_DECREF(self->my_callback);
        }
-       Py_TYPE(self)->tp_free(self);
+       Py_TYPE(obj)->tp_free((PyObject*)self);
    }
 
 .. note::
@@ -173,11 +168,10 @@ representation of the instance for which it is called.  Here is a simple
 example::
 
    static PyObject *
-   newdatatype_repr(PyObject *op)
+   newdatatype_repr(newdatatypeobject *obj)
    {
-       newdatatypeobject *self = (newdatatypeobject *) op;
        return PyUnicode_FromFormat("Repr-ified_newdatatype{{size:%d}}",
-                                   self->obj_UnderlyingDatatypePtr->size);
+                                   obj->obj_UnderlyingDatatypePtr->size);
    }
 
 If no :c:member:`~PyTypeObject.tp_repr` handler is specified, the interpreter will supply a
@@ -194,11 +188,10 @@ used instead.
 Here is a simple example::
 
    static PyObject *
-   newdatatype_str(PyObject *op)
+   newdatatype_str(newdatatypeobject *obj)
    {
-       newdatatypeobject *self = (newdatatypeobject *) op;
        return PyUnicode_FromFormat("Stringified_newdatatype{{size:%d}}",
-                                   self->obj_UnderlyingDatatypePtr->size);
+                                   obj->obj_UnderlyingDatatypePtr->size);
    }
 
 
@@ -286,7 +279,7 @@ be read-only or read-write.  The structures in the table are defined as::
    typedef struct PyMemberDef {
        const char *name;
        int         type;
-       Py_ssize_t  offset;
+       int         offset;
        int         flags;
        const char *doc;
    } PyMemberDef;
@@ -305,8 +298,8 @@ have an associated doc string simply by providing the text in the table.  An
 application can use the introspection API to retrieve the descriptor from the
 class object, and get the doc string using its :attr:`~type.__doc__` attribute.
 
-As with the :c:member:`~PyTypeObject.tp_methods` table, a sentinel entry with a
-:c:member:`~PyMemberDef.name` value of ``NULL`` is required.
+As with the :c:member:`~PyTypeObject.tp_methods` table, a sentinel entry with a :c:member:`~PyMethodDef.ml_name` value
+of ``NULL`` is required.
 
 .. XXX Descriptors need to be explained in more detail somewhere, but not here.
 
@@ -336,16 +329,16 @@ method of a class would be called.
 Here is an example::
 
    static PyObject *
-   newdatatype_getattr(PyObject *op, char *name)
+   newdatatype_getattr(newdatatypeobject *obj, char *name)
    {
-       newdatatypeobject *self = (newdatatypeobject *) op;
-       if (strcmp(name, "data") == 0) {
-           return PyLong_FromLong(self->data);
+       if (strcmp(name, "data") == 0)
+       {
+           return PyLong_FromLong(obj->data);
        }
 
        PyErr_Format(PyExc_AttributeError,
                     "'%.100s' object has no attribute '%.400s'",
-                    Py_TYPE(self)->tp_name, name);
+                    Py_TYPE(obj)->tp_name, name);
        return NULL;
    }
 
@@ -356,7 +349,7 @@ example that simply raises an exception; if this were really all you wanted, the
 :c:member:`~PyTypeObject.tp_setattr` handler should be set to ``NULL``. ::
 
    static int
-   newdatatype_setattr(PyObject *op, char *name, PyObject *v)
+   newdatatype_setattr(newdatatypeobject *obj, char *name, PyObject *v)
    {
        PyErr_Format(PyExc_RuntimeError, "Read-only attribute: %s", name);
        return -1;
@@ -386,10 +379,8 @@ Here is a sample implementation, for a datatype that is considered equal if the
 size of an internal pointer is equal::
 
    static PyObject *
-   newdatatype_richcmp(PyObject *lhs, PyObject *rhs, int op)
+   newdatatype_richcmp(newdatatypeobject *obj1, newdatatypeobject *obj2, int op)
    {
-       newdatatypeobject *obj1 = (newdatatypeobject *) lhs;
-       newdatatypeobject *obj2 = (newdatatypeobject *) rhs;
        PyObject *result;
        int c, size1, size2;
 
@@ -408,7 +399,8 @@ size of an internal pointer is equal::
        case Py_GE: c = size1 >= size2; break;
        }
        result = c ? Py_True : Py_False;
-       return Py_NewRef(result);
+       Py_INCREF(result);
+       return result;
     }
 
 
@@ -447,14 +439,12 @@ This function, if you choose to provide it, should return a hash number for an
 instance of your data type. Here is a simple example::
 
    static Py_hash_t
-   newdatatype_hash(PyObject *op)
+   newdatatype_hash(newdatatypeobject *obj)
    {
-       newdatatypeobject *self = (newdatatypeobject *) op;
        Py_hash_t result;
-       result = self->some_size + 32767 * self->some_number;
-       if (result == -1) {
-           result = -2;
-       }
+       result = obj->some_size + 32767 * obj->some_number;
+       if (result == -1)
+          result = -2;
        return result;
    }
 
@@ -488,9 +478,8 @@ This function takes three arguments:
 Here is a toy ``tp_call`` implementation::
 
    static PyObject *
-   newdatatype_call(PyObject *op, PyObject *args, PyObject *kwds)
+   newdatatype_call(newdatatypeobject *obj, PyObject *args, PyObject *kwds)
    {
-       newdatatypeobject *self = (newdatatypeobject *) op;
        PyObject *result;
        const char *arg1;
        const char *arg2;
@@ -501,7 +490,7 @@ Here is a toy ``tp_call`` implementation::
        }
        result = PyUnicode_FromFormat(
            "Returning -- value: [%d] arg1: [%s] arg2: [%s] arg3: [%s]\n",
-           self->obj_UnderlyingDatatypePtr->size,
+           obj->obj_UnderlyingDatatypePtr->size,
            arg1, arg2, arg3);
        return result;
    }
@@ -561,8 +550,6 @@ For an object to be weakly referenceable, the extension type must set the
 field. The legacy :c:member:`~PyTypeObject.tp_weaklistoffset` field should
 be left as zero.
 
-If this flag is set, :c:macro:`Py_TPFLAGS_HAVE_GC` should also be set.
-
 Concretely, here is how the statically declared type object would look::
 
    static PyTypeObject TrivialType = {
@@ -576,12 +563,12 @@ The only further addition is that ``tp_dealloc`` needs to clear any weak
 references (by calling :c:func:`PyObject_ClearWeakRefs`)::
 
    static void
-   Trivial_dealloc(PyObject *op)
+   Trivial_dealloc(TrivialObject *self)
    {
        /* Clear weakrefs first before calling any destructors */
-       PyObject_ClearWeakRefs(op);
+       PyObject_ClearWeakRefs((PyObject *) self);
        /* ... remainder of destruction code omitted for brevity ... */
-       Py_TYPE(op)->tp_free(op);
+       Py_TYPE(self)->tp_free((PyObject *) self);
    }
 
 

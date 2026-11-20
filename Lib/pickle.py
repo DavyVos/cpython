@@ -17,6 +17,7 @@ Functions:
 
 Misc variables:
 
+    __version__
     format_version
     compatible_formats
 
@@ -25,14 +26,14 @@ Misc variables:
 from types import FunctionType
 from copyreg import dispatch_table
 from copyreg import _extension_registry, _inverted_registry, _extension_cache
-from itertools import batched
+from itertools import islice
 from functools import partial
 import sys
 from sys import maxsize
 from struct import pack, unpack
+import re
 import io
 import codecs
-import weakref
 import _compat_pickle
 
 __all__ = ["PickleError", "PicklingError", "UnpicklingError", "Pickler",
@@ -50,7 +51,7 @@ except ImportError:
 bytes_types = (bytes, bytearray)
 
 # These are purely informational; no code uses these.
-format_version = "5.0"                  # File format version we write
+format_version = "4.0"                  # File format version we write
 compatible_formats = ["1.0",            # Original protocol 0
                       "1.1",            # Protocol 0 with INST added
                       "1.2",            # Original protocol 1
@@ -67,7 +68,7 @@ HIGHEST_PROTOCOL = 5
 # The protocol we write by default.  May be less than HIGHEST_PROTOCOL.
 # Only bump this if the oldest still supported version of Python already
 # includes it.
-DEFAULT_PROTOCOL = 5
+DEFAULT_PROTOCOL = 4
 
 class PickleError(Exception):
     """A common base class for the other pickling exceptions."""
@@ -187,12 +188,7 @@ BYTEARRAY8       = b'\x96'  # push bytearray
 NEXT_BUFFER      = b'\x97'  # push next out-of-band buffer
 READONLY_BUFFER  = b'\x98'  # make top of stack readonly
 
-__all__.extend(x for x in dir() if x.isupper() and not x.startswith('_'))
-
-
-# Data larger than this will be read in chunks, to prevent extreme
-# overallocation.
-_MIN_READ_BUF_SIZE = (1 << 20)
+__all__.extend([x for x in dir() if re.match("[A-Z][A-Z0-9_]+$", x)])
 
 
 class _Framer:
@@ -293,7 +289,7 @@ class _Unframer:
                     "pickle exhausted before end of frame")
             return data
         else:
-            return self._chunked_file_read(n)
+            return self.file_read(n)
 
     def readline(self):
         if self.current_frame:
@@ -308,67 +304,47 @@ class _Unframer:
         else:
             return self.file_readline()
 
-    def _chunked_file_read(self, size):
-        cursize = min(size, _MIN_READ_BUF_SIZE)
-        b = self.file_read(cursize)
-        while cursize < size and len(b) == cursize:
-            delta = min(cursize, size - cursize)
-            b += self.file_read(delta)
-            cursize += delta
-        return b
-
     def load_frame(self, frame_size):
         if self.current_frame and self.current_frame.read() != b'':
             raise UnpicklingError(
                 "beginning of a new frame before end of current frame")
-        data = self._chunked_file_read(frame_size)
-        if len(data) < frame_size:
-            raise EOFError
-        self.current_frame = io.BytesIO(data)
+        self.current_frame = io.BytesIO(self.file_read(frame_size))
 
 
 # Tools used for pickling.
 
-def _getattribute(obj, dotted_path):
-    for subpath in dotted_path:
-        obj = getattr(obj, subpath)
-    return obj
+def _getattribute(obj, name):
+    top = obj
+    for subpath in name.split('.'):
+        if subpath == '<locals>':
+            raise AttributeError("Can't get local attribute {!r} on {!r}"
+                                 .format(name, top))
+        try:
+            parent = obj
+            obj = getattr(obj, subpath)
+        except AttributeError:
+            raise AttributeError("Can't get attribute {!r} on {!r}"
+                                 .format(name, top)) from None
+    return obj, parent
 
 def whichmodule(obj, name):
     """Find the module an object belong to."""
-    dotted_path = name.split('.')
     module_name = getattr(obj, '__module__', None)
-    if '<locals>' in dotted_path:
-        raise PicklingError(f"Can't pickle local object {obj!r}")
-    if module_name is None:
-        # Protect the iteration by using a list copy of sys.modules against dynamic
-        # modules that trigger imports of other modules upon calls to getattr.
-        for module_name, module in sys.modules.copy().items():
-            if (module_name == '__main__'
-                or module_name == '__mp_main__'  # bpo-42406
-                or module is None):
-                continue
-            try:
-                if _getattribute(module, dotted_path) is obj:
-                    return module_name
-            except AttributeError:
-                pass
-        module_name = '__main__'
-
-    try:
-        __import__(module_name, level=0)
-        module = sys.modules[module_name]
-    except (ImportError, ValueError, KeyError) as exc:
-        raise PicklingError(f"Can't pickle {obj!r}: {exc!s}")
-    try:
-        if _getattribute(module, dotted_path) is obj:
-            return module_name
-    except AttributeError:
-        raise PicklingError(f"Can't pickle {obj!r}: "
-                            f"it's not found as {module_name}.{name}")
-
-    raise PicklingError(
-        f"Can't pickle {obj!r}: it's not the same object as {module_name}.{name}")
+    if module_name is not None:
+        return module_name
+    # Protect the iteration by using a list copy of sys.modules against dynamic
+    # modules that trigger imports of other modules upon calls to getattr.
+    for module_name, module in sys.modules.copy().items():
+        if (module_name == '__main__'
+            or module_name == '__mp_main__'  # bpo-42406
+            or module is None):
+            continue
+        try:
+            if _getattribute(module, name)[0] is obj:
+                return module_name
+        except AttributeError:
+            pass
+    return '__main__'
 
 def encode_long(x):
     r"""Encode a long to a two's complement little-endian binary string.
@@ -420,13 +396,6 @@ def decode_long(data):
     """
     return int.from_bytes(data, byteorder='little', signed=True)
 
-def _T(obj):
-    cls = type(obj)
-    module = cls.__module__
-    if module in (None, 'builtins', '__main__'):
-        return cls.__qualname__
-    return f'{module}.{cls.__qualname__}'
-
 
 _NoValue = object()
 
@@ -440,7 +409,7 @@ class _Pickler:
 
         The optional *protocol* argument tells the pickler to use the
         given protocol; supported protocols are 0, 1, 2, 3, 4 and 5.
-        The default protocol is 5. It was introduced in Python 3.8, and
+        The default protocol is 4. It was introduced in Python 3.4, and
         is incompatible with previous versions.
 
         Specifying a negative protocol version selects the highest
@@ -486,9 +455,6 @@ class _Pickler:
         self.write = self.framer.write
         self._write_large_bytes = self.framer.write_large_bytes
         self.memo = {}
-        # Ids of objects reached so far only through weak references; any
-        # left at the end of dump() is an error.  See save_weakref.
-        self._weak_only = set()
         self.proto = int(protocol)
         self.bin = protocol >= 1
         self.fast = 0
@@ -503,7 +469,6 @@ class _Pickler:
         useful when re-using picklers.
         """
         self.memo.clear()
-        self._weak_only.clear()
 
     def dump(self, obj):
         """Write a pickled representation of obj to the open file."""
@@ -517,14 +482,6 @@ class _Pickler:
         if self.proto >= 4:
             self.framer.start_framing()
         self.save(obj)
-        if self._weak_only:
-            # These referents would be collected right after loading.  Report
-            # distinct type names: referents may be numerous and unhashable.
-            names = {_T(self.memo[i][1])
-                     for i in self._weak_only if i in self.memo}
-            raise PicklingError(
-                "cannot pickle weak reference(s) whose referent(s) have no "
-                "strong reference in the pickle: " + ", ".join(sorted(names)))
         self.write(STOP)
         self.framer.end_framing()
 
@@ -572,7 +529,7 @@ class _Pickler:
 
         return GET + repr(i).encode("ascii") + b'\n'
 
-    def save(self, obj, save_persistent_id=True, weak=False):
+    def save(self, obj, save_persistent_id=True):
         self.framer.commit_frame()
 
         # Check for persistent id (defined by a subclass)
@@ -585,9 +542,6 @@ class _Pickler:
         # Check the memo
         x = self.memo.get(id(obj))
         if x is not None:
-            # A strong reference anchors the object: no longer weak-only.
-            if not weak:
-                self._weak_only.discard(id(obj))
             self.write(self.get(x[0]))
             return
 
@@ -625,35 +579,26 @@ class _Pickler:
                     if reduce is not _NoValue:
                         rv = reduce()
                     else:
-                        raise PicklingError(f"Can't pickle {_T(t)} object")
+                        raise PicklingError("Can't pickle %r object: %r" %
+                                            (t.__name__, obj))
 
         # Check for string returned by reduce(), meaning "save as global"
         if isinstance(rv, str):
             self.save_global(obj, rv)
             return
 
-        try:
-            # Assert that reduce() returned a tuple
-            if not isinstance(rv, tuple):
-                raise PicklingError(f'__reduce__ must return a string or tuple, not {_T(rv)}')
+        # Assert that reduce() returned a tuple
+        if not isinstance(rv, tuple):
+            raise PicklingError("%s must return string or tuple" % reduce)
 
-            # Assert that it returned an appropriately sized tuple
-            l = len(rv)
-            if not (2 <= l <= 6):
-                raise PicklingError("tuple returned by __reduce__ "
-                                    "must contain 2 through 6 elements")
+        # Assert that it returned an appropriately sized tuple
+        l = len(rv)
+        if not (2 <= l <= 6):
+            raise PicklingError("Tuple returned by %s must have "
+                                "two to six elements" % reduce)
 
-            # Save the reduce() output and finally memoize the object
-            self.save_reduce(obj=obj, *rv)
-        except BaseException as exc:
-            exc.add_note(f'when serializing {_T(obj)} object')
-            raise
-
-        # A completed non-weak save anchors obj.  Only save_reduce() memoizes
-        # an object after its arguments, so only here can a weak reference to
-        # a still-in-progress obj have tagged it.
-        if not weak:
-            self._weak_only.discard(id(obj))
+        # Save the reduce() output and finally memoize the object
+        self.save_reduce(obj=obj, *rv)
 
     def persistent_id(self, obj):
         # This exists so a subclass can override it
@@ -675,12 +620,10 @@ class _Pickler:
                     dictitems=None, state_setter=None, *, obj=None):
         # This API is called by some subclasses
 
-        if not callable(func):
-            raise PicklingError(f"first item of the tuple returned by __reduce__ "
-                                f"must be callable, not {_T(func)}")
         if not isinstance(args, tuple):
-            raise PicklingError(f"second item of the tuple returned by __reduce__ "
-                                f"must be a tuple, not {_T(args)}")
+            raise PicklingError("args from save_reduce() must be a tuple")
+        if not callable(func):
+            raise PicklingError("func from save_reduce() must be callable")
 
         save = self.save
         write = self.write
@@ -689,30 +632,19 @@ class _Pickler:
         if self.proto >= 2 and func_name == "__newobj_ex__":
             cls, args, kwargs = args
             if not hasattr(cls, "__new__"):
-                raise PicklingError("first argument to __newobj_ex__() has no __new__")
+                raise PicklingError("args[0] from {} args has no __new__"
+                                    .format(func_name))
             if obj is not None and cls is not obj.__class__:
-                raise PicklingError(f"first argument to __newobj_ex__() "
-                                    f"must be {obj.__class__!r}, not {cls!r}")
+                raise PicklingError("args[0] from {} args has the wrong class"
+                                    .format(func_name))
             if self.proto >= 4:
-                try:
-                    save(cls)
-                except BaseException as exc:
-                    exc.add_note(f'when serializing {_T(obj)} class')
-                    raise
-                try:
-                    save(args)
-                    save(kwargs)
-                except BaseException as exc:
-                    exc.add_note(f'when serializing {_T(obj)} __new__ arguments')
-                    raise
+                save(cls)
+                save(args)
+                save(kwargs)
                 write(NEWOBJ_EX)
             else:
                 func = partial(cls.__new__, cls, *args, **kwargs)
-                try:
-                    save(func)
-                except BaseException as exc:
-                    exc.add_note(f'when serializing {_T(obj)} reconstructor')
-                    raise
+                save(func)
                 save(())
                 write(REDUCE)
         elif self.proto >= 2 and func_name == "__newobj__":
@@ -744,33 +676,18 @@ class _Pickler:
             # Python 2.2).
             cls = args[0]
             if not hasattr(cls, "__new__"):
-                raise PicklingError("first argument to __newobj__() has no __new__")
+                raise PicklingError(
+                    "args[0] from __newobj__ args has no __new__")
             if obj is not None and cls is not obj.__class__:
-                raise PicklingError(f"first argument to __newobj__() "
-                                    f"must be {obj.__class__!r}, not {cls!r}")
+                raise PicklingError(
+                    "args[0] from __newobj__ args has the wrong class")
             args = args[1:]
-            try:
-                save(cls)
-            except BaseException as exc:
-                exc.add_note(f'when serializing {_T(obj)} class')
-                raise
-            try:
-                save(args)
-            except BaseException as exc:
-                exc.add_note(f'when serializing {_T(obj)} __new__ arguments')
-                raise
+            save(cls)
+            save(args)
             write(NEWOBJ)
         else:
-            try:
-                save(func)
-            except BaseException as exc:
-                exc.add_note(f'when serializing {_T(obj)} reconstructor')
-                raise
-            try:
-                save(args)
-            except BaseException as exc:
-                exc.add_note(f'when serializing {_T(obj)} reconstructor arguments')
-                raise
+            save(func)
+            save(args)
             write(REDUCE)
 
         if obj is not None:
@@ -788,35 +705,23 @@ class _Pickler:
         # items and dict items (as (key, value) tuples), or None.
 
         if listitems is not None:
-            self._batch_appends(listitems, obj)
+            self._batch_appends(listitems)
 
         if dictitems is not None:
-            self._batch_setitems(dictitems, obj)
+            self._batch_setitems(dictitems)
 
         if state is not None:
             if state_setter is None:
-                try:
-                    save(state)
-                except BaseException as exc:
-                    exc.add_note(f'when serializing {_T(obj)} state')
-                    raise
+                save(state)
                 write(BUILD)
             else:
                 # If a state_setter is specified, call it instead of load_build
                 # to update obj's with its previous state.
                 # First, push state_setter and its tuple of expected arguments
                 # (obj, state) onto the stack.
-                try:
-                    save(state_setter)
-                except BaseException as exc:
-                    exc.add_note(f'when serializing {_T(obj)} state setter')
-                    raise
+                save(state_setter)
                 save(obj)  # simple BINGET opcode as obj is already memoized.
-                try:
-                    save(state)
-                except BaseException as exc:
-                    exc.add_note(f'when serializing {_T(obj)} state')
-                    raise
+                save(state)
                 write(TUPLE2)
                 # Trigger a state_setter(obj, state) function call.
                 write(REDUCE)
@@ -990,12 +895,8 @@ class _Pickler:
         save = self.save
         memo = self.memo
         if n <= 3 and self.proto >= 2:
-            for i, element in enumerate(obj):
-                try:
-                    save(element)
-                except BaseException as exc:
-                    exc.add_note(f'when serializing {_T(obj)} item {i}')
-                    raise
+            for element in obj:
+                save(element)
             # Subtle.  Same as in the big comment below.
             if id(obj) in memo:
                 get = self.get(memo[id(obj)][0])
@@ -1009,12 +910,8 @@ class _Pickler:
         # has more than 3 elements.
         write = self.write
         write(MARK)
-        for i, element in enumerate(obj):
-            try:
-                save(element)
-            except BaseException as exc:
-                exc.add_note(f'when serializing {_T(obj)} item {i}')
-                raise
+        for element in obj:
+            save(element)
 
         if id(obj) in memo:
             # Subtle.  d was not in memo when we entered save_tuple(), so
@@ -1044,47 +941,38 @@ class _Pickler:
             self.write(MARK + LIST)
 
         self.memoize(obj)
-        self._batch_appends(obj, obj)
+        self._batch_appends(obj)
 
     dispatch[list] = save_list
 
     _BATCHSIZE = 1000
 
-    def _batch_appends(self, items, obj):
+    def _batch_appends(self, items):
         # Helper to batch up APPENDS sequences
         save = self.save
         write = self.write
 
         if not self.bin:
-            for i, x in enumerate(items):
-                try:
-                    save(x)
-                except BaseException as exc:
-                    exc.add_note(f'when serializing {_T(obj)} item {i}')
-                    raise
+            for x in items:
+                save(x)
                 write(APPEND)
             return
 
-        start = 0
-        for batch in batched(items, self._BATCHSIZE):
-            batch_len = len(batch)
-            if batch_len != 1:
+        it = iter(items)
+        while True:
+            tmp = list(islice(it, self._BATCHSIZE))
+            n = len(tmp)
+            if n > 1:
                 write(MARK)
-                for i, x in enumerate(batch, start):
-                    try:
-                        save(x)
-                    except BaseException as exc:
-                        exc.add_note(f'when serializing {_T(obj)} item {i}')
-                        raise
+                for x in tmp:
+                    save(x)
                 write(APPENDS)
-            else:
-                try:
-                    save(batch[0])
-                except BaseException as exc:
-                    exc.add_note(f'when serializing {_T(obj)} item {start}')
-                    raise
+            elif n:
+                save(tmp[0])
                 write(APPEND)
-            start += batch_len
+            # else tmp is empty, and we're done
+            if n < self._BATCHSIZE:
+                return
 
     def save_dict(self, obj):
         if self.bin:
@@ -1093,11 +981,11 @@ class _Pickler:
             self.write(MARK + DICT)
 
         self.memoize(obj)
-        self._batch_setitems(obj.items(), obj)
+        self._batch_setitems(obj.items())
 
     dispatch[dict] = save_dict
 
-    def _batch_setitems(self, items, obj):
+    def _batch_setitems(self, items):
         # Helper to batch up SETITEMS sequences; proto >= 1 only
         save = self.save
         write = self.write
@@ -1105,34 +993,28 @@ class _Pickler:
         if not self.bin:
             for k, v in items:
                 save(k)
-                try:
-                    save(v)
-                except BaseException as exc:
-                    exc.add_note(f'when serializing {_T(obj)} item {k!r}')
-                    raise
+                save(v)
                 write(SETITEM)
             return
 
-        for batch in batched(items, self._BATCHSIZE):
-            if len(batch) != 1:
+        it = iter(items)
+        while True:
+            tmp = list(islice(it, self._BATCHSIZE))
+            n = len(tmp)
+            if n > 1:
                 write(MARK)
-                for k, v in batch:
+                for k, v in tmp:
                     save(k)
-                    try:
-                        save(v)
-                    except BaseException as exc:
-                        exc.add_note(f'when serializing {_T(obj)} item {k!r}')
-                        raise
-                write(SETITEMS)
-            else:
-                k, v = batch[0]
-                save(k)
-                try:
                     save(v)
-                except BaseException as exc:
-                    exc.add_note(f'when serializing {_T(obj)} item {k!r}')
-                    raise
+                write(SETITEMS)
+            elif n:
+                k, v = tmp[0]
+                save(k)
+                save(v)
                 write(SETITEM)
+            # else tmp is empty, and we're done
+            if n < self._BATCHSIZE:
+                return
 
     def save_set(self, obj):
         save = self.save
@@ -1145,15 +1027,17 @@ class _Pickler:
         write(EMPTY_SET)
         self.memoize(obj)
 
-        for batch in batched(obj, self._BATCHSIZE):
-            write(MARK)
-            try:
+        it = iter(obj)
+        while True:
+            batch = list(islice(it, self._BATCHSIZE))
+            n = len(batch)
+            if n > 0:
+                write(MARK)
                 for item in batch:
                     save(item)
-            except BaseException as exc:
-                exc.add_note(f'when serializing {_T(obj)} element')
-                raise
-            write(ADDITEMS)
+                write(ADDITEMS)
+            if n < self._BATCHSIZE:
+                return
     dispatch[set] = save_set
 
     def save_frozenset(self, obj):
@@ -1165,12 +1049,8 @@ class _Pickler:
             return
 
         write(MARK)
-        try:
-            for item in obj:
-                save(item)
-        except BaseException as exc:
-            exc.add_note(f'when serializing {_T(obj)} element')
-            raise
+        for item in obj:
+            save(item)
 
         if id(obj) in self.memo:
             # If the object is already in the memo, this means it is
@@ -1185,24 +1065,28 @@ class _Pickler:
 
     def save_global(self, obj, name=None):
         write = self.write
+        memo = self.memo
 
         if name is None:
             name = getattr(obj, '__qualname__', None)
-            if name is None:
-                name = obj.__name__
-
-        if '.__' in name:
-            # Mangle names of private attributes.
-            dotted_path = name.split('.')
-            for i, subpath in enumerate(dotted_path):
-                if i and subpath.startswith('__') and not subpath.endswith('__'):
-                    prev = prev.lstrip('_')
-                    if prev:
-                        dotted_path[i] = f"_{prev.lstrip('_')}{subpath}"
-                prev = subpath
-            name = '.'.join(dotted_path)
+        if name is None:
+            name = obj.__name__
 
         module_name = whichmodule(obj, name)
+        try:
+            __import__(module_name, level=0)
+            module = sys.modules[module_name]
+            obj2, parent = _getattribute(module, name)
+        except (ImportError, KeyError, AttributeError):
+            raise PicklingError(
+                "Can't pickle %r: it's not found as %s.%s" %
+                (obj, module_name, name)) from None
+        else:
+            if obj2 is not obj:
+                raise PicklingError(
+                    "Can't pickle %r: it's not the same object as %s.%s" %
+                    (obj, module_name, name))
+
         if self.proto >= 2:
             code = _extension_registry.get((module_name, name), _NoValue)
             if code is not _NoValue:
@@ -1219,7 +1103,10 @@ class _Pickler:
                 else:
                     write(EXT4 + pack("<i", code))
                 return
-
+        lastname = name.rpartition('.')[2]
+        if parent is module:
+            name = lastname
+        # Non-ASCII identifiers are supported only with protocols >= 3.
         if self.proto >= 4:
             self.save(module_name)
             self.save(name)
@@ -1251,7 +1138,8 @@ class _Pickler:
     def _save_toplevel_by_name(self, module_name, name):
         if self.proto >= 3:
             # Non-ASCII identifiers are supported only with protocols >= 3.
-            encoding = "utf-8"
+            self.write(GLOBAL + bytes(module_name, "utf-8") + b'\n' +
+                       bytes(name, "utf-8") + b'\n')
         else:
             if self.fix_imports:
                 r_name_mapping = _compat_pickle.REVERSE_NAME_MAPPING
@@ -1260,19 +1148,13 @@ class _Pickler:
                     module_name, name = r_name_mapping[(module_name, name)]
                 elif module_name in r_import_mapping:
                     module_name = r_import_mapping[module_name]
-            encoding = "ascii"
-        try:
-            self.write(GLOBAL + bytes(module_name, encoding) + b'\n')
-        except UnicodeEncodeError:
-            raise PicklingError(
-                f"can't pickle module identifier {module_name!r} using "
-                f"pickle protocol {self.proto}")
-        try:
-            self.write(bytes(name, encoding) + b'\n')
-        except UnicodeEncodeError:
-            raise PicklingError(
-                f"can't pickle global identifier {name!r} using "
-                f"pickle protocol {self.proto}")
+            try:
+                self.write(GLOBAL + bytes(module_name, "ascii") + b'\n' +
+                           bytes(name, "ascii") + b'\n')
+            except UnicodeEncodeError:
+                raise PicklingError(
+                    "can't pickle global identifier '%s.%s' using "
+                    "pickle protocol %i" % (module_name, name, self.proto)) from None
 
     def save_type(self, obj):
         if obj is type(None):
@@ -1285,40 +1167,6 @@ class _Pickler:
 
     dispatch[FunctionType] = save_global
     dispatch[type] = save_type
-
-    def save_weakref(self, obj):
-        # Reconstruct as weakref.ref(referent).  The referent is saved
-        # *weakly* (no anchoring, see save()) and tagged weak-only only after
-        # its whole subtree, so a strong cycle inside it cannot anchor it.
-        referent = obj()
-        if referent is None:
-            # All dead references are interchangeable: pickle by name as the
-            # weakref._dead_ref singleton.
-            self.write(GLOBAL + b'weakref\n_dead_ref\n')
-            return
-
-        save = self.save
-        write = self.write
-        save(weakref.ref)
-        # A referent already in the memo is anchored or already tracked;
-        # otherwise it is tagged below, until a strong save of it.
-        anchored = id(referent) in self.memo
-        # Build the 1-tuple (referent,); TUPLE1 needs protocol 2.
-        if self.proto < 2:
-            write(MARK)
-        save(referent, weak=True)
-        if not anchored and id(referent) in self.memo:
-            self._weak_only.add(id(referent))
-        write(TUPLE1 if self.proto >= 2 else TUPLE)
-        write(REDUCE)
-        # The referent's subtree may have pickled this very (cached) weakref
-        # already; reuse the memoized one.
-        if id(obj) in self.memo:
-            write(POP + self.get(self.memo[id(obj)][0]))
-        else:
-            self.memoize(obj)
-
-    dispatch[weakref.ReferenceType] = save_weakref
 
 
 # Unpickling machinery
@@ -1462,7 +1310,7 @@ class _Unpickler:
         elif data == TRUE[1:]:
             val = True
         else:
-            val = int(data)
+            val = int(data, 0)
         self.append(val)
     dispatch[INT[0]] = load_int
 
@@ -1482,7 +1330,7 @@ class _Unpickler:
         val = self.readline()[:-1]
         if val and val[-1] == b'L'[0]:
             val = val[:-1]
-        self.append(int(val))
+        self.append(int(val, 0))
     dispatch[LONG[0]] = load_long
 
     def load_long1(self):
@@ -1573,17 +1421,12 @@ class _Unpickler:
     dispatch[BINBYTES8[0]] = load_binbytes8
 
     def load_bytearray8(self):
-        size, = unpack('<Q', self.read(8))
-        if size > maxsize:
+        len, = unpack('<Q', self.read(8))
+        if len > maxsize:
             raise UnpicklingError("BYTEARRAY8 exceeds system's maximum size "
                                   "of %d bytes" % maxsize)
-        cursize = min(size, _MIN_READ_BUF_SIZE)
-        b = bytearray(cursize)
-        if self.readinto(b) == cursize:
-            while cursize < size and len(b) == cursize:
-                delta = min(cursize, size - cursize)
-                b += self.read(delta)
-                cursize += delta
+        b = bytearray(len)
+        self.readinto(b)
         self.append(b)
     dispatch[BYTEARRAY8[0]] = load_bytearray8
 
@@ -1679,7 +1522,11 @@ class _Unpickler:
     def _instantiate(self, klass, args):
         if (args or not isinstance(klass, type) or
             hasattr(klass, "__getinitargs__")):
-            value = klass(*args)
+            try:
+                value = klass(*args)
+            except TypeError as err:
+                raise TypeError("in constructor for %s: %s" %
+                                (klass.__name__, str(err)), err.__traceback__)
         else:
             value = klass.__new__(klass)
         self.append(value)
@@ -1767,13 +1614,8 @@ class _Unpickler:
             elif module in _compat_pickle.IMPORT_MAPPING:
                 module = _compat_pickle.IMPORT_MAPPING[module]
         __import__(module, level=0)
-        if self.proto >= 4 and '.' in name:
-            dotted_path = name.split('.')
-            try:
-                return _getattribute(sys.modules[module], dotted_path)
-            except AttributeError:
-                raise AttributeError(
-                    f"Can't resolve path {name!r} on module {module!r}")
+        if self.proto >= 4:
+            return _getattribute(sys.modules[module], name)[0]
         else:
             return getattr(sys.modules[module], name)
 
@@ -1812,7 +1654,7 @@ class _Unpickler:
         i = self.read(1)[0]
         try:
             self.append(self.memo[i])
-        except KeyError:
+        except KeyError as exc:
             msg = f'Memo value not found at index {i}'
             raise UnpicklingError(msg) from None
     dispatch[BINGET[0]] = load_binget
@@ -1821,7 +1663,7 @@ class _Unpickler:
         i, = unpack('<I', self.read(4))
         try:
             self.append(self.memo[i])
-        except KeyError:
+        except KeyError as exc:
             msg = f'Memo value not found at index {i}'
             raise UnpicklingError(msg) from None
     dispatch[LONG_BINGET[0]] = load_long_binget
@@ -1983,25 +1825,36 @@ except ImportError:
     Pickler, Unpickler = _Pickler, _Unpickler
     dump, dumps, load, loads = _dump, _dumps, _load, _loads
 
-
-def _main(args=None):
-    import argparse
-    import pprint
-    parser = argparse.ArgumentParser(
-        description='display contents of the pickle files',
-    )
-    parser.add_argument(
-        'pickle_file',
-        nargs='+', help='the pickle file')
-    args = parser.parse_args(args)
-    for fn in args.pickle_file:
-        if fn == '-':
-            obj = load(sys.stdin.buffer)
-        else:
-            with open(fn, 'rb') as f:
-                obj = load(f)
-        pprint.pprint(obj)
-
+# Doctest
+def _test():
+    import doctest
+    return doctest.testmod()
 
 if __name__ == "__main__":
-    _main()
+    import argparse
+    parser = argparse.ArgumentParser(
+        description='display contents of the pickle files')
+    parser.add_argument(
+        'pickle_file',
+        nargs='*', help='the pickle file')
+    parser.add_argument(
+        '-t', '--test', action='store_true',
+        help='run self-test suite')
+    parser.add_argument(
+        '-v', action='store_true',
+        help='run verbosely; only affects self-test run')
+    args = parser.parse_args()
+    if args.test:
+        _test()
+    else:
+        if not args.pickle_file:
+            parser.print_help()
+        else:
+            import pprint
+            for fn in args.pickle_file:
+                if fn == '-':
+                    obj = load(sys.stdin.buffer)
+                else:
+                    with open(fn, 'rb') as f:
+                        obj = load(f)
+                pprint.pprint(obj)

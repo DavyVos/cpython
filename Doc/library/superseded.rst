@@ -1,7 +1,7 @@
 .. _superseded:
 
 ******************
-Superseded modules
+Superseded Modules
 ******************
 
 The modules described in this chapter have been superseded by other modules
@@ -24,4 +24,3 @@ currently no modules in this latter category.
    :maxdepth: 1
 
    getopt.rst
-   profile.rst

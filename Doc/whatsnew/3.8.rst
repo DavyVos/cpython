@@ -160,7 +160,7 @@ breaking client code.  For example, in the :mod:`statistics` module, the
 parameter name *dist* may be changed in the future.  This was made
 possible with the following function specification::
 
-  def quantiles(dist, /, *, n=4, method='exclusive'):
+  def quantiles(dist, /, *, n=4, method='exclusive')
       ...
 
 Since the parameters to the left of ``/`` are not exposed as possible
@@ -429,9 +429,9 @@ Other Language Changes
   normal assignment syntax::
 
     >>> def parse(family):
-    ...     lastname, *members = family.split()
-    ...     return lastname.upper(), *members
-    ...
+            lastname, *members = family.split()
+            return lastname.upper(), *members
+
     >>> parse('simpsons homer marge bart lisa maggie')
     ('SIMPSONS', 'homer', 'marge', 'bart', 'lisa', 'maggie')
 
@@ -908,10 +908,9 @@ for :deco:`property`, :deco:`classmethod`, and :deco:`staticmethod`::
 io
 --
 
-In development mode (:option:`-X` ``dev``) and in
-:ref:`debug build <debug-build>`, the :class:`io.IOBase` finalizer now logs the
-exception if the ``close()`` method fails. The exception is ignored silently
-by default in release build.
+In development mode (:option:`-X` ``env``) and in :ref:`debug build <debug-build>`, the
+:class:`io.IOBase` finalizer now logs the exception if the ``close()`` method
+fails. The exception is ignored silently by default in release build.
 (Contributed by Victor Stinner in :issue:`18748`.)
 
 
@@ -1631,8 +1630,8 @@ Build and C API Changes
   (Contributed by Pablo Galindo in :issue:`37221`.)
 
 * :c:func:`!Py_SetPath` now sets :data:`sys.executable` to the program full
-  path (:c:func:`!Py_GetProgramFullPath`) rather than to the program name
-  (:c:func:`!Py_GetProgramName`).
+  path (:c:func:`Py_GetProgramFullPath`) rather than to the program name
+  (:c:func:`Py_GetProgramName`).
   (Contributed by Victor Stinner in :issue:`38234`.)
 
 
@@ -2082,7 +2081,7 @@ Changes in the C API
                 return NULL;
         #if PY_VERSION_HEX < 0x03080000
             // Workaround for Python issue 35810; no longer necessary in Python 3.8
-            Py_INCREF(type);
+            PY_INCREF(type)
         #endif
             return foo;
         }

@@ -5,7 +5,6 @@ import unittest
 from textwrap import dedent
 from contextlib import ExitStack
 from unittest import mock
-from test.support import cpython_only
 from test.support import force_not_colorized_test_class
 from test.support import import_helper
 
@@ -39,52 +38,20 @@ class TestInteractiveConsole(unittest.TestCase, MockSys):
         self.console = code.InteractiveConsole()
         self.mock_sys()
 
-    @cpython_only
-    def test_lazy_import(self):
-        import_helper.ensure_lazy_imports("code", {"traceback"})
-
     def test_ps1(self):
-        self.infunc.side_effect = [
-            "import code",
-            "code.sys.ps1",
-            EOFError('Finished')
-        ]
+        self.infunc.side_effect = EOFError('Finished')
         self.console.interact()
-        output = ''.join(''.join(call[1]) for call in self.stdout.method_calls)
-        self.assertIn('>>> ', output)
-        self.assertNotHasAttr(self.sysmod, 'ps1')
-
-        self.infunc.side_effect = [
-            "import code",
-            "code.sys.ps1",
-            EOFError('Finished')
-        ]
+        self.assertEqual(self.sysmod.ps1, '>>> ')
         self.sysmod.ps1 = 'custom1> '
         self.console.interact()
-        output = ''.join(''.join(call[1]) for call in self.stdout.method_calls)
-        self.assertIn('custom1> ', output)
         self.assertEqual(self.sysmod.ps1, 'custom1> ')
 
     def test_ps2(self):
-        self.infunc.side_effect = [
-            "import code",
-            "code.sys.ps2",
-            EOFError('Finished')
-        ]
+        self.infunc.side_effect = EOFError('Finished')
         self.console.interact()
-        output = ''.join(''.join(call[1]) for call in self.stdout.method_calls)
-        self.assertIn('... ', output)
-        self.assertNotHasAttr(self.sysmod, 'ps2')
-
-        self.infunc.side_effect = [
-            "import code",
-            "code.sys.ps2",
-            EOFError('Finished')
-        ]
+        self.assertEqual(self.sysmod.ps2, '... ')
         self.sysmod.ps2 = 'custom2> '
         self.console.interact()
-        output = ''.join(''.join(call[1]) for call in self.stdout.method_calls)
-        self.assertIn('custom2> ', output)
         self.assertEqual(self.sysmod.ps2, 'custom2> ')
 
     def test_console_stderr(self):
@@ -138,7 +105,7 @@ class TestInteractiveConsole(unittest.TestCase, MockSys):
         output = ''.join(''.join(call[1]) for call in self.stderr.method_calls)
         output = output[output.index('(InteractiveConsole)'):]
         output = output[output.index('\n') + 1:]
-        self.assertStartsWith(output, 'UnicodeEncodeError: ')
+        self.assertTrue(output.startswith('UnicodeEncodeError: '), output)
         self.assertIs(self.sysmod.last_type, UnicodeEncodeError)
         self.assertIs(type(self.sysmod.last_value), UnicodeEncodeError)
         self.assertIsNone(self.sysmod.last_traceback)

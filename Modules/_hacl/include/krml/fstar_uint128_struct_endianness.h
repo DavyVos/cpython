@@ -1,5 +1,5 @@
 /* Copyright (c) INRIA and Microsoft Corporation. All rights reserved.
-   Licensed under the Apache 2.0 and MIT Licenses. */
+   Licensed under the Apache 2.0 License. */
 
 #ifndef FSTAR_UINT128_STRUCT_ENDIANNESS_H
 #define FSTAR_UINT128_STRUCT_ENDIANNESS_H

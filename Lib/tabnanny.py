@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 """The Tab Nanny despises ambiguous indentation.  She knows no mercy.
 
 tabnanny -- Detection of ambiguous indentation
@@ -15,6 +17,8 @@ releases; such changes may not be backward compatible.
 # XXX Note: this is now a standard library module.
 # XXX The API needs to undergo changes however; the current code is too
 # XXX script-like.  This will be addressed later.
+
+__version__ = "6"
 
 import os
 import sys
@@ -330,15 +334,6 @@ def _process_tokens(tokens):
                 witness = indents[-1].not_equal_witness(thisguy)
                 msg = "indent not equal e.g. " + format_witnesses(witness)
                 raise NannyNag(start[0], msg, line)
-
-
-def __getattr__(name):
-    if name == "__version__":
-        from warnings import _deprecated
-
-        _deprecated("__version__", remove=(3, 20))
-        return "6"  # Do not change
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 if __name__ == '__main__':

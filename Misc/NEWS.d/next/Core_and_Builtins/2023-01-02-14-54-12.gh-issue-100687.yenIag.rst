@@ -1,2 +1,0 @@
-Reduce the memory used by the result of adding two large :class:`int`
-values. Such additions are also slightly faster for most sizes.

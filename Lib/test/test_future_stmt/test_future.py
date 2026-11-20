@@ -3,7 +3,7 @@
 import __future__
 import ast
 import unittest
-from test.support import force_not_colorized, import_helper, subTests
+from test.support import import_helper
 from test.support.script_helper import spawn_python, kill_python
 from textwrap import dedent
 import os
@@ -67,19 +67,19 @@ class FutureTest(unittest.TestCase):
         with import_helper.CleanImport(
             'test.test_future_stmt.test_future_single_import',
         ):
-            from test.test_future_stmt import test_future_single_import  # noqa: F401
+            from test.test_future_stmt import test_future_single_import
 
     def test_future_multiple_imports(self):
         with import_helper.CleanImport(
             'test.test_future_stmt.test_future_multiple_imports',
         ):
-            from test.test_future_stmt import test_future_multiple_imports  # noqa: F401
+            from test.test_future_stmt import test_future_multiple_imports
 
     def test_future_multiple_features(self):
         with import_helper.CleanImport(
             "test.test_future_stmt.test_future_multiple_features",
         ):
-            from test.test_future_stmt import test_future_multiple_features  # noqa: F401
+            from test.test_future_stmt import test_future_multiple_features
 
     def test_unknown_future_flag(self):
         code = """
@@ -87,44 +87,8 @@ class FutureTest(unittest.TestCase):
             from __future__ import rested_snopes  # typo error here: nested => rested
         """
         self.assertSyntaxError(
-            code,
-            lineno=2,
-            message=(
-                "future feature 'rested_snopes' is not defined. "
-                "Did you mean: 'nested_scopes'?"
-            ),
-            offset=24,
-        )
-
-    @subTests("typo, origin", [
-        ("nest_scopes", "nested_scopes"),
-        ("gneretors", "generators"),
-        ("divicion", "division"),
-        ("absolute_imports", "absolute_import"),
-        ("print_func", "print_function"),
-        ("unicode_literal", "unicode_literals"),
-        ("barry_as_bdfl", "barry_as_FLUFL"),
-        ("generatorstop", "generator_stop"),
-        ("anotations", "annotations"),
-    ])
-    def test_typos_in_future_imports(self, typo, origin):
-        self.assertSyntaxError(
-            f"from __future__ import {typo}",
-            lineno=1,
-            message=(
-                f"future feature '{typo}' is not defined. "
-                f"Did you mean: '{origin}'?"
-            ),
-            offset=24,
-        )
-
-    @subTests("name", ["missing_name", "brces", "brace"])
-    def test_no_suggestion_on_missing_name(self, name):
-        self.assertSyntaxError(
-            f"from __future__ import {name}",
-            lineno=1,
-            message=f"future feature '{name}' is not defined",
-            offset=24,
+            code, lineno=2,
+            message='future feature rested_snopes is not defined', offset=24,
         )
 
     def test_future_import_not_on_top(self):
@@ -173,7 +137,7 @@ class FutureTest(unittest.TestCase):
         code = """
             from __future__ import *
         """
-        self.assertSyntaxError(code, message="future feature '*' is not defined", offset=24)
+        self.assertSyntaxError(code, message='future feature * is not defined', offset=24)
 
     def test_future_import_braces(self):
         code = """
@@ -189,7 +153,7 @@ class FutureTest(unittest.TestCase):
 
     def test_module_with_future_import_not_on_top(self):
         with self.assertRaises(SyntaxError) as cm:
-            from test.test_future_stmt import badsyntax_future  # noqa: F401
+            from test.test_future_stmt import badsyntax_future
         self.check_syntax_error(cm.exception, "badsyntax_future", lineno=3)
 
     def test_ensure_flags_dont_clash(self):
@@ -212,7 +176,6 @@ class FutureTest(unittest.TestCase):
         exec("from __future__ import unicode_literals; x = ''", {}, scope)
         self.assertIsInstance(scope["x"], str)
 
-    @force_not_colorized
     def test_syntactical_future_repl(self):
         p = spawn_python('-i')
         p.stdin.write(b"from __future__ import barry_as_FLUFL\n")
@@ -386,8 +349,6 @@ class AnnotationsFutureTestCase(unittest.TestCase):
         eq("(i ** 2 + j for i in (1, 2, 3) for j in (1, 2, 3))")
         eq("{i: 0 for i in (1, 2, 3)}")
         eq("{i: j for i, j in ((1, 'a'), (2, 'b'), (3, 'c'))}")
-        eq("{**x for x in ()}")
-        eq("[*x for x in ()]")
         eq("[(x, y) for x, y in (a, b)]")
         eq("[(x,) for x, in (a,)]")
         eq("Python3 > Python2 > COBOL")
@@ -461,11 +422,6 @@ class AnnotationsFutureTestCase(unittest.TestCase):
         eq('(((a)))', 'a')
         eq('(((a, b)))', '(a, b)')
         eq("1 + 2 + 3")
-        eq("t''")
-        eq("t'{a    +  b}'")
-        eq("t'{a!s}'")
-        eq("t'{a:b}'")
-        eq("t'{a:b=}'")
 
     def test_fstring_debug_annotations(self):
         # f-strings with '=' don't round trip very well, so set the expected

@@ -1,7 +1,7 @@
 #include "parts.h"
 
 #define Py_BUILD_CORE
-#include "internal/pycore_long.h"   // IMMORTALITY_BIT_MASK
+#include "internal/pycore_long.h"   // _PyLong_IsSmallInt()
 
 int verify_immortality(PyObject *object)
 {
@@ -28,32 +28,25 @@ test_immortal_builtins(PyObject *self, PyObject *Py_UNUSED(ignored))
 static PyObject *
 test_immortal_small_ints(PyObject *self, PyObject *Py_UNUSED(ignored))
 {
-    for (int i = -5; i <= 1024; i++) {
+    for (int i = -5; i <= 256; i++) {
         PyObject *obj = PyLong_FromLong(i);
         assert(verify_immortality(obj));
-        int has_int_immortal_bit = _PyLong_IsSmallInt((PyLongObject *)obj);
-        assert(has_int_immortal_bit);
+        int is_small_int = _PyLong_IsSmallInt((PyLongObject *)obj);
+        assert(is_small_int);
     }
-    for (int i = 1025; i <= 1030; i++) {
+    for (int i = 257; i <= 260; i++) {
         PyObject *obj = PyLong_FromLong(i);
         assert(obj);
-        int has_int_immortal_bit = _PyLong_IsSmallInt((PyLongObject *)obj);
-        assert(!has_int_immortal_bit);
+        int is_small_int = _PyLong_IsSmallInt((PyLongObject *)obj);
+        assert(!is_small_int);
         Py_DECREF(obj);
     }
     Py_RETURN_NONE;
 }
 
-static PyObject *
-is_immortal(PyObject *self, PyObject *op)
-{
-    return PyBool_FromLong(PyUnstable_IsImmortal(op));
-}
-
 static PyMethodDef test_methods[] = {
     {"test_immortal_builtins",   test_immortal_builtins,     METH_NOARGS},
     {"test_immortal_small_ints", test_immortal_small_ints,   METH_NOARGS},
-    {"is_immortal",              is_immortal,                METH_O},
     {NULL},
 };
 

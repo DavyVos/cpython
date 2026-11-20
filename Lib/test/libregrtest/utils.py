@@ -7,22 +7,13 @@ import platform
 import random
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import sysconfig
 import tempfile
 import textwrap
-import types
 from collections.abc import Callable
-_winapi: types.ModuleType | None
-try:
-    import _winapi
-except ImportError:
-    _winapi = None
-try:
-    from _testcapi import get_process_memory_usage as _get_process_memory_usage
-except ImportError:
-    _get_process_memory_usage = None
 
 from test import support
 from test.support import os_helper
@@ -65,10 +56,6 @@ TestList = list[TestName]
 TestFilter = list[tuple[TestName, bool]]
 FilterTuple = tuple[TestName, ...]
 FilterDict = dict[TestName, FilterTuple]
-
-
-def cleanup_test_name(name: TestName) -> TestName:
-    return name.removeprefix('test.')
 
 
 def format_duration(seconds: float) -> str:
@@ -279,7 +266,8 @@ def clear_caches():
     except KeyError:
         pass
     else:
-        typing._clear_caches()
+        for f in typing._cleanups:
+            f()
 
         import inspect
         abs_classes = filter(inspect.isabstract, typing.__dict__.values())
@@ -310,30 +298,14 @@ def clear_caches():
     else:
         importlib_metadata.FastPath.__new__.cache_clear()
 
-    try:
-        encodings = sys.modules['encodings']
-    except KeyError:
-        pass
-    else:
-        encodings._cache.clear()
-
-    try:
-        codecs = sys.modules['codecs']
-    except KeyError:
-        pass
-    else:
-        # There's no direct API to clear the codecs search cache, but
-        # `unregister` clears it implicitly.
-        def noop_search_function(name):
-            return None
-        codecs.register(noop_search_function)
-        codecs.unregister(noop_search_function)
-
 
 def get_build_info():
     # Get most important configure and build options as a list of strings.
     # Example: ['debug', 'ASAN+MSAN'] or ['release', 'LTO+PGO'].
 
+    config_args = sysconfig.get_config_var('CONFIG_ARGS') or ''
+    cflags = sysconfig.get_config_var('PY_CFLAGS') or ''
+    cflags += ' ' + (sysconfig.get_config_var('PY_CFLAGS_NODIST') or '')
     ldflags_nodist = sysconfig.get_config_var('PY_LDFLAGS_NODIST') or ''
 
     build = []
@@ -352,24 +324,58 @@ def get_build_info():
             free_threading = f"{free_threading} GIL={int(PYTHON_GIL)}"
         build.append(free_threading)
 
-    if support.Py_DEBUG:
+    if hasattr(sys, 'gettotalrefcount'):
         # --with-pydebug
         build.append('debug')
 
-        if not support.built_with_c_assertions():
+        if '-DNDEBUG' in cflags:
             build.append('without_assert')
     else:
         build.append('release')
 
-        if support.built_with_c_assertions():
+        if '--with-assertions' in config_args:
+            build.append('with_assert')
+        elif '-DNDEBUG' not in cflags:
             build.append('with_assert')
 
     # --enable-experimental-jit
-    if sys._jit.is_available():
-        if sys._jit.is_enabled():
-            build.append("JIT")
+    tier2 = re.search('-D_Py_TIER2=([0-9]+)', cflags)
+    if tier2:
+        tier2 = int(tier2.group(1))
+
+    if not sys.flags.ignore_environment:
+        PYTHON_JIT = os.environ.get('PYTHON_JIT', None)
+        if PYTHON_JIT:
+            PYTHON_JIT = (PYTHON_JIT != '0')
+    else:
+        PYTHON_JIT = None
+
+    if tier2 == 1:  # =yes
+        if PYTHON_JIT == False:
+            jit = 'JIT=off'
         else:
-            build.append("JIT (disabled)")
+            jit = 'JIT'
+    elif tier2 == 3:  # =yes-off
+        if PYTHON_JIT:
+            jit = 'JIT'
+        else:
+            jit = 'JIT=off'
+    elif tier2 == 4:  # =interpreter
+        if PYTHON_JIT == False:
+            jit = 'JIT-interpreter=off'
+        else:
+            jit = 'JIT-interpreter'
+    elif tier2 == 6:  # =interpreter-off (Secret option!)
+        if PYTHON_JIT:
+            jit = 'JIT-interpreter'
+        else:
+            jit = 'JIT-interpreter=off'
+    elif '-D_Py_JIT' in cflags:
+        jit = 'JIT'
+    else:
+        jit = None
+    if jit:
+        build.append(jit)
 
     # --enable-framework=name
     framework = sysconfig.get_config_var('PYTHONFRAMEWORK')
@@ -401,9 +407,7 @@ def get_build_info():
 
     # --with-address-sanitizer
     sanitizers = []
-    if support.check_sanitizer(hwaddress=True):
-        sanitizers.append("HWASAN")
-    elif support.check_sanitizer(address=True):
+    if support.check_sanitizer(address=True):
         sanitizers.append("ASAN")
     # --with-memory-sanitizer
     if support.check_sanitizer(memory=True):
@@ -414,9 +418,6 @@ def get_build_info():
     # --with-thread-sanitizer
     if support.check_sanitizer(thread=True):
         sanitizers.append("TSAN")
-    # --with-thread-sanitizer
-    if support.check_sanitizer(function=True):
-        sanitizers.append("fsanitize=function")
     if sanitizers:
         build.append('+'.join(sanitizers))
 
@@ -472,6 +473,17 @@ def get_temp_dir(tmp_dir: StrPath | None = None) -> StrPath:
             tmp_dir = tempfile.gettempdir()
 
     return os.path.abspath(tmp_dir)
+
+
+def fix_umask() -> None:
+    if support.is_emscripten:
+        # Emscripten has default umask 0o777, which breaks some tests.
+        # see https://github.com/emscripten-core/emscripten/issues/17269
+        old_mask = os.umask(0)
+        if old_mask == 0o777:
+            os.umask(0o027)
+        else:
+            os.umask(old_mask)
 
 
 def get_work_dir(parent_dir: StrPath, worker: bool = False) -> StrPath:
@@ -661,36 +673,13 @@ def display_header(use_resources: dict[str, str | None],
 
     cpu_count: object = os.cpu_count()
     if cpu_count:
-        process_cpu_count = os.process_cpu_count()
+        # The function is new in Python 3.13; mypy doesn't know about it yet:
+        process_cpu_count = os.process_cpu_count()  # type: ignore[attr-defined]
         if process_cpu_count and process_cpu_count != cpu_count:
             cpu_count = f"{process_cpu_count} (process) / {cpu_count} (system)"
         print("== CPU count:", cpu_count)
-
-    encodings = []
-    if _winapi is not None:
-        # Log ANSI and OEM code pages
-        ansi = f'cp{_winapi.GetACP()}'
-        oem = f'cp{_winapi.GetOEMCP()}'
-        if ansi == oem:
-            encodings.append(f'ansi=oem={ansi}')
-        else:
-            encodings.append(f'ansi={ansi}')
-            encodings.append(f'oem={oem}')
-        encodings.append(f'FS={sys.getfilesystemencoding()}')
-    else:
-        locale_encoding = locale.getencoding()     # nl_langinfo(CODESET)
-        fs_encoding = sys.getfilesystemencoding()  # normalized name
-        if locale_encoding.lower() == fs_encoding.lower():
-            encodings.append(f'locale=FS={fs_encoding}')
-        else:
-            encodings.append(f'locale={locale_encoding}')
-            encodings.append(f'FS={fs_encoding}')
-    if not sys.flags.utf8_mode:
-        encodings.append('utf8=0')
-    if (not sys.flags.ignore_environment
-        and os.environ.get('PYTHONCOERCECLOCALE') == '0'):
-        encodings.append('coerce=0')
-    print(f"== encodings: {' '.join(encodings)}")
+    print("== encodings: locale=%s FS=%s"
+          % (locale.getencoding(), sys.getfilesystemencoding()))
 
     if use_resources:
         text = format_resources(use_resources)
@@ -728,7 +717,6 @@ def display_header(use_resources: dict[str, str | None],
     msan = support.check_sanitizer(memory=True)
     ubsan = support.check_sanitizer(ub=True)
     tsan = support.check_sanitizer(thread=True)
-    function_san = support.check_sanitizer(function=True)
     sanitizers = []
     if asan:
         sanitizers.append("address")
@@ -738,14 +726,12 @@ def display_header(use_resources: dict[str, str | None],
         sanitizers.append("undefined behavior")
     if tsan:
         sanitizers.append("thread")
-    if function_san:
-        sanitizers.append("function")
     if sanitizers:
         print(f"== sanitizers: {', '.join(sanitizers)}")
         for sanitizer, env_var in (
             (asan, "ASAN_OPTIONS"),
             (msan, "MSAN_OPTIONS"),
-            (ubsan or function_san, "UBSAN_OPTIONS"),
+            (ubsan, "UBSAN_OPTIONS"),
             (tsan, "TSAN_OPTIONS"),
         ):
             options= os.environ.get(env_var)
@@ -767,6 +753,35 @@ def cleanup_temp_dir(tmp_dir: StrPath) -> None:
         else:
             print("Remove file: %s" % name)
             os_helper.unlink(name)
+
+WINDOWS_STATUS = {
+    0xC0000005: "STATUS_ACCESS_VIOLATION",
+    0xC00000FD: "STATUS_STACK_OVERFLOW",
+    0xC000013A: "STATUS_CONTROL_C_EXIT",
+}
+
+def get_signal_name(exitcode):
+    if exitcode < 0:
+        signum = -exitcode
+        try:
+            return signal.Signals(signum).name
+        except ValueError:
+            pass
+
+    # Shell exit code (ex: WASI build)
+    if 128 < exitcode < 256:
+        signum = exitcode - 128
+        try:
+            return signal.Signals(signum).name
+        except ValueError:
+            pass
+
+    try:
+        return WINDOWS_STATUS[exitcode]
+    except KeyError:
+        pass
+
+    return None
 
 
 ILLEGAL_XML_CHARS_RE = re.compile(
@@ -794,55 +809,3 @@ def display_title(title):
     print(title)
     print("#" * len(title))
     print(flush=True)
-
-
-def _get_process_memory_usage_linux(pid: int) -> int | None:
-    # Linux implementation: read the private memory in bytes from
-    # /proc/pid/smaps.
-    try:
-        fp = open(f"/proc/{pid}/smaps", "rb")
-    except OSError:
-        return None
-
-    try:
-        total = 0
-        with fp:
-            for line in fp:
-                # Include both Private_Clean and Private_Dirty sections.
-                line = line.rstrip()
-                if line.startswith(b"Private_") and line.endswith(b'kB'):
-                    parts = line.split()
-                    total += int(parts[1]) * 1024
-        return total
-    except ProcessLookupError:
-        return None
-
-
-def _get_process_memory_usage_windows(pid: int) -> int | None:
-    assert _winapi is not None  # to make mypy happy
-    try:
-        handle = _winapi.OpenProcess(_winapi.PROCESS_QUERY_LIMITED_INFORMATION,
-                                     False, pid)
-    except OSError:
-        return None
-    try:
-        mem_info = _winapi.GetProcessMemoryInfo(handle)
-    finally:
-        _winapi.CloseHandle(handle)
-    return mem_info['WorkingSetSize']
-
-
-if _get_process_memory_usage is not None:
-    def get_process_memory_usage(pid: int) -> int | None:
-        try:
-            return _get_process_memory_usage(pid)
-        except ProcessLookupError:
-            return None
-elif _winapi is not None:
-    get_process_memory_usage = _get_process_memory_usage_windows
-elif sys.platform == 'linux':
-    get_process_memory_usage = _get_process_memory_usage_linux
-else:
-    def get_process_memory_usage(pid: int) -> int | None:
-        return None
-get_process_memory_usage.__doc__ = "Get process memory usage in bytes."

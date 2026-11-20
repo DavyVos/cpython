@@ -170,12 +170,9 @@ See
 for more details.
 
 .. versionchanged:: 3.9
-   Evaluating :data:`NotImplemented` in a boolean context was deprecated.
-
-.. versionchanged:: 3.14
-   Evaluating :data:`NotImplemented` in a boolean context now raises a :exc:`TypeError`.
-   It previously evaluated to :const:`True` and emitted a :exc:`DeprecationWarning`
-   since Python 3.9.
+   Evaluating :data:`NotImplemented` in a boolean context is deprecated. While
+   it currently evaluates as true, it will emit a :exc:`DeprecationWarning`.
+   It will raise a :exc:`TypeError` in a future version of Python.
 
 
 Ellipsis
@@ -258,8 +255,6 @@ Booleans (:class:`bool`)
    a string, the strings ``"False"`` or ``"True"`` are returned, respectively.
 
 
-.. _datamodel-float:
-
 :class:`numbers.Real` (:class:`float`)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -290,7 +285,6 @@ floating-point numbers.  The same caveats apply as for floating-point numbers.
 The real and imaginary parts of a complex number ``z`` can be retrieved through
 the read-only attributes ``z.real`` and ``z.imag``.
 
-.. _datamodel-sequences:
 
 Sequences
 ---------
@@ -310,25 +304,12 @@ including built-in sequences, interpret negative subscripts by adding the
 sequence length. For example, ``a[-2]`` equals ``a[n-2]``, the second to last
 item of sequence a with length ``n``.
 
-The resulting value must be a nonnegative integer less than the number of items
-in the sequence. If it is not, an :exc:`IndexError` is raised.
+.. index:: single: slicing
 
-.. index::
-   single: slicing
-   single: start (slice object attribute)
-   single: stop (slice object attribute)
-   single: step (slice object attribute)
-
-Sequences also support slicing: ``a[start:stop]`` selects all items with index *k* such
-that *start* ``<=`` *k* ``<`` *stop*.  When used as an expression, a slice is a
-sequence of the same type. The comment above about negative subscripts also applies
+Sequences also support slicing: ``a[i:j]`` selects all items with index *k* such
+that *i* ``<=`` *k* ``<`` *j*.  When used as an expression, a slice is a
+sequence of the same type. The comment above about negative indexes also applies
 to negative slice positions.
-Note that no error is raised if a slice position is less than zero or larger
-than the length of the sequence.
-
-If *start* is missing or :data:`None`, slicing behaves as if *start* was zero.
-If *stop* is missing or ``None``, slicing behaves as if *stop* was equal to
-the length of the sequence.
 
 Some sequences also support "extended slicing" with a third "step" parameter:
 ``a[i:j:k]`` selects all items of *a* with index *x* where ``x = i + n*k``, *n*
@@ -359,22 +340,17 @@ Strings
       pair: built-in function; chr
       pair: built-in function; ord
       single: character
-      pair: string; item
+      single: integer
       single: Unicode
 
-   A string (:class:`str`) is a sequence of values that represent
-   :dfn:`characters`, or more formally, *Unicode code points*.
-   All the code points in the range ``0`` to ``0x10FFFF`` can be
-   represented in a string.
-
-   Python doesn't have a dedicated *character* type.
-   Instead, every code point in the string is represented as a string
-   object with length ``1``.
-
-   The built-in function :func:`ord`
+   A string is a sequence of values that represent Unicode code points.
+   All the code points in the range ``U+0000 - U+10FFFF`` can be
+   represented in a string.  Python doesn't have a :c:expr:`char` type;
+   instead, every code point in the string is represented as a string
+   object with length ``1``.  The built-in function :func:`ord`
    converts a code point from its string form to an integer in the
-   range ``0`` to ``0x10FFFF``; :func:`chr` converts an integer in the range
-   ``0`` to ``0x10FFFF`` to the corresponding length ``1`` string object.
+   range ``0 - 10FFFF``; :func:`chr` converts an integer in the range
+   ``0 - 10FFFF`` to the corresponding length ``1`` string object.
    :meth:`str.encode` can be used to convert a :class:`str` to
    :class:`bytes` using the given text encoding, and
    :meth:`bytes.decode` can be used to achieve the opposite.
@@ -385,7 +361,7 @@ Tuples
       pair: singleton; tuple
       pair: empty; tuple
 
-   The items of a :class:`tuple` are arbitrary Python objects. Tuples of two or
+   The items of a tuple are arbitrary Python objects. Tuples of two or
    more items are formed by comma-separated lists of expressions.  A tuple
    of one item (a 'singleton') can be formed by affixing a comma to an
    expression (an expression by itself does not create a tuple, since
@@ -395,7 +371,7 @@ Tuples
 Bytes
    .. index:: bytes, byte
 
-   A :class:`bytes` object is an immutable array.  The items are 8-bit bytes,
+   A bytes object is an immutable array.  The items are 8-bit bytes,
    represented by integers in the range 0 <= x < 256.  Bytes literals
    (like ``b'abc'``) and the built-in :func:`bytes` constructor
    can be used to create bytes objects.  Also, bytes objects can be
@@ -480,8 +456,6 @@ Frozen sets
    a dictionary key.
 
 
-.. _datamodel-mappings:
-
 Mappings
 --------
 
@@ -496,7 +470,7 @@ subscript notation ``a[k]`` selects the item indexed by ``k`` from the mapping
 :keyword:`del` statements. The built-in function :func:`len` returns the number
 of items in a mapping.
 
-There are two intrinsic mapping types:
+There is currently a single intrinsic mapping type:
 
 
 Dictionaries
@@ -533,20 +507,6 @@ module.
    Dictionaries did not preserve insertion order in versions of Python before 3.6.
    In CPython 3.6, insertion order was preserved, but it was considered
    an implementation detail at that time rather than a language guarantee.
-
-
-Frozen dictionaries
-^^^^^^^^^^^^^^^^^^^
-
-.. index:: pair: object; frozendict
-
-These represent an immutable dictionary.  They are created by the built-in
-:func:`frozendict` constructor.  A frozendict is :term:`hashable` if all of
-its keys and values are hashable, in which case it can be used as an element
-of a set, or as a key in another mapping.  :class:`!frozendict` is not a
-subclass of :class:`dict`; it inherits directly from :class:`object`.
-
-.. versionadded:: 3.15
 
 
 Callable types
@@ -622,7 +582,6 @@ Special writable attributes
    single: __defaults__ (function attribute)
    single: __code__ (function attribute)
    single: __annotations__ (function attribute)
-   single: __annotate__ (function attribute)
    single: __kwdefaults__ (function attribute)
    single: __type_params__ (function attribute)
 
@@ -669,17 +628,7 @@ Most of these attributes check the type of the assigned value:
        :term:`parameters <parameter>`.
        The keys of the dictionary are the parameter names,
        and ``'return'`` for the return annotation, if provided.
-       See also: :attr:`object.__annotations__`.
-
-       .. versionchanged:: 3.14
-          Annotations are now :ref:`lazily evaluated <lazy-evaluation>`.
-          See :pep:`649`.
-
-   * - .. attribute:: function.__annotate__
-     - The :term:`annotate function` for this function, or ``None``
-       if the function has no annotations. See :attr:`object.__annotate__`.
-
-       .. versionadded:: 3.14
+       See also: :ref:`annotations-howto`.
 
    * - .. attribute:: function.__kwdefaults__
      - A :class:`dictionary <dict>` containing defaults for keyword-only
@@ -863,8 +812,7 @@ determined by the C function. Special read-only attributes:
 * :attr:`!__doc__` is the function's documentation string, or ``None`` if
   unavailable. See :attr:`function.__doc__`.
 * :attr:`!__name__` is the function's name. See :attr:`function.__name__`.
-* :attr:`!__self__` is the module object the function was defined in or
-  ``None`` if unavailable.
+* :attr:`!__self__` is set to ``None`` (but see the next item).
 * :attr:`!__module__` is the name of
   the module the function was defined in or ``None`` if unavailable.
   See :attr:`function.__module__`.
@@ -938,10 +886,9 @@ Attribute assignment updates the module's namespace dictionary, e.g.,
    single: __loader__ (module attribute)
    single: __path__ (module attribute)
    single: __file__ (module attribute)
+   single: __cached__ (module attribute)
    single: __doc__ (module attribute)
    single: __annotations__ (module attribute)
-   single: __annotate__ (module attribute)
-   single: __lazy_modules__ (module attribute)
    pair: module; namespace
 
 .. _import-mod-attrs:
@@ -1043,7 +990,7 @@ this approach.
       Raise :exc:`DeprecationWarning` instead of :exc:`ImportWarning` when
       falling back to :attr:`!__package__` during import resolution.
 
-   .. deprecated-removed:: 3.13 3.16
+   .. deprecated-removed:: 3.13 3.15
       :attr:`!__package__` will cease to be set or taken into consideration
       by the import system or standard library.
 
@@ -1087,22 +1034,42 @@ this approach.
    instead of :attr:`!module.__path__`.
 
 .. attribute:: module.__file__
+.. attribute:: module.__cached__
 
-   :attr:`!__file__` is an optional attribute that
+   :attr:`!__file__` and :attr:`!__cached__` are both optional attributes that
    may or may not be set. Both attributes should be a :class:`str` when they
    are available.
 
-   An optional attribute, :attr:`!__file__` indicates the pathname of the file
-   from which the module was loaded (if loaded from a file), or the pathname of
-   the shared library file for extension modules loaded dynamically from a
-   shared library. It might be missing for certain types of modules, such as C
-   modules that are statically linked into the interpreter, and the
+   :attr:`!__file__` indicates the pathname of the file from which the module
+   was loaded (if loaded from a file), or the pathname of the shared library
+   file for extension modules loaded dynamically from a shared library.
+   It might be missing for certain types of modules, such as C modules that are
+   statically linked into the interpreter, and the
    :ref:`import system <importsystem>` may opt to leave it unset if it
    has no semantic meaning (for example, a module loaded from a database).
 
-.. versionchanged:: 3.15
-   The ``__cached__`` attribute is no longer set on modules or taken into
-   consideration by the import system or standard library.
+   If :attr:`!__file__` is set then the :attr:`!__cached__` attribute might
+   also be set,  which is the path to any compiled version of
+   the code (for example, a byte-compiled file). The file does not need to exist
+   to set this attribute; the path can simply point to where the
+   compiled file *would* exist (see :pep:`3147`).
+
+   Note that :attr:`!__cached__` may be set even if :attr:`!__file__` is not
+   set.  However, that scenario is quite atypical.  Ultimately, the
+   :term:`loader` is what makes use of the module spec provided by the
+   :term:`finder` (from which :attr:`!__file__` and :attr:`!__cached__` are
+   derived).  So if a loader can load from a cached module but otherwise does
+   not load from a file, that atypical scenario may be appropriate.
+
+   It is **strongly** recommended that you use
+   :attr:`module.__spec__.cached <importlib.machinery.ModuleSpec.cached>`
+   instead of :attr:`!module.__cached__`.
+
+   .. deprecated-removed:: 3.13 3.15
+      Setting :attr:`!__cached__` on a module while failing to set
+      :attr:`!__spec__.cached` is deprecated. In Python 3.15,
+      :attr:`!__cached__` will cease to be set or taken into consideration by
+      the import system or standard library.
 
 Other writable attributes on module objects
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1117,34 +1084,10 @@ the following writable attributes:
 
 .. attribute:: module.__annotations__
 
-   A dictionary containing :term:`variable annotations <variable annotation>`
-   collected during module body execution.  For best practices on working with
-   :attr:`!__annotations__`, see :mod:`annotationlib`.
-
-   .. versionchanged:: 3.14
-      Annotations are now :ref:`lazily evaluated <lazy-evaluation>`.
-      See :pep:`649`.
-
-.. attribute:: module.__annotate__
-
-   The :term:`annotate function` for this module, or ``None`` if the module has
-   no annotations. See also: :attr:`~object.__annotate__` attributes.
-
-   .. versionadded:: 3.14
-
-.. attribute:: module.__lazy_modules__
-
-   A container (an object implementing :meth:`~object.__contains__`) of fully
-   qualified module name strings.  When defined
-   at module scope, any regular :keyword:`import` statement in that module whose
-   target module name appears in this container is treated as a
-   :ref:`lazy import <lazy-imports>`, as if the :keyword:`lazy` keyword had
-   been used.  Imports inside functions, class bodies, or
-   :keyword:`try`/:keyword:`except`/:keyword:`finally` blocks are unaffected.
-
-   See :ref:`lazy-modules-compat` for details and examples.
-
-   .. versionadded:: 3.15
+   A dictionary containing
+   :term:`variable annotations <variable annotation>` collected during module
+   body execution.  For best practices on working with :attr:`__annotations__`,
+   please see :ref:`annotations-howto`.
 
 Module dictionaries
 ^^^^^^^^^^^^^^^^^^^
@@ -1221,7 +1164,6 @@ Special attributes
    single: __base__ (class attribute)
    single: __doc__ (class attribute)
    single: __annotations__ (class attribute)
-   single: __annotate__ (class attribute)
    single: __type_params__ (class attribute)
    single: __static_attributes__ (class attribute)
    single: __firstlineno__ (class attribute)
@@ -1267,36 +1209,16 @@ Special attributes
    * - .. attribute:: type.__annotations__
      - A dictionary containing
        :term:`variable annotations <variable annotation>`
-       collected during class body execution. See also:
-       :attr:`__annotations__ attributes <object.__annotations__>`.
+       collected during class body execution. For best practices on working
+       with :attr:`!__annotations__`, please see :ref:`annotations-howto`.
 
-       For best practices on working with :attr:`~object.__annotations__`,
-       please see :mod:`annotationlib`. Use
-       :func:`annotationlib.get_annotations` instead of accessing this
-       attribute directly.
+       .. caution::
 
-       .. warning::
-
-          Accessing the :attr:`!__annotations__` attribute directly
-          on a class object may return annotations for the wrong class, specifically
-          in certain cases where the class, its base class, or a metaclass
-          is defined under ``from __future__ import annotations``.
-          See :pep:`749 <749#pep749-metaclasses>` for details.
-
-          This attribute does not exist on certain builtin classes. On
-          user-defined classes without ``__annotations__``, it is an
-          empty dictionary.
-
-       .. versionchanged:: 3.14
-          Annotations are now :ref:`lazily evaluated <lazy-evaluation>`.
-          See :pep:`649`.
-
-   * - .. method:: type.__annotate__
-     - The :term:`annotate function` for this class, or ``None``
-       if the class has no annotations.
-       See also: :attr:`__annotate__ attributes <object.__annotate__>`.
-
-       .. versionadded:: 3.14
+          Accessing the :attr:`!__annotations__` attribute of a class
+          object directly may yield incorrect results in the presence of
+          metaclasses. In addition, the attribute may not exist for
+          some classes. Use :func:`inspect.get_annotations` to
+          retrieve class annotations safely.
 
    * - .. attribute:: type.__type_params__
      - A :class:`tuple` containing the :ref:`type parameters <type-params>` of
@@ -1486,6 +1408,7 @@ indirectly) to mutable objects.
    single: co_filename (code object attribute)
    single: co_firstlineno (code object attribute)
    single: co_flags (code object attribute)
+   single: co_lnotab (code object attribute)
    single: co_name (code object attribute)
    single: co_names (code object attribute)
    single: co_nlocals (code object attribute)
@@ -1558,15 +1481,13 @@ Special read-only attributes
    * - .. attribute:: codeobject.co_firstlineno
      - The line number of the first line of the function
 
-   * - .. attribute:: codeobject.co_linetable
-     - A :class:`bytes` object containing encoded source location information.
-       The exact format is an implementation detail and may change between
-       Python versions. Use :meth:`~codeobject.co_lines` and
-       :meth:`~codeobject.co_positions` for supported access to line and
-       position information. To create a modified copy of a code object,
-       use :meth:`~codeobject.replace`.
+   * - .. attribute:: codeobject.co_lnotab
+     - A string encoding the mapping from :term:`bytecode` offsets to line
+       numbers. For details, see the source code of the interpreter.
 
-       .. versionadded:: 3.10
+       .. deprecated:: 3.12
+          This attribute of code objects is deprecated, and may be removed in
+          Python 3.15.
 
    * - .. attribute:: codeobject.co_stacksize
      - The required stack size of the code object
@@ -1593,10 +1514,9 @@ Other bits in :attr:`~codeobject.co_flags` are reserved for internal use.
 
 .. index:: single: documentation string
 
-If a code object represents a function and has a docstring,
-the :data:`~inspect.CO_HAS_DOCSTRING` bit is set in :attr:`~codeobject.co_flags`
-and the first item in :attr:`~codeobject.co_consts` is
-the docstring of the function.
+If a code object represents a function, the first item in
+:attr:`~codeobject.co_consts` is
+the documentation string of the function, or ``None`` if undefined.
 
 Methods on code objects
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -1696,7 +1616,6 @@ and are also passed to registered trace functions.
    single: f_locals (frame attribute)
    single: f_lasti (frame attribute)
    single: f_builtins (frame attribute)
-   single: f_generator (frame attribute)
 
 Special read-only attributes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1733,12 +1652,6 @@ Special read-only attributes
      - The "precise instruction" of the frame object
        (this is an index into the :term:`bytecode` string of the
        :ref:`code object <code-objects>`)
-
-   * - .. attribute:: frame.f_generator
-     - The :term:`generator` or :term:`coroutine` object that owns this frame,
-       or ``None`` if the frame is a normal function.
-
-       .. versionadded:: 3.14
 
 .. index::
    single: f_trace (frame attribute)
@@ -1888,12 +1801,6 @@ Slice objects
 Slice objects are used to represent slices for
 :meth:`~object.__getitem__`
 methods.  They are also created by the built-in :func:`slice` function.
-
-.. versionadded:: 3.15
-
-   The :func:`slice` type now supports :ref:`subscription <subscriptions>`. For
-   example, ``slice[float]`` may be used in type annotations to indicate a slice
-   containing :type:`float` objects.
 
 .. index::
    single: start (slice object attribute)
@@ -2236,12 +2143,12 @@ Basic customization
       pair: built-in function; hash
 
    Called by built-in function :func:`hash` and for operations on members of
-   hashed collections including :class:`set`, :class:`frozenset`, :class:`dict`,
-   and :class:`frozendict`. The ``__hash__()`` method should return an integer.
-   The only required property is that objects which compare equal have the same
-   hash value; it is advised to mix together the hash values of the components
-   of the object that also play a part in comparison of objects by packing them
-   into a tuple and hashing the tuple. Example::
+   hashed collections including :class:`set`, :class:`frozenset`, and
+   :class:`dict`.  The ``__hash__()`` method should return an integer. The only required
+   property is that objects which compare equal have the same hash value; it is
+   advised to mix together the hash values of the components of the object that
+   also play a part in comparison of objects by packing them into a tuple and
+   hashing the tuple. Example::
 
        def __hash__(self):
            return hash((self.name, self.nick, self.color))
@@ -2690,10 +2597,10 @@ Notes on using *__slots__*:
   descriptor directly from the base class). This renders the meaning of the
   program undefined.  In the future, a check may be added to prevent this.
 
-* :exc:`TypeError` will be raised if *__slots__* other than *__dict__* and
-  *__weakref__* are defined for a class derived from a
+* :exc:`TypeError` will be raised if nonempty *__slots__* are defined for a
+  class derived from a
   :c:member:`"variable-length" built-in type <PyTypeObject.tp_itemsize>` such as
-  :class:`int`, :class:`bytes`, and :class:`type`, except :class:`tuple`.
+  :class:`int`, :class:`bytes`, and :class:`tuple`.
 
 * Any non-string :term:`iterable` may be assigned to *__slots__*.
 
@@ -2705,7 +2612,7 @@ Notes on using *__slots__*:
 * :attr:`~object.__class__` assignment works only if both classes have the
   same *__slots__*.
 
-* :ref:`Multiple inheritance <multiple-inheritance>` with multiple slotted parent
+* :ref:`Multiple inheritance <tut-multiple>` with multiple slotted parent
   classes can be used,
   but only one parent is allowed to have attributes created by slots
   (the other bases must have empty slot layouts) - violations raise
@@ -2715,11 +2622,6 @@ Notes on using *__slots__*:
   created for each
   of the iterator's values. However, the *__slots__* attribute will be an empty
   iterator.
-
-.. versionchanged:: 3.15
-   Allowed defining the *__dict__* and *__weakref__* *__slots__* for any class.
-   Allowed defining any *__slots__* for a class derived from :class:`tuple`.
-
 
 .. _class-customization:
 
@@ -2860,8 +2762,6 @@ Resolving MRO entries
       Core support for typing module and generic types.
 
 
-.. _metaclass-determination:
-
 Determining the appropriate metaclass
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .. index::
@@ -2991,8 +2891,6 @@ explored include enum, logging, interface checking, automatic delegation,
 automatic property creation, proxies, frameworks, and automatic resource
 locking/synchronization.
 
-
-.. _customize-instance-subclass-checks:
 
 Customizing instance and subclass checks
 ----------------------------------------
@@ -3267,55 +3165,43 @@ through the object's keys; for sequences, it should iterate through the values.
    .. versionadded:: 3.4
 
 
-.. method:: object.__getitem__(self, subscript)
+.. index:: pair: object; slice
 
-   Called to implement *subscription*, that is, ``self[subscript]``.
-   See :ref:`subscriptions` for details on the syntax.
+.. note::
 
-   There are two types of built-in objects that support subscription
-   via :meth:`!__getitem__`:
+   Slicing is done exclusively with the following three methods.  A call like ::
 
-   - **sequences**, where *subscript* (also called
-     :term:`index`) should be an integer or a :class:`slice` object.
-     See the :ref:`sequence documentation <datamodel-sequences>` for the expected
-     behavior, including handling :class:`slice` objects and negative indices.
-   - **mappings**, where *subscript* is also called the :term:`key`.
-     See :ref:`mapping documentation <datamodel-mappings>` for the expected
-     behavior.
+      a[1:2] = b
 
-   If *subscript* is of an inappropriate type, :meth:`!__getitem__`
-   should raise :exc:`TypeError`.
-   If *subscript* has an inappropriate value, :meth:`!__getitem__`
-   should raise an :exc:`LookupError` or one of its subclasses
-   (:exc:`IndexError` for sequences; :exc:`KeyError` for mappings).
+   is translated to ::
 
-   .. index:: pair: object; slice
+      a[slice(1, 2, None)] = b
 
-   .. note::
+   and so forth.  Missing slice items are always filled in with ``None``.
 
-      Slicing is handled by :meth:`!__getitem__`, :meth:`~object.__setitem__`,
-      and :meth:`~object.__delitem__`.
-      A call like ::
 
-         a[1:2] = b
+.. method:: object.__getitem__(self, key)
 
-      is translated to ::
-
-         a[slice(1, 2, None)] = b
-
-      and so forth. Missing slice items are always filled in with ``None``.
+   Called to implement evaluation of ``self[key]``. For :term:`sequence` types,
+   the accepted keys should be integers. Optionally, they may support
+   :class:`slice` objects as well.  Negative index support is also optional.
+   If *key* is
+   of an inappropriate type, :exc:`TypeError` may be raised; if *key* is a value
+   outside the set of indexes for the sequence (after any special
+   interpretation of negative values), :exc:`IndexError` should be raised. For
+   :term:`mapping` types, if *key* is missing (not in the container),
+   :exc:`KeyError` should be raised.
 
    .. note::
 
-      The sequence iteration protocol (used, for example, in :keyword:`for`
-      loops), expects that an :exc:`IndexError` will be raised for illegal
-      indexes to allow proper detection of the end of a sequence.
+      :keyword:`for` loops expect that an :exc:`IndexError` will be raised for
+      illegal indexes to allow proper detection of the end of the sequence.
 
    .. note::
 
-      When :ref:`subscripting <subscriptions>` a *class*, the special
+      When :ref:`subscripting<subscriptions>` a *class*, the special
       class method :meth:`~object.__class_getitem__` may be called instead of
-      :meth:`!__getitem__`. See :ref:`classgetitem-versus-getitem` for more
+      ``__getitem__()``. See :ref:`classgetitem-versus-getitem` for more
       details.
 
 
@@ -3420,7 +3306,7 @@ left undefined.
    :meth:`__divmod__` method should be the equivalent to using
    :meth:`__floordiv__` and :meth:`__mod__`; it should not be related to
    :meth:`__truediv__`.  Note that :meth:`__pow__` should be defined to accept
-   an optional third argument if the three-argument version of the built-in :func:`pow`
+   an optional third argument if the ternary version of the built-in :func:`pow`
    function is to be supported.
 
    If one of those methods does not support the operation with the supplied
@@ -3449,23 +3335,17 @@ left undefined.
    These methods are called to implement the binary arithmetic operations
    (``+``, ``-``, ``*``, ``@``, ``/``, ``//``, ``%``, :func:`divmod`,
    :func:`pow`, ``**``, ``<<``, ``>>``, ``&``, ``^``, ``|``) with reflected
-   (swapped) operands.  These functions are only called if the operands
-   are of different types, when the left operand does not support the corresponding
-   operation [#]_, or the right operand's class is derived from the left operand's
-   class. [#]_ For instance, to evaluate the expression ``x - y``, where *y* is
-   an instance of a class that has an :meth:`__rsub__` method, ``type(y).__rsub__(y, x)``
-   is called if ``type(x).__sub__(x, y)`` returns :data:`NotImplemented` or ``type(y)``
-   is a subclass of ``type(x)``. [#]_
+   (swapped) operands.  These functions are only called if the left operand does
+   not support the corresponding operation [#]_ and the operands are of different
+   types. [#]_ For instance, to evaluate the expression ``x - y``, where *y* is
+   an instance of a class that has an :meth:`__rsub__` method,
+   ``type(y).__rsub__(y, x)`` is called if ``type(x).__sub__(x, y)`` returns
+   :data:`NotImplemented`.
 
-   Note that :meth:`__rpow__` should be defined to accept an optional third
-   argument if the three-argument version of the built-in :func:`pow` function
-   is to be supported.
+   .. index:: pair: built-in function; pow
 
-   .. versionchanged:: 3.14
-
-      Three-argument :func:`pow` now try calling :meth:`~object.__rpow__` if necessary.
-      Previously it was only called in two-argument :func:`!pow` and the binary
-      power operator.
+   Note that ternary :func:`pow` will not try calling :meth:`__rpow__` (the
+   coercion rules would become too complicated).
 
    .. note::
 
@@ -3474,6 +3354,7 @@ left undefined.
       for the operation, this method will be called before the left operand's
       non-reflected method. This behavior allows subclasses to override their
       ancestors' operations.
+
 
 .. method:: object.__iadd__(self, other)
             object.__isub__(self, other)
@@ -3556,8 +3437,11 @@ left undefined.
    return the value of the object truncated to an :class:`~numbers.Integral`
    (typically an :class:`int`).
 
-   .. versionchanged:: 3.14
-      :func:`int` no longer delegates to the :meth:`~object.__trunc__` method.
+   The built-in function :func:`int` falls back to :meth:`__trunc__` if neither
+   :meth:`__int__` nor :meth:`__index__` is defined.
+
+   .. versionchanged:: 3.11
+      The delegation of :func:`int` to :meth:`__trunc__` is deprecated.
 
 
 .. _context-managers:
@@ -3665,25 +3549,12 @@ implement the protocol in Python.
    provides a convenient way to interpret the flags. The method must return
    a :class:`memoryview` object.
 
-   **Thread safety:** In :term:`free-threaded <free threading>` Python,
-   implementations must manage any internal export counter using atomic
-   operations. The method must be safe to call concurrently from multiple
-   threads, and the returned buffer's underlying data must remain valid
-   until the corresponding :meth:`~object.__release_buffer__` call
-   completes. See :ref:`thread-safety-memoryview` for details.
-
 .. method:: object.__release_buffer__(self, buffer)
 
    Called when a buffer is no longer needed. The *buffer* argument is a
    :class:`memoryview` object that was previously returned by
    :meth:`~object.__buffer__`. The method must release any resources associated
    with the buffer. This method should return ``None``.
-
-   **Thread safety:** In :term:`free-threaded <free threading>` Python,
-   any export counter decrement must use atomic operations. Resource
-   cleanup must be thread-safe, as the final release may race with
-   concurrent releases from other threads.
-
    Buffer objects that do not need to perform any cleanup are not required
    to implement this method.
 
@@ -3696,51 +3567,6 @@ implement the protocol in Python.
 
    :class:`collections.abc.Buffer`
       ABC for buffer types.
-
-Annotations
------------
-
-Functions, classes, and modules may contain :term:`annotations <annotation>`,
-which are a way to associate information (usually :term:`type hints <type hint>`)
-with a symbol.
-
-.. attribute:: object.__annotations__
-
-   This attribute contains the annotations for an object. It is
-   :ref:`lazily evaluated <lazy-evaluation>`, so accessing the attribute may
-   execute arbitrary code and raise exceptions. If evaluation is successful, the
-   attribute is set to a dictionary mapping from variable names to annotations.
-
-   .. versionchanged:: 3.14
-      Annotations are now lazily evaluated.
-
-.. method:: object.__annotate__(format)
-
-   An :term:`annotate function`.
-   Returns a new dictionary object mapping attribute/parameter names to their annotation values.
-
-   Takes a format parameter specifying the format in which annotations values should be provided.
-   It must be a member of the :class:`annotationlib.Format` enum, or an integer with
-   a value corresponding to a member of the enum.
-
-   If an annotate function doesn't support the requested format, it must raise
-   :exc:`NotImplementedError`. Annotate functions must always support
-   :attr:`~annotationlib.Format.VALUE` format; they must not raise
-   :exc:`NotImplementedError()` when called with this format.
-
-   When called with  :attr:`~annotationlib.Format.VALUE` format, an annotate function may raise
-   :exc:`NameError`; it must not raise :exc:`!NameError` when called requesting any other format.
-
-   If an object does not have any annotations, :attr:`~object.__annotate__` should preferably be set
-   to ``None`` (it can’t be deleted), rather than set to a function that returns an empty dict.
-
-   .. versionadded:: 3.14
-
-.. seealso::
-
-   :pep:`649` --- Deferred evaluation of annotation using descriptors
-      Introduces lazy evaluation of annotations and the ``__annotate__`` function.
-
 
 .. _special-lookup:
 
@@ -4025,10 +3851,7 @@ An example of an asynchronous context manager class::
    method—that will instead have the opposite effect of explicitly
    *blocking* such fallback.
 
-.. [#] For operands of the same type, it is assumed that if the non-reflected method
-   (such as :meth:`~object.__add__`) fails then the operation is not supported, which is why the
-   reflected method is not called.
-
-.. [#] If the right operand's type is a subclass of the left operand's type, the
-   reflected method having precedence allows subclasses to override their ancestors'
-   operations.
+.. [#] For operands of the same type, it is assumed that if the non-reflected
+   method -- such as :meth:`~object.__add__` -- fails then the overall
+   operation is not
+   supported, which is why the reflected method is not called.

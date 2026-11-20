@@ -4,6 +4,9 @@
 .. module:: statistics
    :synopsis: Mathematical statistics functions
 
+.. moduleauthor:: Steven D'Aprano <steve+python@pearwood.info>
+.. sectionauthor:: Steven D'Aprano <steve+python@pearwood.info>
+
 .. versionadded:: 3.4
 
 **Source code:** :source:`Lib/statistics.py`
@@ -718,7 +721,7 @@ However, for reading convenience, most of the examples show sorted sequences.
 
 .. function:: covariance(x, y, /)
 
-   Return the sample covariance of two sequence inputs *x* and *y*. Covariance
+   Return the sample covariance of two inputs *x* and *y*. Covariance
    is a measure of the joint variability of two inputs.
 
    Both inputs must be of the same length (no less than two), otherwise
@@ -744,7 +747,7 @@ However, for reading convenience, most of the examples show sorted sequences.
 
    Return the `Pearson's correlation coefficient
    <https://en.wikipedia.org/wiki/Pearson_correlation_coefficient>`_
-   for two sequence inputs. Pearson's correlation coefficient *r* takes values
+   for two inputs. Pearson's correlation coefficient *r* takes values
    between -1 and +1. It measures the strength and direction of a linear
    relationship.
 
@@ -807,7 +810,7 @@ However, for reading convenience, most of the examples show sorted sequences.
    (it is equal to the difference between predicted and actual values
    of the dependent variable).
 
-   Both inputs must be sequences of the same length (no less than two), and
+   Both inputs must be of the same length (no less than two), and
    the independent variable *x* cannot be constant;
    otherwise a :exc:`StatisticsError` is raised.
 

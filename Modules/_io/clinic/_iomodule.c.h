@@ -7,7 +7,6 @@ preserve
 #  include "pycore_runtime.h"     // _Py_ID()
 #endif
 #include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
-#include "pycore_unicodeobject.h" // _PyUnicode_AsUTF8NoNUL()
 
 PyDoc_STRVAR(_io_open__doc__,
 "open($module, /, file, mode=\'r\', buffering=-1, encoding=None,\n"
@@ -66,9 +65,10 @@ PyDoc_STRVAR(_io_open__doc__,
 "argument is given, the default buffering policy works as follows:\n"
 "\n"
 "* Binary files are buffered in fixed-size chunks; the size of the buffer\n"
-"  is max(min(blocksize, 8 MiB), DEFAULT_BUFFER_SIZE) when the device\n"
-"  block size is available.\n"
-"  On most systems, the buffer will typically be 128 kilobytes long.\n"
+"  is chosen using a heuristic trying to determine the underlying\n"
+"  device\'s \"block size\" and falling back on `io.DEFAULT_BUFFER_SIZE`.\n"
+"  On many systems, the buffer will typically be 4096 or 8192 bytes\n"
+"  long.\n"
 "\n"
 "* \"Interactive\" text files (files for which isatty() returns True)\n"
 "  use line buffering.  Other text files use the policy described above\n"
@@ -147,11 +147,9 @@ _io_open(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kw
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
         .ob_item = { &_Py_ID(file), &_Py_ID(mode), &_Py_ID(buffering), &_Py_ID(encoding), &_Py_ID(errors), &_Py_ID(newline), &_Py_ID(closefd), &_Py_ID(opener), },
     };
     #undef NUM_KEYWORDS
@@ -179,8 +177,7 @@ _io_open(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kw
     int closefd = 1;
     PyObject *opener = Py_None;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 1, /*maxpos*/ 8, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 1, 8, 0, argsbuf);
     if (!args) {
         goto exit;
     }
@@ -193,8 +190,13 @@ _io_open(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kw
             _PyArg_BadArgument("open", "argument 'mode'", "str", args[1]);
             goto exit;
         }
-        mode = _PyUnicode_AsUTF8NoNUL(args[1]);
+        Py_ssize_t mode_length;
+        mode = PyUnicode_AsUTF8AndSize(args[1], &mode_length);
         if (mode == NULL) {
+            goto exit;
+        }
+        if (strlen(mode) != (size_t)mode_length) {
+            PyErr_SetString(PyExc_ValueError, "embedded null character");
             goto exit;
         }
         if (!--noptargs) {
@@ -215,8 +217,13 @@ _io_open(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kw
             encoding = NULL;
         }
         else if (PyUnicode_Check(args[3])) {
-            encoding = _PyUnicode_AsUTF8NoNUL(args[3]);
+            Py_ssize_t encoding_length;
+            encoding = PyUnicode_AsUTF8AndSize(args[3], &encoding_length);
             if (encoding == NULL) {
+                goto exit;
+            }
+            if (strlen(encoding) != (size_t)encoding_length) {
+                PyErr_SetString(PyExc_ValueError, "embedded null character");
                 goto exit;
             }
         }
@@ -233,8 +240,13 @@ _io_open(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kw
             errors = NULL;
         }
         else if (PyUnicode_Check(args[4])) {
-            errors = _PyUnicode_AsUTF8NoNUL(args[4]);
+            Py_ssize_t errors_length;
+            errors = PyUnicode_AsUTF8AndSize(args[4], &errors_length);
             if (errors == NULL) {
+                goto exit;
+            }
+            if (strlen(errors) != (size_t)errors_length) {
+                PyErr_SetString(PyExc_ValueError, "embedded null character");
                 goto exit;
             }
         }
@@ -251,8 +263,13 @@ _io_open(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kw
             newline = NULL;
         }
         else if (PyUnicode_Check(args[5])) {
-            newline = _PyUnicode_AsUTF8NoNUL(args[5]);
+            Py_ssize_t newline_length;
+            newline = PyUnicode_AsUTF8AndSize(args[5], &newline_length);
             if (newline == NULL) {
+                goto exit;
+            }
+            if (strlen(newline) != (size_t)newline_length) {
+                PyErr_SetString(PyExc_ValueError, "embedded null character");
                 goto exit;
             }
         }
@@ -353,11 +370,9 @@ _io_open_code(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
         .ob_item = { &_Py_ID(path), },
     };
     #undef NUM_KEYWORDS
@@ -377,8 +392,7 @@ _io_open_code(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
     PyObject *argsbuf[1];
     PyObject *path;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 1, /*maxpos*/ 1, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 1, 1, 0, argsbuf);
     if (!args) {
         goto exit;
     }
@@ -392,4 +406,4 @@ _io_open_code(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=4570f4466d711d60 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=6fb7864751a4cbd8 input=a9049054013a1b77]*/

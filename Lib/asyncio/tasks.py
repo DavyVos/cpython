@@ -48,8 +48,23 @@ def all_tasks(loop=None):
     # capturing the set of eager tasks first, so if an eager task "graduates"
     # to a regular task in another thread, we don't risk missing it.
     eager_tasks = list(_eager_tasks)
-
-    return {t for t in itertools.chain(_scheduled_tasks, eager_tasks)
+    # Looping over the WeakSet isn't safe as it can be updated from another
+    # thread, therefore we cast it to list prior to filtering. The list cast
+    # itself requires iteration, so we repeat it several times ignoring
+    # RuntimeErrors (which are not very likely to occur).
+    # See issues 34970 and 36607 for details.
+    scheduled_tasks = None
+    i = 0
+    while True:
+        try:
+            scheduled_tasks = list(_scheduled_tasks)
+        except RuntimeError:
+            i += 1
+            if i >= 1000:
+                raise
+        else:
+            break
+    return {t for t in itertools.chain(scheduled_tasks, eager_tasks)
             if futures._get_loop(t) is loop and not t.done()}
 
 
@@ -119,7 +134,7 @@ class Task(futures._PyFuture):  # Inherit Python Task implementation
                 raise
         else:
             self._loop.call_soon(self.__step, context=self._context)
-            _py_register_task(self)
+            _register_task(self)
 
     def __del__(self):
         if self._state == futures._PENDING and self._log_destroy_pending:
@@ -254,44 +269,39 @@ class Task(futures._PyFuture):  # Inherit Python Task implementation
         return self._num_cancels_requested
 
     def __eager_start(self):
-        prev_task = _py_swap_current_task(self._loop, self)
+        prev_task = _swap_current_task(self._loop, self)
         try:
-            _py_register_eager_task(self)
-            # gh-157299: the eager step must record the awaited_by edge
-            futures.future_add_to_awaited_by(self, prev_task)
+            _register_eager_task(self)
             try:
                 self._context.run(self.__step_run_and_handle_result, None)
             finally:
-                futures.future_discard_from_awaited_by(self, prev_task)
-                _py_unregister_eager_task(self)
+                _unregister_eager_task(self)
         finally:
             try:
-                curtask = _py_swap_current_task(self._loop, prev_task)
+                curtask = _swap_current_task(self._loop, prev_task)
                 assert curtask is self
             finally:
                 if self.done():
                     self._coro = None
                     self = None  # Needed to break cycles when an exception occurs.
                 else:
-                    _py_register_task(self)
+                    _register_task(self)
 
     def __step(self, exc=None):
         if self.done():
             raise exceptions.InvalidStateError(
-                f'__step(): already done: {self!r}, {exc!r}')
+                f'_step(): already done: {self!r}, {exc!r}')
         if self._must_cancel:
-            # gh-108549: do not swallow SystemExit and KeyboardInterrupt.
-            if not isinstance(exc, (exceptions.CancelledError,
-                                    SystemExit, KeyboardInterrupt)):
+            if not isinstance(exc, exceptions.CancelledError):
                 exc = self._make_cancelled_error()
             self._must_cancel = False
         self._fut_waiter = None
 
-        _py_enter_task(self._loop, self)
+        _enter_task(self._loop, self)
         try:
             self.__step_run_and_handle_result(exc)
         finally:
-            _py_leave_task(self._loop, self)
+            _leave_task(self._loop, self)
             self = None  # Needed to break cycles when an exception occurs.
 
     def __step_run_and_handle_result(self, exc):
@@ -336,7 +346,6 @@ class Task(futures._PyFuture):  # Inherit Python Task implementation
                         self._loop.call_soon(
                             self.__step, new_exc, context=self._context)
                     else:
-                        futures.future_add_to_awaited_by(result, self)
                         result._asyncio_future_blocking = False
                         result.add_done_callback(
                             self.__wakeup, context=self._context)
@@ -371,7 +380,6 @@ class Task(futures._PyFuture):  # Inherit Python Task implementation
             self = None  # Needed to break cycles when an exception occurs.
 
     def __wakeup(self, future):
-        futures.future_discard_from_awaited_by(future, self)
         try:
             future.result()
         except BaseException as exc:
@@ -380,7 +388,7 @@ class Task(futures._PyFuture):  # Inherit Python Task implementation
         else:
             # Don't pass the value of `future.result()` explicitly,
             # as `Future.__iter__` and `Future.__await__` don't need it.
-            # If we call `__step(value, None)` instead of `__step()`,
+            # If we call `_step(value, None)` instead of `_step()`,
             # Python eval loop would use `.send(value)` method call,
             # instead of `__next__()`, which is slower for futures
             # that return non-generator iterators from their `__iter__`.
@@ -400,13 +408,19 @@ else:
     Task = _CTask = _asyncio.Task
 
 
-def create_task(coro, **kwargs):
+def create_task(coro, *, name=None, context=None):
     """Schedule the execution of a coroutine object in a spawn task.
 
     Return a Task object.
     """
     loop = events.get_running_loop()
-    return loop.create_task(coro, **kwargs)
+    if context is None:
+        # Use legacy API if context is not needed
+        task = loop.create_task(coro, name=name)
+    else:
+        task = loop.create_task(coro, name=name, context=context)
+
+    return task
 
 
 # wait() and as_completed() similar to those in PEP 3148.
@@ -510,7 +524,6 @@ async def _wait(fs, timeout, return_when, loop):
     if timeout is not None:
         timeout_handle = loop.call_later(timeout, _release_waiter, waiter)
     counter = len(fs)
-    cur_task = current_task()
 
     def _on_completion(f):
         nonlocal counter
@@ -523,11 +536,9 @@ async def _wait(fs, timeout, return_when, loop):
                 timeout_handle.cancel()
             if not waiter.done():
                 waiter.set_result(None)
-        futures.future_discard_from_awaited_by(f, cur_task)
 
     for f in fs:
         f.add_done_callback(_on_completion)
-        futures.future_add_to_awaited_by(f, cur_task)
 
     try:
         await waiter
@@ -536,7 +547,6 @@ async def _wait(fs, timeout, return_when, loop):
             timeout_handle.cancel()
         for f in fs:
             f.remove_done_callback(_on_completion)
-            futures.future_discard_from_awaited_by(f, cur_task)
 
     done, pending = set(), set()
     for f in fs:
@@ -555,10 +565,6 @@ async def _cancel_and_wait(fut):
     cb = functools.partial(_release_waiter, waiter)
     fut.add_done_callback(cb)
 
-    # gh-157058: awaiting the waiter leaves no edge on fut, add it here
-    cur_task = current_task()
-    futures.future_add_to_awaited_by(fut, cur_task)
-
     try:
         fut.cancel()
         # We cannot wait on *fut* directly to make
@@ -566,7 +572,6 @@ async def _cancel_and_wait(fut):
         await waiter
     finally:
         fut.remove_done_callback(cb)
-        futures.future_discard_from_awaited_by(fut, cur_task)
 
 
 class _AsCompletedIterator:
@@ -581,17 +586,9 @@ class _AsCompletedIterator:
         self._timeout_handle = None
 
         loop = events.get_event_loop()
-        # The iterator may be created outside of a running event loop and
-        # then driven with loop.run_until_complete(), in which case there
-        # is no current task to record as the waiter.
-        if events._get_running_loop() is loop:
-            self._cur_task = current_task(loop)
-        else:
-            self._cur_task = None
         todo = {ensure_future(aw, loop=loop) for aw in set(aws)}
         for f in todo:
             f.add_done_callback(self._handle_completion)
-            futures.future_add_to_awaited_by(f, self._cur_task)
         if todo and timeout is not None:
             self._timeout_handle = (
                 loop.call_later(timeout, self._handle_timeout)
@@ -622,7 +619,6 @@ class _AsCompletedIterator:
     def _handle_timeout(self):
         for f in self._todo:
             f.remove_done_callback(self._handle_completion)
-            futures.future_discard_from_awaited_by(f, self._cur_task)
             self._done.put_nowait(None)  # Sentinel for _wait_for_one().
         self._todo.clear()  # Can't do todo.remove(f) in the loop.
 
@@ -630,7 +626,6 @@ class _AsCompletedIterator:
         if not self._todo:
             return  # _handle_timeout() was here first.
         self._todo.remove(f)
-        futures.future_discard_from_awaited_by(f, self._cur_task)
         self._done.put_nowait(f)
         if not self._todo and self._timeout_handle is not None:
             self._timeout_handle.cancel()
@@ -639,11 +634,7 @@ class _AsCompletedIterator:
         # Wait for the next future to be done and return it unless resolve is
         # set, in which case return either the result of the future or raise
         # an exception.
-        try:
-            f = await self._done.get()
-        except:
-            self._todo_left += 1
-            raise
+        f = await self._done.get()
         if f is None:
             # Dummy value from _handle_timeout().
             raise exceptions.TimeoutError
@@ -799,11 +790,6 @@ class _GatheringFuture(futures.Future):
         return ret
 
 
-def _discard_awaited_by(children, waiter):
-    for fut in children:
-        futures.future_discard_from_awaited_by(fut, waiter)
-
-
 def gather(*coros_or_futures, return_exceptions=False):
     """Return a future aggregating results from the given coroutines/futures.
 
@@ -840,18 +826,9 @@ def gather(*coros_or_futures, return_exceptions=False):
         outer.set_result([])
         return outer
 
-    loop = events._get_running_loop()
-    if loop is not None:
-        cur_task = current_task(loop)
-    else:
-        cur_task = None
-
-    def _done_callback(fut, cur_task=cur_task):
+    def _done_callback(fut):
         nonlocal nfinished
         nfinished += 1
-
-        if cur_task is not None:
-            futures.future_discard_from_awaited_by(fut, cur_task)
 
         if outer is None or outer.done():
             if not fut.cancelled():
@@ -865,14 +842,11 @@ def gather(*coros_or_futures, return_exceptions=False):
                 # 'fut.exception()' will *raise* a CancelledError
                 # instead of returning it.
                 exc = fut._make_cancelled_error()
-                # gh-157213: children outliving gather() must lose the edge
-                _discard_awaited_by(children, cur_task)
                 outer.set_exception(exc)
                 return
             else:
                 exc = fut.exception()
                 if exc is not None:
-                    _discard_awaited_by(children, cur_task)
                     outer.set_exception(exc)
                     return
 
@@ -912,6 +886,7 @@ def gather(*coros_or_futures, return_exceptions=False):
     nfuts = 0
     nfinished = 0
     done_futs = []
+    loop = None
     outer = None  # bpo-46672
     for arg in coros_or_futures:
         if arg not in arg_to_fut:
@@ -924,6 +899,7 @@ def gather(*coros_or_futures, return_exceptions=False):
                 # can't control it, disable the "destroy pending task"
                 # warning.
                 fut._log_destroy_pending = False
+
             nfuts += 1
             arg_to_fut[arg] = fut
             if fut.done():
@@ -938,11 +914,6 @@ def gather(*coros_or_futures, return_exceptions=False):
         children.append(fut)
 
     outer = _GatheringFuture(children, loop=loop)
-    # Add the awaited-by edges only after all arguments are validated
-    if cur_task is not None and len(done_futs) < nfuts:
-        for fut in arg_to_fut.values():
-            if not fut.done():
-                futures.future_add_to_awaited_by(fut, cur_task)
     # Run done callbacks after GatheringFuture created so any post-processing
     # can be performed at this point
     # optimization: in the special case that *all* futures finished eagerly,
@@ -993,16 +964,11 @@ def shield(arg):
     loop = futures._get_loop(inner)
     outer = loop.create_future()
 
-    if loop is not None and (cur_task := current_task(loop)) is not None:
-        futures.future_add_to_awaited_by(inner, cur_task)
-    else:
-        cur_task = None
-
-    def _clear_awaited_by_callback(inner):
-        futures.future_discard_from_awaited_by(inner, cur_task)
-
     def _inner_done_callback(inner):
         if outer.cancelled():
+            if not inner.cancelled():
+                # Mark inner's result as retrieved.
+                inner.exception()
             return
 
         if inner.cancelled():
@@ -1014,16 +980,10 @@ def shield(arg):
             else:
                 outer.set_result(inner.result())
 
+
     def _outer_done_callback(outer):
         if not inner.done():
             inner.remove_done_callback(_inner_done_callback)
-            if cur_task is not None:
-                inner.remove_done_callback(_clear_awaited_by_callback)
-                futures.future_discard_from_awaited_by(inner, cur_task)
-
-    if cur_task is not None:
-        inner.add_done_callback(_clear_awaited_by_callback)
-
 
     inner.add_done_callback(_inner_done_callback)
     outer.add_done_callback(_outer_done_callback)
@@ -1073,9 +1033,9 @@ def create_eager_task_factory(custom_task_constructor):
     used. E.g. `loop.set_task_factory(asyncio.eager_task_factory)`.
     """
 
-    def factory(loop, coro, *, eager_start=True, **kwargs):
+    def factory(loop, coro, *, name=None, context=None):
         return custom_task_constructor(
-            coro, loop=loop, eager_start=eager_start, **kwargs)
+            coro, loop=loop, name=name, context=context, eager_start=True)
 
     return factory
 
@@ -1147,13 +1107,14 @@ _py_unregister_eager_task = _unregister_eager_task
 _py_enter_task = _enter_task
 _py_leave_task = _leave_task
 _py_swap_current_task = _swap_current_task
-_py_all_tasks = all_tasks
+
 
 try:
     from _asyncio import (_register_task, _register_eager_task,
                           _unregister_task, _unregister_eager_task,
                           _enter_task, _leave_task, _swap_current_task,
-                          current_task, all_tasks)
+                          _scheduled_tasks, _eager_tasks, _current_tasks,
+                          current_task)
 except ImportError:
     pass
 else:
@@ -1165,4 +1126,3 @@ else:
     _c_enter_task = _enter_task
     _c_leave_task = _leave_task
     _c_swap_current_task = _swap_current_task
-    _c_all_tasks = all_tasks

@@ -46,9 +46,6 @@ import os
 import sys
 
 
-MAX_UNICODE = 0x10_ffff
-
-
 # Look up the gdb.Type for some standard types:
 # Those need to be refreshed as types (pointer sizes) may change when
 # gdb loads different executables
@@ -71,6 +68,9 @@ def _type_unsigned_int_ptr():
 def _sizeof_void_p():
     return gdb.lookup_type('void').pointer().sizeof
 
+def _sizeof_pyobject():
+    return gdb.lookup_type('PyObject').sizeof
+
 def _managed_dict_offset():
     # See pycore_object.h
     pyobj = gdb.lookup_type("PyObject")
@@ -79,14 +79,6 @@ def _managed_dict_offset():
     else:
         return -3 * _sizeof_void_p()
 
-_INTERP_FRAME_HAS_TLBC_INDEX = None
-def interp_frame_has_tlbc_index():
-    global _INTERP_FRAME_HAS_TLBC_INDEX
-    if _INTERP_FRAME_HAS_TLBC_INDEX is None:
-        interp_frame = gdb.lookup_type("_PyInterpreterFrame")
-        _INTERP_FRAME_HAS_TLBC_INDEX = any(field.name == "tlbc_index"
-                                           for field in interp_frame.fields())
-    return _INTERP_FRAME_HAS_TLBC_INDEX
 
 Py_TPFLAGS_INLINE_VALUES     = (1 << 2)
 Py_TPFLAGS_MANAGED_DICT      = (1 << 4)
@@ -101,18 +93,15 @@ Py_TPFLAGS_BASE_EXC_SUBCLASS = (1 << 30)
 Py_TPFLAGS_TYPE_SUBCLASS     = (1 << 31)
 
 #From pycore_frame.h
-FRAME_OWNED_BY_INTERPRETER = 3
+FRAME_OWNED_BY_CSTACK = 3
 
 MAX_OUTPUT_LEN=1024
 
 hexdigits = "0123456789abcdef"
 
-USED_TAGS = 0b11
-
 FRAME_INFO_OPTIMIZED_OUT = '(frame information optimized out)'
 UNABLE_READ_INFO_PYTHON_FRAME = 'Unable to read information on python frame'
 EVALFRAME = '_PyEval_EvalFrameDefault'
-
 
 class NullPyObjectPtr(RuntimeError):
     pass
@@ -153,10 +142,6 @@ class TruncatedStringIO(object):
         return self._val
 
 
-def _PyStackRef_AsPyObjectBorrow(gdbval):
-    return gdb.Value(int(gdbval['bits']) & ~USED_TAGS)
-
-
 class PyObjectPtr(object):
     """
     Class wrapping a gdb.Value that's either a (PyObject*) within the
@@ -171,12 +156,7 @@ class PyObjectPtr(object):
     _typename = 'PyObject'
 
     def __init__(self, gdbval, cast_to=None):
-        # Clear the tagged pointer
-        if gdbval.type.name == '_PyStackRef':
-            if cast_to is None:
-                cast_to = gdb.lookup_type('PyObject').pointer()
-            self._gdbval = _PyStackRef_AsPyObjectBorrow(gdbval).cast(cast_to)
-        elif cast_to:
+        if cast_to:
             self._gdbval = gdbval.cast(cast_to)
         else:
             self._gdbval = gdbval
@@ -352,7 +332,6 @@ class PyObjectPtr(object):
                     'frame': PyFrameObjectPtr,
                     'set' : PySetObjectPtr,
                     'frozenset' : PySetObjectPtr,
-                    'frozendict' : PyDictObjectPtr,
                     'builtin_function_or_method' : PyCFunctionObjectPtr,
                     'method-wrapper': wrapperobject,
                     }
@@ -520,7 +499,7 @@ class HeapTypeObjectPtr(PyObjectPtr):
         dict_ptr = dict_ptr_ptr.cast(_type_char_ptr().pointer()).dereference()
         if int(dict_ptr):
             return None
-        char_ptr = obj_ptr + typeobj.field('tp_basicsize')
+        char_ptr = obj_ptr + _sizeof_pyobject()
         values_ptr = char_ptr.cast(gdb.lookup_type("PyDictValues").pointer())
         values = values_ptr['values']
         return PyKeysValuesPair(self.get_cached_keys(), values)
@@ -708,16 +687,6 @@ def parse_location_table(firstlineno, linetable):
         yield addr, end_addr, line
         addr = end_addr
 
-
-class PyCodeArrayPtr:
-    def __init__(self, gdbval):
-        self._gdbval = gdbval
-
-    def get_entry(self, index):
-        assert (index >= 0) and (index < self._gdbval["size"])
-        return self._gdbval["entries"][index]
-
-
 class PyCodeObjectPtr(PyObjectPtr):
     """
     Class wrapping a gdb.Value that's a PyCodeObject* i.e. a <code> instance
@@ -816,20 +785,12 @@ class PyDictObjectPtr(PyObjectPtr):
         return result
 
     def write_repr(self, out, visited):
-        tp_name = self.safe_tp_name()
-        is_frozendict = (tp_name == "frozendict")
-
         # Guard against infinite loops:
         if self.as_address() in visited:
-            if is_frozendict:
-                out.write(tp_name + '({...})')
-            else:
-                out.write('{...}')
+            out.write('{...}')
             return
         visited.add(self.as_address())
 
-        if is_frozendict:
-            out.write(tp_name + '(')
         out.write('{')
         first = True
         for pyop_key, pyop_value in self.iteritems():
@@ -840,8 +801,6 @@ class PyDictObjectPtr(PyObjectPtr):
             out.write(': ')
             pyop_value.write_repr(out, visited)
         out.write('}')
-        if is_frozendict:
-            out.write(')')
 
     @staticmethod
     def _get_entries(keys):
@@ -906,7 +865,7 @@ class PyLongObjectPtr(PyObjectPtr):
 
     def proxyval(self, visited):
         '''
-        Python's Include/cpython/longinterpr.h has this declaration:
+        Python's Include/longinterpr.h has this declaration:
 
             typedef struct _PyLongValue {
                 uintptr_t lv_tag; /* Number of digits, sign and flags */
@@ -925,7 +884,8 @@ class PyLongObjectPtr(PyObjectPtr):
                 - 0: Positive
                 - 1: Zero
                 - 2: Negative
-            The third lowest bit of lv_tag is set to 1 for the small ints and 0 otherwise.
+            The third lowest bit of lv_tag is reserved for an immortality flag, but is
+            not currently used.
 
         where SHIFT can be either:
             #define PyLong_SHIFT        30
@@ -1108,7 +1068,7 @@ class PyFramePtr:
 
         obj_ptr_ptr = gdb.lookup_type("PyObject").pointer().pointer()
 
-        localsplus = self._gdbval["localsplus"]
+        localsplus = self._gdbval["localsplus"].cast(obj_ptr_ptr)
 
         for i in safe_range(self.co_nlocals):
             pyop_value = PyObjectPtr.from_pyobject_ptr(localsplus[i])
@@ -1138,16 +1098,11 @@ class PyFramePtr:
     def _f_lasti(self):
         codeunit_p = gdb.lookup_type("_Py_CODEUNIT").pointer()
         instr_ptr = self._gdbval["instr_ptr"]
-        if interp_frame_has_tlbc_index():
-            tlbc_index = self._gdbval["tlbc_index"]
-            code_arr = PyCodeArrayPtr(self._f_code().field("co_tlbc"))
-            first_instr = code_arr.get_entry(tlbc_index).cast(codeunit_p)
-        else:
-            first_instr = self._f_code().field("co_code_adaptive").cast(codeunit_p)
+        first_instr = self._f_code().field("co_code_adaptive").cast(codeunit_p)
         return int(instr_ptr - first_instr)
 
     def is_shim(self):
-        return self._f_special("owner", int) == FRAME_OWNED_BY_INTERPRETER
+        return self._f_special("owner", int) == FRAME_OWNED_BY_CSTACK
 
     def previous(self):
         if int(self._gdbval['previous']) == 0:
@@ -1381,15 +1336,11 @@ class PySetObjectPtr(PyObjectPtr):
 class PyBytesObjectPtr(PyObjectPtr):
     _typename = 'PyBytesObject'
 
-    def get_bytes(self):
+    def __str__(self):
         field_ob_size = self.field('ob_size')
         field_ob_sval = self.field('ob_sval')
         char_ptr = field_ob_sval.address.cast(_type_unsigned_char_ptr())
-        return [char_ptr[i] for i in safe_range(field_ob_size)]
-
-    def __str__(self):
-        as_bytes = self.get_bytes()
-        return ''.join([chr(byte) for byte in as_bytes])
+        return ''.join([chr(char_ptr[i]) for i in safe_range(field_ob_size)])
 
     def proxyval(self, visited):
         return str(self)
@@ -1397,17 +1348,17 @@ class PyBytesObjectPtr(PyObjectPtr):
     def write_repr(self, out, visited):
         # Write this out as a Python bytes literal, i.e. with a "b" prefix
 
-        as_bytes = self.get_bytes()
+        # Get a PyStringObject* within the Python gdb process:
+        proxy = self.proxyval(visited)
 
         # Transliteration of Python's Objects/bytesobject.c:PyBytes_Repr
         # to Python code:
         quote = "'"
-        if ord("'") in as_bytes and ord('"') not in as_bytes:
+        if "'" in proxy and not '"' in proxy:
             quote = '"'
         out.write('b')
         out.write(quote)
-        for value in as_bytes:
-            byte = chr(value)
+        for byte in proxy:
             if byte == quote or byte == '\\':
                 out.write('\\')
                 out.write(byte)
@@ -1417,10 +1368,10 @@ class PyBytesObjectPtr(PyObjectPtr):
                 out.write('\\n')
             elif byte == '\r':
                 out.write('\\r')
-            elif value < ord(' ') or value >= 0x7f:
+            elif byte < ' ' or ord(byte) >= 0x7f:
                 out.write('\\x')
-                out.write(hexdigits[(value & 0xf0) >> 4])
-                out.write(hexdigits[value & 0xf])
+                out.write(hexdigits[(ord(byte) & 0xf0) >> 4])
+                out.write(hexdigits[ord(byte) & 0xf])
             else:
                 out.write(byte)
         out.write(quote)
@@ -1473,17 +1424,10 @@ def _unichr_is_printable(char):
     return unicodedata.category(char) not in ("C", "Z")
 
 
-def safe_chr(i):
-    if i <= MAX_UNICODE:
-        return chr(i)
-    else:
-        return f'\\U{i:08x}'
-
-
 class PyUnicodeObjectPtr(PyObjectPtr):
     _typename = 'PyUnicodeObject'
 
-    def get_code_points(self):
+    def proxyval(self, visited):
         compact = self.field('_base')
         ascii = compact['_base']
         state = ascii['state']
@@ -1505,13 +1449,11 @@ class PyUnicodeObjectPtr(PyObjectPtr):
 
         # Gather a list of ints from the code point array; these are either
         # UCS-1, UCS-2 or UCS-4 code points:
-        return [int(field_str[i]) for i in safe_range(field_length)]
+        code_points = [int(field_str[i]) for i in safe_range(field_length)]
 
-    def proxyval(self, visited):
-        code_points = self.get_code_points()
         # Convert the int code points to unicode characters, and generate a
         # local unicode instance.
-        result = ''.join(map(safe_chr, code_points))
+        result = ''.join(map(chr, code_points))
         return result
 
     def write_repr(self, out, visited):
@@ -1522,18 +1464,20 @@ class PyUnicodeObjectPtr(PyObjectPtr):
         encoding = gdb.host_charset()
 
         # Get a PyUnicodeObject* within the Python gdb process:
-        code_points = self.get_code_points()
+        proxy = self.proxyval(visited)
 
         # Transliteration of Python's Object/unicodeobject.c:unicode_repr
         # to Python:
-        if ord("'") in code_points and ord('"') not in code_points:
+        if "'" in proxy and '"' not in proxy:
             quote = '"'
         else:
             quote = "'"
         out.write(quote)
 
-        for code_point in code_points:
-            ch = safe_chr(code_point)
+        i = 0
+        while i < len(proxy):
+            ch = proxy[i]
+            i += 1
 
             # Escape quotes and backslashes
             if ch == quote or ch == '\\':
@@ -1549,24 +1493,24 @@ class PyUnicodeObjectPtr(PyObjectPtr):
                 out.write('\\r')
 
             # Map non-printable US ASCII to '\xhh' */
-            elif ch < ' ' or code_point == 0x7F:
+            elif ch < ' ' or ord(ch) == 0x7F:
                 out.write('\\x')
-                out.write(hexdigits[(code_point >> 4) & 0x000F])
-                out.write(hexdigits[code_point & 0x000F])
+                out.write(hexdigits[(ord(ch) >> 4) & 0x000F])
+                out.write(hexdigits[ord(ch) & 0x000F])
 
             # Copy ASCII characters as-is
-            elif code_point < 0x7F:
+            elif ord(ch) < 0x7F:
                 out.write(ch)
 
             # Non-ASCII characters
             else:
-                if code_point <= MAX_UNICODE:
-                    printable = ch.isprintable()
-                else:
-                    printable = False
+                ucs = ch
+                ch2 = None
+
+                printable = ucs.isprintable()
                 if printable:
                     try:
-                        ch.encode(encoding)
+                        ucs.encode(encoding)
                     # LookupError or ValueError if the host charset is unknown
                     # or invalid.
                     except (UnicodeEncodeError, LookupError, ValueError):
@@ -1575,7 +1519,14 @@ class PyUnicodeObjectPtr(PyObjectPtr):
                 # Map Unicode whitespace and control characters
                 # (categories Z* and C* except ASCII space)
                 if not printable:
-                    code = code_point
+                    if ch2 is not None:
+                        # Match Python's representation of non-printable
+                        # wide characters.
+                        code = (ord(ch) & 0x03FF) << 10
+                        code |= ord(ch2) & 0x03FF
+                        code += 0x00010000
+                    else:
+                        code = ord(ucs)
 
                     # Map 8-bit characters to '\\xhh'
                     if code <= 0xff:
@@ -1603,6 +1554,8 @@ class PyUnicodeObjectPtr(PyObjectPtr):
                 else:
                     # Copy characters as-is
                     out.write(ch)
+                    if ch2 is not None:
+                        out.write(ch2)
 
         out.write(quote)
 
@@ -1673,10 +1626,7 @@ class PyObjectPtrPrinter:
             return stringify(proxyval)
 
 def pretty_printer_lookup(gdbval):
-    type = gdbval.type.strip_typedefs().unqualified()
-    if type.code == gdb.TYPE_CODE_UNION and type.tag == '_PyStackRef':
-        return PyObjectPtrPrinter(gdbval)
-
+    type = gdbval.type.unqualified()
     if type.code != gdb.TYPE_CODE_PTR:
         return None
 

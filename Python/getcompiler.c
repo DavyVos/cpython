@@ -3,10 +3,6 @@
 
 #include "Python.h"
 
-#ifdef _Py_COMPILER
-#  define COMPILER _Py_COMPILER
-#endif
-
 #ifndef COMPILER
 
 // Note the __clang__ conditional has to come before the __GNUC__ one because

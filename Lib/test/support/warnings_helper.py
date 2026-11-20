@@ -1,9 +1,9 @@
 import contextlib
+import functools
 import importlib
 import re
 import sys
 import warnings
-
 
 
 def import_deprecated(name):
@@ -23,7 +23,8 @@ def check_syntax_warning(testcase, statement, errtext='',
     testcase.assertEqual(len(warns), 1, warns)
 
     warn, = warns
-    testcase.assertIsSubclass(warn.category, SyntaxWarning)
+    testcase.assertTrue(issubclass(warn.category, SyntaxWarning),
+                        warn.category)
     if errtext:
         testcase.assertRegex(str(warn.message), errtext)
     testcase.assertEqual(warn.filename, '<testcase>')
@@ -42,32 +43,20 @@ def check_syntax_warning(testcase, statement, errtext='',
     testcase.assertEqual(warns, [])
 
 
-@contextlib.contextmanager
-def ignore_warnings(*, category, message=''):
+def ignore_warnings(*, category):
     """Decorator to suppress warnings.
 
-    Can also be used as a context manager. This is not preferred,
-    because it makes diffs more noisy and tools like 'git blame' less useful.
-    But, it's useful for async functions.
+    Use of context managers to hide warnings make diffs
+    more noisy and tools like 'git blame' less useful.
     """
-    with warnings.catch_warnings():
-        warnings.filterwarnings('ignore', category=category, message=message)
-        yield
-
-
-@contextlib.contextmanager
-def ignore_fork_in_thread_deprecation_warnings():
-    """Suppress deprecation warnings related to forking in multi-threaded code.
-
-    See gh-135427
-
-    Can be used as decorator (preferred) or context manager.
-    """
-    with ignore_warnings(
-        message=".*fork.*may lead to deadlocks in the child.*",
-        category=DeprecationWarning,
-    ):
-        yield
+    def decorator(test):
+        @functools.wraps(test)
+        def wrapper(self, *args, **kwargs):
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', category=category)
+                return test(self, *args, **kwargs)
+        return wrapper
+    return decorator
 
 
 class WarningsRecorder(object):
@@ -171,12 +160,11 @@ def _filterwarnings(filters, quiet=False):
     registry = frame.f_globals.get('__warningregistry__')
     if registry:
         registry.clear()
-    # Because test_warnings swap the module, we need to look up in the
-    # sys.modules dictionary.
-    wmod = sys.modules['warnings']
-    with wmod.catch_warnings(record=True) as w:
-        # Set filter "always" to record all warnings.
-        wmod.simplefilter("always")
+    with warnings.catch_warnings(record=True) as w:
+        # Set filter "always" to record all warnings.  Because
+        # test_warnings swap the module, we need to look up in
+        # the sys.modules dictionary.
+        sys.modules['warnings'].simplefilter("always")
         yield WarningsRecorder(w)
     # Filter the recorded warnings
     reraise = list(w)

@@ -4,6 +4,10 @@
 .. module:: difflib
    :synopsis: Helpers for computing differences between objects.
 
+.. moduleauthor:: Tim Peters <tim_one@users.sourceforge.net>
+.. sectionauthor:: Tim Peters <tim_one@users.sourceforge.net>
+.. Markup by Fred L. Drake, Jr. <fdrake@acm.org>
+
 **Source code:** :source:`Lib/difflib.py`
 
 .. testsetup::
@@ -128,7 +132,7 @@ Diff generation
 
    The :class:`Differ` class has this constructor:
 
-   .. method:: __init__(linejunk=None, charjunk=None, autojunk=True)
+   .. method:: __init__(linejunk=None, charjunk=None)
 
       Optional keyword parameters *linejunk* and *charjunk* are for filter functions
       (or ``None``):
@@ -147,14 +151,6 @@ Diff generation
       :meth:`~SequenceMatcher.find_longest_match` method's *isjunk*
       parameter for an explanation.
 
-      Setting the optional *autojunk* argument to ``False`` will turn
-      :ref:`automatic junk heuristic <difflib-junk>` off.
-
-      .. versionchanged:: 3.16
-         Added keyword-only *autojunk* parameter.
-
-
-
    :class:`Differ` objects are used (deltas generated) via a single method:
 
 
@@ -168,8 +164,6 @@ Diff generation
       delta also consists of newline-terminated strings, ready to be
       printed as-is via the :meth:`~io.IOBase.writelines` method of a
       file-like object.
-
-
 
 .. class:: HtmlDiff
 
@@ -186,7 +180,7 @@ Diff generation
    The constructor for this class is:
 
 
-   .. method:: __init__(tabsize=8, wrapcolumn=None, linejunk=None, charjunk=IS_CHARACTER_JUNK, *, autojunk=True)
+   .. method:: __init__(tabsize=8, wrapcolumn=None, linejunk=None, charjunk=IS_CHARACTER_JUNK)
 
       Initializes instance of :class:`HtmlDiff`.
 
@@ -197,15 +191,8 @@ Diff generation
       broken and wrapped, defaults to ``None`` where lines are not wrapped.
 
       *linejunk* and *charjunk* are optional keyword arguments passed into :func:`ndiff`
-      (used by :class:`HtmlDiff` to generate the side by side HTML differences).
-      See :func:`ndiff` documentation for argument default values and descriptions.
-
-      Setting the optional *autojunk* argument to ``False`` will turn
-      :ref:`automatic junk heuristic <difflib-junk>` off.
-
-      .. versionchanged:: 3.16
-         Added keyword-only *autojunk* parameter.
-
+      (used by :class:`HtmlDiff` to generate the side by side HTML differences).  See
+      :func:`ndiff` documentation for argument default values and descriptions.
 
    The following methods are public:
 
@@ -248,7 +235,7 @@ Diff generation
 
 
 
-.. function:: context_diff(a, b, fromfile='', tofile='', fromfiledate='', tofiledate='', n=3, lineterm='\n', *, autojunk=True)
+.. function:: context_diff(a, b, fromfile='', tofile='', fromfiledate='', tofiledate='', n=3, lineterm='\n')
 
    Compare *a* and *b* (lists of strings); return a delta (a :term:`generator`
    generating the delta lines) in context diff format.
@@ -294,14 +281,8 @@ Diff generation
 
    See :ref:`difflib-interface` for a more detailed example.
 
-   Setting the optional *autojunk* argument to ``False`` will turn
-   :ref:`automatic junk heuristic <difflib-junk>` off.
 
-   .. versionchanged:: 3.16
-      Added keyword-only *autojunk* parameter.
-
-
-.. function:: get_close_matches(word, possibilities, n=3, cutoff=0.6, *, autojunk=True)
+.. function:: get_close_matches(word, possibilities, n=3, cutoff=0.6)
 
    Return a list of the best "good enough" matches.  *word* is a sequence for which
    close matches are desired (typically a string), and *possibilities* is a list of
@@ -312,9 +293,6 @@ Diff generation
 
    Optional argument *cutoff* (default ``0.6``) is a float in the range [0, 1].
    Possibilities that don't score at least that similar to *word* are ignored.
-
-   Setting the optional *autojunk* argument to ``False`` will turn
-   :ref:`automatic junk heuristic <difflib-junk>` off.
 
    The best (no more than *n*) matches among the possibilities are returned in a
    list, sorted by similarity score, most similar first.
@@ -329,11 +307,8 @@ Diff generation
       >>> get_close_matches('accept', keyword.kwlist)
       ['except']
 
-   .. versionchanged:: 3.16
-      Added keyword-only *autojunk* parameter.
 
-
-.. function:: ndiff(a, b, linejunk=None, charjunk=IS_CHARACTER_JUNK, *, autojunk=True)
+.. function:: ndiff(a, b, linejunk=None, charjunk=IS_CHARACTER_JUNK)
 
    Compare *a* and *b* (lists of strings); return a :class:`Differ`\ -style
    delta (a :term:`generator` generating the delta lines).
@@ -354,11 +329,6 @@ Diff generation
    function :func:`IS_CHARACTER_JUNK`, which filters out whitespace characters (a
    blank or tab; it's a bad idea to include newline in this!).
 
-   Setting the optional *autojunk* argument to ``False`` will turn
-   :ref:`automatic junk heuristic <difflib-junk>` off.
-
-   Example:
-
       >>> diff = ndiff('one\ntwo\nthree\n'.splitlines(keepends=True),
       ...              'ore\ntree\nemu\n'.splitlines(keepends=True))
       >>> print(''.join(diff), end="")
@@ -371,9 +341,6 @@ Diff generation
       ?  -
       + tree
       + emu
-
-   .. versionchanged:: 3.16
-      Added keyword-only *autojunk* parameter.
 
 
 .. function:: restore(sequence, which)
@@ -399,7 +366,7 @@ Diff generation
       emu
 
 
-.. function:: unified_diff(a, b, fromfile='', tofile='', fromfiledate='', tofiledate='', n=3, lineterm='\n', *, autojunk=True, color=False)
+.. function:: unified_diff(a, b, fromfile='', tofile='', fromfiledate='', tofiledate='', n=3, lineterm='\n')
 
    Compare *a* and *b* (lists of strings); return a delta (a :term:`generator`
    generating the delta lines) in unified diff format.
@@ -417,10 +384,6 @@ Diff generation
 
    For inputs that do not have trailing newlines, set the *lineterm* argument to
    ``""`` so that the output will be uniformly newline free.
-
-   Set *color* to ``True`` to enable output in color, similar to
-   :program:`git diff --color`. Even if enabled, it can be
-   :ref:`controlled using environment variables <using-on-controlling-color>`.
 
    The unified diff format normally has a header for filenames and modification
    times.  Any or all of these may be specified using strings for *fromfile*,
@@ -443,16 +406,6 @@ Diff generation
        guido
 
    See :ref:`difflib-interface` for a more detailed example.
-
-   .. versionchanged:: 3.15
-      Added the *color* parameter.
-
-   Setting the optional *autojunk* argument to ``False`` will turn
-   :ref:`automatic junk heuristic <difflib-junk>` off.
-
-   .. versionchanged:: 3.16
-      Added keyword-only *autojunk* parameter.
-
 
 .. function:: diff_bytes(dfunc, a, b, fromfile=b'', tofile=b'', fromfiledate=b'', tofiledate=b'', n=3, lineterm=b'\n')
 
@@ -795,7 +748,7 @@ Finally, we compare the two:
 
    >>> result = list(d.compare(text1, text2))
 
-``result`` is a list of strings, so let's pretty-print it::
+``result`` is a list of strings, so let's pretty-print it:
 
    >>> from pprint import pprint
    >>> pprint(result)
@@ -810,7 +763,7 @@ Finally, we compare the two:
     '?           ++++ ^                      ^\n',
     '+   5. Flat is better than nested.\n']
 
-As a single multi-line string it looks like this::
+As a single multi-line string it looks like this:
 
    >>> import sys
    >>> sys.stdout.writelines(result)

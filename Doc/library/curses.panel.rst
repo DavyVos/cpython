@@ -4,6 +4,8 @@
 .. module:: curses.panel
    :synopsis: A panel stack extension that adds depth to  curses windows.
 
+.. sectionauthor:: A.M. Kuchling <amk@amk.ca>
+
 --------------
 
 Panels are windows with the added feature of depth, so they can be stacked on
@@ -116,8 +118,6 @@ Panel objects
 .. method:: panel.replace(win)
 
    Change the window associated with the panel to the window *win*.
-   Raise :exc:`curses.panel.error` if *win* has been detached from its
-   screen by :meth:`screen.close() <curses.screen.close>`.
 
 
 .. method:: panel.set_userptr(obj)

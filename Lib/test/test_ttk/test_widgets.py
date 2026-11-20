@@ -29,14 +29,20 @@ class StandardTtkOptionsTests(StandardOptionsTests):
 
     def test_configure_padding(self):
         widget = self.create()
-        self.checkParam(widget, 'padding', 0, expected=(0,))
-        self.checkParam(widget, 'padding', 5, expected=(5,))
+        if get_tk_patchlevel(self.root) < (8, 6, 14):
+            def padding_conv(value):
+                self.assertIsInstance(value, tuple)
+                return tuple(map(str, value))
+        else:
+            padding_conv = None
+        self.checkParam(widget, 'padding', 0, expected=(0,), conv=padding_conv)
+        self.checkParam(widget, 'padding', 5, expected=(5,), conv=padding_conv)
         self.checkParam(widget, 'padding', (5, 6),
-                        expected=(5, 6))
+                        expected=(5, 6), conv=padding_conv)
         self.checkParam(widget, 'padding', (5, 6, 7),
-                        expected=(5, 6, 7))
+                        expected=(5, 6, 7), conv=padding_conv)
         self.checkParam(widget, 'padding', (5, 6, 7, 8),
-                        expected=(5, 6, 7, 8))
+                        expected=(5, 6, 7, 8), conv=padding_conv)
         self.checkParam(widget, 'padding', ('5p', '6p', '7p', '8p'))
         self.checkParam(widget, 'padding', (), expected='')
 
@@ -311,7 +317,7 @@ class CheckbuttonTest(AbstractLabelTest, unittest.TestCase):
                 b = ttk.Checkbutton(f, text=j)
                 b.pack()
                 buttons.append(b)
-        variables = [b['variable'] for b in buttons]
+        variables = [str(b['variable']) for b in buttons]
         self.assertEqual(len(set(variables)), 4, variables)
 
     def test_unique_variables2(self):
@@ -332,7 +338,7 @@ class CheckbuttonTest(AbstractLabelTest, unittest.TestCase):
             buttons.append(b)
         names = [str(b) for b in buttons]
         self.assertEqual(len(set(names)), len(buttons), names)
-        variables = [b['variable'] for b in buttons]
+        variables = [str(b['variable']) for b in buttons]
         self.assertEqual(len(set(variables)), len(buttons), variables)
 
 
@@ -402,6 +408,7 @@ class EntryTest(AbstractWidgetTest, unittest.TestCase):
             self.skipTest('Test does not work on macOS Tk 9.')
             # https://core.tcl-lang.org/tk/tktview/8b49e9cfa6
         self.entry.pack()
+        self.root.update()
 
         # Identifying the element under a point requires the widget to be
         # mapped with a real size; the rest of the checks do not.
@@ -639,14 +646,14 @@ class PanedWindowTest(AbstractWidgetTest, unittest.TestCase):
 
     def test_configure_orient(self):
         widget = self.create()
-        self.assertEqual(widget['orient'], 'vertical')
+        self.assertEqual(str(widget['orient']), 'vertical')
         errmsg='attempt to change read-only option'
         if get_tk_patchlevel(self.root) < (8, 6, 0, 'beta', 3):
             errmsg='Attempt to change read-only option'
         self.checkInvalidParam(widget, 'orient', 'horizontal',
                 errmsg=errmsg)
         widget2 = self.create(orient='horizontal')
-        self.assertEqual(widget2['orient'], 'horizontal')
+        self.assertEqual(str(widget2['orient']), 'horizontal')
 
     def test_add(self):
         # attempt to add a child that is not a direct child of the paned window
@@ -811,7 +818,7 @@ class RadiobuttonTest(AbstractLabelTest, unittest.TestCase):
         self.assertEqual(myvar.get(),
             conv(cbtn.tk.globalgetvar(cbtn['variable'])))
 
-        self.assertEqual(cbtn['variable'], cbtn2['variable'])
+        self.assertEqual(str(cbtn['variable']), str(cbtn2['variable']))
 
 
 @add_configure_tests(StandardTtkOptionsTests)
@@ -1006,13 +1013,13 @@ class ProgressbarTest(AbstractWidgetTest, unittest.TestCase):
 
     def test_step(self):
         widget = self.create(maximum=100, mode='determinate')
-        self.assertEqual(widget['value'], self._str(0.0))
+        self.assertEqual(float(widget['value']), 0.0)
         widget.step()  # The default increment is 1.0.
-        self.assertEqual(widget['value'], self._str(1.0))
+        self.assertEqual(float(widget['value']), 1.0)
         widget.step(5)
-        self.assertEqual(widget['value'], self._str(6.0))
+        self.assertEqual(float(widget['value']), 6.0)
         widget.step(-2)
-        self.assertEqual(widget['value'], self._str(4.0))
+        self.assertEqual(float(widget['value']), 4.0)
 
     def test_start_stop(self):
         widget = self.create(maximum=100, mode='determinate')
@@ -1021,9 +1028,9 @@ class ProgressbarTest(AbstractWidgetTest, unittest.TestCase):
         widget.update()
         widget.stop()   # Cancel it.
         # After stopping, the value no longer changes.
-        value = widget['value']
+        value = float(widget['value'])
         widget.update()
-        self.assertEqual(widget['value'], value)
+        self.assertEqual(float(widget['value']), value)
 
 
 @unittest.skipIf(sys.platform == 'darwin',
@@ -1766,7 +1773,7 @@ class TreeviewTest(AbstractWidgetTest, unittest.TestCase):
         # The Treeitem.indicator element is packed at the left of the row in
         # the Item layout on every platform and theme.
         element = self.tv.identify_element(x + 8, y + h // 2)
-        self.assertRegex(element, r'.*indicator\z')
+        self.assertRegex(element, r'.*indicator\Z')
         # The empty string is returned outside the widget.
         self.assertEqual(self.tv.identify_element(-1, -1), '')
         self.assertRaises(tkinter.TclError, self.tv.identify_element, None, 5)
@@ -2154,264 +2161,6 @@ class TreeviewTest(AbstractWidgetTest, unittest.TestCase):
         self.assertEqual(self.tv.tag_has('tag1'), (item1,))
         self.assertEqual(self.tv.tag_has('tag2'), (item2,))
         self.assertEqual(self.tv.tag_has('tag3'), ())
-
-    def build_tree(self):
-        # a -> a1, a2 -> a2x; b
-        tv = self.tv
-        tv.insert('', 'end', 'a')
-        tv.insert('a', 'end', 'a1')
-        tv.insert('a', 'end', 'a2')
-        tv.insert('a2', 'end', 'a2x')
-        tv.insert('', 'end', 'b')
-        return tv
-
-    @requires_tk(9, 1)
-    def test_depth(self):
-        tv = self.build_tree()
-        self.assertEqual(tv.depth('a'), 1)
-        self.assertEqual(tv.depth('a2'), 2)
-        self.assertEqual(tv.depth('a2x'), 3)
-
-    @requires_tk(9, 1)
-    def test_haschildren(self):
-        tv = self.build_tree()
-        self.assertTrue(tv.haschildren('a'))
-        self.assertTrue(tv.haschildren('a2'))
-        self.assertFalse(tv.haschildren('a1'))
-        self.assertFalse(tv.haschildren('b'))
-
-    @requires_tk(9, 1)
-    def test_identifier(self):
-        tv = self.build_tree()
-        self.assertEqual(tv.identifier('a', 0), 'a1')
-        self.assertEqual(tv.identifier('a', 1), 'a2')
-        self.assertEqual(tv.identifier('', 0), 'a')
-        self.assertEqual(tv.identifier('', 1), 'b')
-
-    @requires_tk(9, 1)
-    def test_size(self):
-        tv = self.build_tree()
-        self.assertEqual(tv.size(''), 2)
-        self.assertEqual(tv.size('a'), 2)
-        self.assertEqual(tv.size('a', recurse=True), 3)
-        self.assertEqual(tv.size('b'), 0)
-        tv.hide('a1')
-        self.assertEqual(tv.size('a'), 1)
-        self.assertEqual(tv.size('a', hidden=True), 2)
-
-    @requires_tk(9, 1)
-    def test_range(self):
-        tv = self.build_tree()
-        tv.expand('a', recurse=True)
-        self.assertEqual(tv.range('a', 'b'), ('a', 'a1', 'a2', 'a2x', 'b'))
-        self.assertEqual(tv.range('a1', 'a2'), ('a1', 'a2'))
-        self.assertEqual(tv.range('a', 'a'), ('a',))
-        tv.hide('a1')
-        self.assertEqual(tv.range('a', 'b'), ('a', 'a2', 'a2x', 'b'))
-        self.assertEqual(tv.range('a', 'b', hidden=True),
-                         ('a', 'a1', 'a2', 'a2x', 'b'))
-
-    @requires_tk(9, 1)
-    def test_after_before_item(self):
-        tv = self.build_tree()
-        tv.expand('a', recurse=True)
-        self.assertEqual(tv.after_item('a'), 'a1')
-        self.assertEqual(tv.after_item('a1'), 'a2')
-        self.assertEqual(tv.after_item('a2x'), 'b')
-        self.assertEqual(tv.after_item('b'), '')
-        self.assertEqual(tv.before_item('b'), 'a2x')
-        self.assertEqual(tv.before_item('a1'), 'a')
-        self.assertEqual(tv.before_item('a'), '')
-        # With recurse=False the search stays at the sibling level.
-        self.assertEqual(tv.after_item('a', recurse=False), 'b')
-        self.assertEqual(tv.before_item('b', recurse=False), 'a')
-        # next/prev == after_item/before_item with hidden=True, recurse=False.
-        self.assertEqual(tv.after_item('a', hidden=True, recurse=False),
-                         tv.next('a'))
-        self.assertEqual(tv.before_item('b', hidden=True, recurse=False),
-                         tv.prev('b'))
-
-    def test_expand_collapse(self):
-        # Without recurse this works on all Tk versions (emulated before 9.1).
-        tv = self.build_tree()
-        tv.expand('a')
-        self.assertTrue(tv.item('a', 'open'))
-        self.assertFalse(tv.item('a2', 'open'))
-        tv.collapse('a')
-        self.assertFalse(tv.item('a', 'open'))
-        # Several items at once, as separate arguments or as a list.
-        tv.expand('a', 'a2')
-        self.assertTrue(tv.item('a', 'open'))
-        self.assertTrue(tv.item('a2', 'open'))
-        tv.collapse(['a', 'a2'])
-        self.assertFalse(tv.item('a', 'open'))
-        self.assertFalse(tv.item('a2', 'open'))
-
-    @requires_tk(9, 1)
-    def test_expand_collapse_recurse(self):
-        tv = self.build_tree()
-        tv.expand('a', recurse=True)
-        self.assertTrue(tv.item('a', 'open'))
-        self.assertTrue(tv.item('a2', 'open'))
-        tv.collapse('a', recurse=True)
-        self.assertFalse(tv.item('a', 'open'))
-        self.assertFalse(tv.item('a2', 'open'))
-
-    @requires_tk(9, 1)
-    def test_hide_unhide(self):
-        tv = self.build_tree()
-        tv.expand('a', recurse=True)
-        tv.hide('a1')
-        self.assertEqual(tv.range('a', 'b'), ('a', 'a2', 'a2x', 'b'))
-        tv.unhide('a1')
-        self.assertEqual(tv.range('a', 'b'), ('a', 'a1', 'a2', 'a2x', 'b'))
-        tv.hide('a1', 'a2')
-        self.assertEqual(tv.range('a', 'b'), ('a', 'b'))
-        tv.unhide(['a1', 'a2'])
-        self.assertEqual(tv.range('a', 'b'), ('a', 'a1', 'a2', 'a2x', 'b'))
-
-    @requires_tk(9, 1)
-    def test_visible(self):
-        tv = self.build_tree()
-        tv.pack()
-        self.addCleanup(tv.pack_forget)
-        self.root.update_idletasks()
-        self.assertTrue(tv.visible('a'))
-        self.assertFalse(tv.visible('a2x'))  # ancestors are closed
-        tv.expand('a', recurse=True)
-        self.root.update_idletasks()
-        self.assertTrue(tv.visible('a2x'))
-        tv.hide('a2')
-        self.root.update_idletasks()
-        self.assertFalse(tv.visible('a2x'))  # an ancestor is hidden
-
-    @requires_tk(9, 1)
-    def test_current(self):
-        tv = self.build_tree()
-        # No item is under the mouse pointer during the test.
-        self.assertEqual(tv.current(), ())
-
-    @requires_tk(9, 0)
-    def test_detached(self):
-        tv = self.build_tree()
-        self.assertEqual(tv.detached(), ())
-        self.assertFalse(tv.detached('a'))
-        tv.detach('a')
-        self.assertEqual(tv.detached(), ('a',))  # not the descendants
-        self.assertTrue(tv.detached('a'))
-        self.assertFalse(tv.detached('b'))
-        tv.move('a', '', 'end')  # reattach
-        self.assertEqual(tv.detached(), ())
-
-    @requires_tk(9, 1)
-    def test_detached_all(self):
-        # The -all form and the ancestor-aware item query require Tk 9.1.
-        tv = self.build_tree()
-        self.assertEqual(tv.detached_all(), ())
-        tv.detach('a')
-        self.assertEqual(set(tv.detached_all()),
-                         {'a', 'a1', 'a2', 'a2x'})  # with descendants
-        self.assertEqual(tv.detached(), ('a',))  # without descendants
-        self.assertTrue(tv.detached('a2x'))  # an ancestor is detached
-
-    @requires_tk(9, 1)
-    def test_cellfocus(self):
-        tv = self.create(columns=('x',))
-        tv.insert('', 'end', 'a', values=('1',))
-        self.assertEqual(tv.cellfocus(), ())
-        tv.cellfocus(('a', 'x'))
-        self.assertEqual(tv.cellfocus(), ('a', 'x'))
-        tv.cellfocus('')
-        self.assertEqual(tv.cellfocus(), ())
-
-    @requires_tk(9, 1)
-    def test_sort(self):
-        tv = self.create(columns=('x',))
-        for name, value in [('c', '3'), ('a', '1'), ('b', '2')]:
-            tv.insert('', 'end', name, values=(value,))
-        tv.sort('', column='x', integer=True)
-        self.assertEqual(tv.get_children(), ('a', 'b', 'c'))
-        tv.sort('', column='x', integer=True, decreasing=True)
-        self.assertEqual(tv.get_children(), ('c', 'b', 'a'))
-        tv.sort('', column='x', command=lambda p, q: (p > q) - (p < q))
-        self.assertEqual(tv.get_children(), ('a', 'b', 'c'))
-
-    @requires_tk(9, 1)
-    def test_search(self):
-        tv = self.create(columns=('x',))
-        for name, value in [('a', '1'), ('b', '2'), ('c', '2')]:
-            tv.insert('', 'end', name, values=(value,))
-        self.assertEqual(tv.search('', '2', columns=('x',)), 'b')
-        self.assertEqual(tv.search('', 'z', columns=('x',)), '')
-        self.assertEqual(tv.search('', '2', columns=('x',), backwards=True), 'c')
-        self.assertEqual(tv.search_all('', '2', columns=('x',)), ('b', 'c'))
-        self.assertEqual(tv.search_all('', '?', columns=('x',), glob=True),
-                         ('a', 'b', 'c'))
-
-    @requires_tk(9, 1)
-    def test_search_cell(self):
-        tv = self.create(columns=('x',))
-        for name, value in [('a', '1'), ('b', '2'), ('c', '2')]:
-            tv.insert('', 'end', name, values=(value,))
-        self.assertEqual(tv.search_cell('', '2', columns=('x',)), ('b', 'x'))
-        self.assertEqual(tv.search_cell('', 'z', columns=('x',)), ())
-        self.assertEqual(tv.search_all_cells('', '2', columns=('x',)),
-                         (('b', 'x'), ('c', 'x')))
-
-    @requires_tk(9, 1)
-    def test_cellselection(self):
-        tv = self.create(columns=('x', 'y'))
-        for name in 'ab':
-            tv.insert('', 'end', name, values=('1', '2'))
-        self.assertEqual(tv.cellselection(), ())
-        self.assertFalse(tv.cellselection_present())
-        tv.cellselection_set(('a', 'x'), ('b', 'y'))
-        self.assertEqual(set(tv.cellselection()), {('a', 'x'), ('b', 'y')})
-        self.assertTrue(tv.cellselection_present())
-        self.assertTrue(tv.cellselection_includes(('a', 'x')))
-        self.assertFalse(tv.cellselection_includes(('a', 'y')))
-        tv.cellselection_add(('a', 'y'))
-        tv.cellselection_remove(('b', 'y'))
-        self.assertEqual(set(tv.cellselection()), {('a', 'x'), ('a', 'y')})
-        # A single list of cells is also accepted.
-        tv.cellselection_set([('b', 'x'), ('b', 'y')])
-        self.assertEqual(set(tv.cellselection()), {('b', 'x'), ('b', 'y')})
-        tv.cellselection_set()  # clear
-        self.assertEqual(tv.cellselection(), ())
-        self.assertEqual(tv.cellselection_anchor(), ())
-        tv.cellselection_anchor(('a', 'x'))
-        self.assertEqual(tv.cellselection_anchor(), ('a', 'x'))
-        tv.cellselection_anchor('')
-        self.assertEqual(tv.cellselection_anchor(), ())
-
-    @requires_tk(9, 1)
-    def test_cellselection_range(self):
-        tv = self.create(columns=('x', 'y', 'z'))
-        for name in 'abc':
-            tv.insert('', 'end', name, values=('1', '2', '3'))
-        tv.cellselection_set_range(('a', 'x'), ('b', 'y'))
-        self.assertEqual(set(tv.cellselection()),
-                         {('a', 'x'), ('a', 'y'), ('b', 'x'), ('b', 'y')})
-        tv.cellselection_add_range(('c', 'z'), ('c', 'z'))
-        self.assertIn(('c', 'z'), tv.cellselection())
-        tv.cellselection_remove_range(('a', 'x'), ('b', 'x'))
-        self.assertEqual(set(tv.cellselection()),
-                         {('a', 'y'), ('b', 'y'), ('c', 'z')})
-
-    @requires_tk(9, 1)
-    def test_tag_cell(self):
-        tv = self.create(columns=('x', 'y'))
-        for name in 'ab':
-            tv.insert('', 'end', name, values=('1', '2'))
-        self.assertEqual(tv.tag_cell_has('hot'), ())
-        tv.tag_cell_add('hot', ('a', 'x'), ('b', 'y'))
-        self.assertTrue(tv.tag_cell_has('hot', ('a', 'x')))
-        self.assertFalse(tv.tag_cell_has('hot', ('a', 'y')))
-        self.assertEqual(set(tv.tag_cell_has('hot')), {('a', 'x'), ('b', 'y')})
-        tv.tag_cell_remove('hot', ('a', 'x'))
-        self.assertEqual(tv.tag_cell_has('hot'), (('b', 'y'),))
-        tv.tag_cell_remove('hot')  # from all cells
-        self.assertEqual(tv.tag_cell_has('hot'), ())
 
 
 @add_configure_tests(StandardTtkOptionsTests)

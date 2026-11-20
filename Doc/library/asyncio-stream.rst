@@ -171,8 +171,7 @@ and work with streams:
 .. function:: start_unix_server(client_connected_cb, path=None, \
                  *, limit=65536, sock=None, backlog=100, ssl=None, \
                  ssl_handshake_timeout=None, \
-                 ssl_shutdown_timeout=None, start_serving=True, \
-                 cleanup_socket=True, mode=None)
+                 ssl_shutdown_timeout=None, start_serving=True, cleanup_socket=True)
    :async:
 
    Start a Unix socket server.
@@ -182,9 +181,6 @@ and work with streams:
    If *cleanup_socket* is true then the Unix socket will automatically
    be removed from the filesystem when the server is closed, unless the
    socket has been replaced after the server has been created.
-
-   If *mode* is not ``None``, the permissions of the Unix socket file
-   are set to *mode* before the server starts accepting connections.
 
    See also the documentation of :meth:`loop.create_unix_server`.
 
@@ -208,9 +204,6 @@ and work with streams:
 
    .. versionchanged:: 3.13
       Added the *cleanup_socket* parameter.
-
-   .. versionchanged:: 3.16
-      Added the *mode* parameter.
 
 
 StreamReader
@@ -425,7 +418,7 @@ StreamWriter
       .. versionchanged:: 3.12
          Added the *ssl_shutdown_timeout* parameter.
 
-      .. versionchanged:: 3.16
+      .. versionchanged:: 3.13.16
          Raises a ``ValueError`` if ``sslcontext.check_hostname`` is ``True``
          and ``server_hostname`` is not supplied.
 

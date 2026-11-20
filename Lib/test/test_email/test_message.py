@@ -1030,30 +1030,6 @@ class TestEmailMessage(TestEmailMessageBase, TestEmailBase):
         parsed_body = parsed.get_body().get_content().rstrip('\n')
         self.assertEqual(parsed_body, body)
 
-    def test_invalid_header_names(self):
-        invalid_headers = [
-            ('Invalid Header', 'contains space'),
-            ('Tab\tHeader', 'contains tab'),
-            ('Colon:Header', 'contains colon'),
-            ('', 'Empty name'),
-            (' LeadingSpace', 'starts with space'),
-            ('TrailingSpace ', 'ends with space'),
-            ('Header\x7F', 'Non-ASCII character'),
-            ('Header\x80', 'Extended ASCII'),
-        ]
-        for email_policy in (policy.default, policy.compat32):
-            for setter in (EmailMessage.__setitem__, EmailMessage.add_header):
-                for name, value in invalid_headers:
-                    self.do_test_invalid_header_names(email_policy, setter, name, value)
-
-    def do_test_invalid_header_names(self, policy, setter, name, value):
-        with self.subTest(policy=policy, setter=setter, name=name, value=value):
-            message = EmailMessage(policy=policy)
-            pattern = r'(?i)(?=.*invalid)(?=.*header)(?=.*name)'
-            with self.assertRaisesRegex(ValueError, pattern) as cm:
-                 setter(message, name, value)
-            self.assertIn(f"{name!r}", str(cm.exception))
-
     def test_get_body_malformed(self):
         """test for bpo-42892"""
         msg = textwrap.dedent("""\
@@ -1080,25 +1056,6 @@ class TestEmailMessage(TestEmailMessageBase, TestEmailBase):
         # In bpo-42892, this would raise
         # AttributeError: 'str' object has no attribute 'is_attachment'
         m.get_body()
-
-    def test_get_body_malformed_nested_multipart(self):
-        # gh-159304: a nested multipart part without a boundary has a
-        # string payload, which get_body() must not iterate over.
-        msg = textwrap.dedent("""\
-            From: sender@example.com
-            To: receiver@example.com
-            Subject: Malformed
-            Content-Type: multipart/related; boundary=OUTER
-
-            --OUTER
-            Content-Type: multipart/related
-
-            raw body no boundary
-            --OUTER--
-            """)
-        m = self._str_msg(msg)
-        self.assertIsNone(m.get_body(('plain', 'html')))
-        self.assertIs(m.get_body(('related',)), m)
 
     def test_get_bytes_payload_with_quoted_printable_encoding(self):
         # We use a memoryview to avoid directly changing the private payload

@@ -264,10 +264,10 @@ def library_recipes():
             tk_patches = ['backport_gh71383_fix.patch', 'tk868_on_10_8_10_9.patch', 'backport_gh110950_fix.patch']
 
         else:
-            tcl_tk_ver='9.0.4'
-            tcl_checksum='d0aed49230bc02a65c1e0229e65f34590a4b037ec40d546f32573b467f7551ea'
+            tcl_tk_ver='8.6.18'
+            tcl_checksum='14f9af32b1767ff718477a8f974ad03c34341097e6b43f4ce54644ee974e268e'
 
-            tk_checksum='d7a146d2917eb8b5cc95276dbf0e3d03c7464d2b19c1675357857c989301dbb4'
+            tk_checksum='95cd528a80f5e4bdb557af9b14a7197d6860793a3894e25e7c9fad2ed05d4c3c'
             tk_patches = []
 
 
@@ -359,14 +359,13 @@ def library_recipes():
                   ),
           ),
           dict(
-              name="SQLite 3.53.4",
-              url="https://www.sqlite.org/2026/sqlite-autoconf-3530400.tar.gz",
-              checksum="0e9483900e92cd5de8fd48d16bf9200145a61f7fd5be542a5ac81d8a9516eb9c",
+              name="SQLite 3.50.4",
+              url="https://www.sqlite.org/2025/sqlite-autoconf-3500400.tar.gz",
+              checksum="a3db587a1b92ee5ddac2f66b3edb41b26f9c867275782d46c3a088977d6a5b18",
               extra_cflags=('-Os '
                             '-DSQLITE_ENABLE_FTS5 '
                             '-DSQLITE_ENABLE_FTS4 '
                             '-DSQLITE_ENABLE_FTS3_PARENTHESIS '
-                            '-DSQLITE_ENABLE_PERCENTILE '
                             '-DSQLITE_ENABLE_RTREE '
                             '-DSQLITE_OMIT_AUTOINIT '
                             '-DSQLITE_TCL=0 '
@@ -1159,6 +1158,7 @@ def buildPython():
     print(" NOTE: --with-mimalloc=no pending resolution of weak linking issues")
     runCommand("%s -C --enable-framework --enable-universalsdk=/ "
                "--with-mimalloc=no "
+               "--with-system-libmpdec "
                "--with-universal-archs=%s "
                "%s "
                "%s "
@@ -1402,10 +1402,7 @@ def patchFile(inPath, outPath):
     data = data.replace('$FULL_VERSION', getFullVersion())
     data = data.replace('$VERSION', getVersion())
     data = data.replace('$MACOSX_DEPLOYMENT_TARGET', ''.join((DEPTARGET, ' or later')))
-    archs = universal_opts_map[UNIVERSALARCHS]
-    data = data.replace('$ARCHITECTURES', ", ".join(archs))
-    data = data.replace('$ARCHITECTURE_NOUN',
-                        "architecture" if len(archs) == 1 else "architectures")
+    data = data.replace('$ARCHITECTURES', ", ".join(universal_opts_map[UNIVERSALARCHS]))
     data = data.replace('$INSTALL_SIZE', installSize())
     data = data.replace('$THIRD_PARTY_LIBS', "\\\n".join(THIRD_PARTY_LIBS))
 

@@ -94,7 +94,7 @@ class TestPkg(unittest.TestCase):
     def test_1(self):
         hier = [("t1", None), ("t1 __init__.py", "")]
         self.mkhier(hier)
-        import t1  # noqa: F401
+        import t1
 
     def test_2(self):
         hier = [
@@ -124,7 +124,7 @@ class TestPkg(unittest.TestCase):
 
         from t2 import sub
         from t2.sub import subsub
-        from t2.sub.subsub import spam  # noqa: F401
+        from t2.sub.subsub import spam
         self.assertEqual(sub.__name__, "t2.sub")
         self.assertEqual(subsub.__name__, "t2.sub.subsub")
         self.assertEqual(sub.subsub.__name__, "t2.sub.subsub")
@@ -198,15 +198,15 @@ class TestPkg(unittest.TestCase):
 
         import t5
         self.assertEqual(fixdir(dir(t5)),
-                         ['__doc__', '__file__', '__loader__', '__name__',
-                         '__package__', '__path__', '__spec__', 'foo',
-                         'string', 't5'])
+                         ['__cached__', '__doc__', '__file__', '__loader__',
+                          '__name__', '__package__', '__path__', '__spec__',
+                          'foo', 'string', 't5'])
         self.assertEqual(fixdir(dir(t5.foo)),
-                         ['__doc__', '__file__', '__loader__', '__name__',
-                         '__package__', '__spec__', 'string'])
+                         ['__cached__', '__doc__', '__file__', '__loader__',
+                          '__name__', '__package__', '__spec__', 'string'])
         self.assertEqual(fixdir(dir(t5.string)),
-                         ['__doc__', '__file__', '__loader__', '__name__',
-                         '__package__', '__spec__', 'spam'])
+                         ['__cached__', '__doc__', '__file__', '__loader__',
+                          '__name__', '__package__', '__spec__', 'spam'])
 
     def test_6(self):
         hier = [
@@ -221,13 +221,14 @@ class TestPkg(unittest.TestCase):
 
         import t6
         self.assertEqual(fixdir(dir(t6)),
-                         ['__all__', '__doc__', '__file__', '__loader__',
-                         '__name__', '__package__', '__path__', '__spec__'])
+                         ['__all__', '__cached__', '__doc__', '__file__',
+                          '__loader__', '__name__', '__package__', '__path__',
+                          '__spec__'])
         s = """
             import t6
             from t6 import *
             self.assertEqual(fixdir(dir(t6)),
-                             ['__all__', '__doc__', '__file__',
+                             ['__all__', '__cached__', '__doc__', '__file__',
                               '__loader__', '__name__', '__package__',
                               '__path__', '__spec__', 'eggs', 'ham', 'spam'])
             self.assertEqual(dir(), ['eggs', 'ham', 'self', 'spam', 't6'])
@@ -255,19 +256,20 @@ class TestPkg(unittest.TestCase):
         t7, sub, subsub = None, None, None
         import t7 as tas
         self.assertEqual(fixdir(dir(tas)),
-                         ['__doc__', '__file__', '__loader__', '__name__',
-                          '__package__', '__path__', '__spec__'])
+                         ['__cached__', '__doc__', '__file__', '__loader__',
+                          '__name__', '__package__', '__path__', '__spec__'])
         self.assertFalse(t7)
         from t7 import sub as subpar
         self.assertEqual(fixdir(dir(subpar)),
-                         ['__doc__', '__file__', '__loader__', '__name__',
-                          '__package__', '__path__', '__spec__'])
+                         ['__cached__', '__doc__', '__file__', '__loader__',
+                          '__name__', '__package__', '__path__', '__spec__'])
         self.assertFalse(t7)
         self.assertFalse(sub)
         from t7.sub import subsub as subsubsub
         self.assertEqual(fixdir(dir(subsubsub)),
-                         ['__doc__', '__file__', '__loader__', '__name__',
-                          '__package__', '__path__', '__spec__', 'spam'])
+                         ['__cached__', '__doc__', '__file__', '__loader__',
+                          '__name__', '__package__', '__path__', '__spec__',
+                          'spam'])
         self.assertFalse(t7)
         self.assertFalse(sub)
         self.assertFalse(subsub)

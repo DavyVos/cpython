@@ -4,6 +4,9 @@
 .. module:: xml.dom
    :synopsis: Document Object Model API for Python.
 
+.. sectionauthor:: Paul Prescod <paul@prescod.net>
+.. sectionauthor:: Martin v. Löwis <martin@v.loewis.de>
+
 **Source code:** :source:`Lib/xml/dom/__init__.py`
 
 --------------
@@ -69,7 +72,7 @@ implementations are free to support the strict mapping from IDL).  See section
 Module Contents
 ---------------
 
-The :mod:`!xml.dom` contains the following functions:
+The :mod:`xml.dom` contains the following functions:
 
 
 .. function:: registerDOMImplementation(name, factory)
@@ -126,7 +129,7 @@ Some convenience constants are also provided:
    HyperText Markup Language <https://www.w3.org/TR/xhtml1/>`_ (section 3.1.1).
 
 
-In addition, :mod:`!xml.dom` contains a base :class:`Node` class and the DOM
+In addition, :mod:`xml.dom` contains a base :class:`Node` class and the DOM
 exception classes.  The :class:`Node` class provided by this module does not
 implement any of the methods or attributes defined by the DOM specification;
 concrete DOM implementations must provide those.  The :class:`Node` class
@@ -228,8 +231,6 @@ DOM Level 2 added the ability to create new :class:`Document` and
    Return a new :class:`DocumentType` object that encapsulates the given
    *qualifiedName*, *publicId*, and *systemId* strings, representing the
    information contained in an XML document type declaration.
-
-   Raise :exc:`InvalidCharacterErr` if the name is not a valid XML name.
 
 
 .. _dom-node-objects:
@@ -456,10 +457,6 @@ for each node type are:
    children, returning *newChild*. If the node was already in
    the tree, it is removed first.
 
-   Raise :exc:`WrongDocumentErr` if *newChild* was created by another
-   document, and :exc:`HierarchyRequestErr` if it is this node itself or
-   its ancestor.
-
 
 .. method:: Node.insertBefore(newChild, refChild)
 
@@ -467,10 +464,6 @@ for each node type are:
    *refChild* is a child of this node; if not, :exc:`NotFoundErr` is raised.
    *newChild* is returned. If *refChild* is ``None``, it inserts *newChild* at the
    end of the children's list.
-
-   Raise :exc:`WrongDocumentErr` if *newChild* was created by another
-   document, and :exc:`HierarchyRequestErr` if it is this node itself or
-   its ancestor.
 
 
 .. method:: Node.removeChild(oldChild)
@@ -485,10 +478,6 @@ for each node type are:
 
    Replace an existing node with a new node. It must be the case that  *oldChild*
    is a child of this node; if not, :exc:`NotFoundErr` is raised.
-
-   Raise :exc:`WrongDocumentErr` if *newChild* was created by another
-   document, and :exc:`HierarchyRequestErr` if it is this node itself or
-   its ancestor.
 
 
 .. method:: Node.normalize()
@@ -515,7 +504,7 @@ NodeList Objects
 A :class:`NodeList` represents a sequence of nodes.  These objects are used in
 two ways in the DOM Core recommendation:  an :class:`Element` object provides
 one as its list of child nodes, and the :meth:`~Element.getElementsByTagName`
-and :meth:`~Element.getElementsByTagNameNS` methods of :class:`Element` return
+and :meth:`~Element.getElementsByTagNameNS` methods of :class:`Node` return
 objects with this interface to represent query results.
 
 :class:`NodeList` does *not* inherit from :class:`Node`.
@@ -676,8 +665,6 @@ inherits properties from :class:`Node`.
    document when it is created.  You need to explicitly insert it with one of the
    other methods such as :meth:`~Node.insertBefore` or :meth:`~Node.appendChild`.
 
-   Raise :exc:`InvalidCharacterErr` if the name is not a valid XML name.
-
 
 .. method:: Document.createElementNS(namespaceURI, tagName)
 
@@ -686,28 +673,12 @@ inherits properties from :class:`Node`.
    need to explicitly insert it with one of the other methods such as
    :meth:`~Node.insertBefore` or :meth:`~Node.appendChild`.
 
-   Raise :exc:`InvalidCharacterErr` if the name is not a valid XML name.
-   Raise :exc:`NamespaceErr` if the qualified name is malformed,
-   if it has a prefix and the namespace URI is empty,
-   or if the prefix is ``'xml'``
-   and the namespace URI is not the XML namespace.
-
 
 .. method:: Document.createTextNode(data)
 
    Create and return a text node containing the data passed as a parameter.  As
    with the other creation methods, this one does not insert the node into the
    tree.
-
-
-.. method:: Document.createEntityReference(name)
-
-   Create and return a new entity reference node.
-   The node is not inserted into the document when it is created.
-
-   Raise :exc:`InvalidCharacterErr` if the name is not a valid XML name.
-
-   .. versionadded:: 3.16
 
 
 .. method:: Document.createComment(data)
@@ -723,8 +694,6 @@ inherits properties from :class:`Node`.
    *data* passed as parameters.  As with the other creation methods, this one does
    not insert the node into the tree.
 
-   Raise :exc:`InvalidCharacterErr` if the name is not a valid XML name.
-
 
 .. method:: Document.createAttribute(name)
 
@@ -732,8 +701,6 @@ inherits properties from :class:`Node`.
    attribute node with any particular element.  You must use
    :meth:`~Element.setAttributeNode` on the appropriate :class:`Element` object
    to use the newly created attribute instance.
-
-   Raise :exc:`InvalidCharacterErr` if the name is not a valid XML name.
 
 
 .. method:: Document.createAttributeNS(namespaceURI, qualifiedName)
@@ -743,25 +710,12 @@ inherits properties from :class:`Node`.
    element.  You must use :meth:`~Element.setAttributeNode` on the appropriate
    :class:`Element` object to use the newly created attribute instance.
 
-   Raise :exc:`InvalidCharacterErr` if the name is not a valid XML name.
-   Raise :exc:`NamespaceErr` if the qualified name is malformed,
-   if it has a prefix and the namespace URI is empty,
-   if the prefix is ``'xml'`` and the namespace URI is not the XML namespace,
-   or if the name or the prefix is ``'xmlns'``
-   and the namespace URI is not the XMLNS namespace, or vice versa.
-
 
 .. method:: Document.getElementById(id)
 
    Return the element with the given ID, or ``None``.
    Only attributes declared as being of type ID in the DTD
    or by :meth:`Element.setIdAttribute` are searched.
-   If several elements have the same ID, the first one
-   in document order is returned.
-
-   .. versionchanged:: 3.16
-      Previously, which of the elements with the same ID was returned
-      was unspecified and could change between calls.
 
 
 .. method:: Document.getElementsByTagName(tagName)
@@ -890,8 +844,6 @@ of that class.
 
    Set an attribute value from a string.
 
-   Raise :exc:`InvalidCharacterErr` if the name is not a valid XML name.
-
 
 .. method:: Element.setAttributeNode(newAttr)
 
@@ -899,8 +851,6 @@ of that class.
    necessary if the :attr:`~Attr.name` attribute matches.  If a replacement
    occurs, the old attribute node will be returned.  If *newAttr* is already in use,
    :exc:`InuseAttributeErr` will be raised.
-
-   Raise :exc:`WrongDocumentErr` if *newAttr* was created by another document.
 
 
 .. method:: Element.setAttributeNodeNS(newAttr)
@@ -911,20 +861,11 @@ of that class.
    returned.  If *newAttr* is already in use, :exc:`InuseAttributeErr` will be
    raised.
 
-   Raise :exc:`WrongDocumentErr` if *newAttr* was created by another document.
-
 
 .. method:: Element.setAttributeNS(namespaceURI, qname, value)
 
    Set an attribute value from a string, given a *namespaceURI* and a *qname*.
    Note that a qname is the whole attribute name.  This is different than above.
-
-   Raise :exc:`InvalidCharacterErr` if the name is not a valid XML name.
-   Raise :exc:`NamespaceErr` if the qualified name is malformed,
-   if it has a prefix and the namespace URI is empty,
-   if the prefix is ``'xml'`` and the namespace URI is not the XML namespace,
-   or if the name or the prefix is ``'xmlns'``
-   and the namespace URI is not the XMLNS namespace, or vice versa.
 
 
 .. _dom-attr-objects:
@@ -1031,18 +972,12 @@ NamedNodeMap Objects
    Add *node* to the map, using its :attr:`~Attr.name` as the key.
    Return the node which it replaces, or ``None`` if it replaces no node.
 
-   Raise :exc:`WrongDocumentErr` if *node* was created by another document,
-   and :exc:`InuseAttributeErr` if it belongs to another element.
-
 
 .. method:: NamedNodeMap.setNamedItemNS(node)
 
    Add *node* to the map,
    using its namespace URI and local name as the key.
    Return the node which it replaces, or ``None`` if it replaces no node.
-
-   Raise :exc:`WrongDocumentErr` if *node* was created by another document,
-   and :exc:`InuseAttributeErr` if it belongs to another element.
 
 
 .. method:: NamedNodeMap.removeNamedItem(name)
@@ -1289,23 +1224,6 @@ The name of the notation is its :attr:`~Node.nodeName`.
    The system identifier of the notation,
    or ``None`` if it is not specified.
    This is a read-only attribute.
-.. _dom-entityreference-objects:
-
-EntityReference Objects
-^^^^^^^^^^^^^^^^^^^^^^^
-
-.. class:: EntityReference
-   :no-typesetting:
-
-:class:`EntityReference` represents an entity reference in the XML document.
-It is a subclass of :class:`Node`.
-The name of the referenced entity is its :attr:`~Node.nodeName`.
-Its children are the replacement text of the entity, and are read-only.
-
-Parsers may expand entity references,
-so such a node only occurs in a document if it was created explicitly.
-
-.. versionadded:: 3.16
 
 
 .. _dom-exceptions:

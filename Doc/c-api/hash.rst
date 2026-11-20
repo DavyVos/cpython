@@ -32,19 +32,13 @@ See also the :c:member:`PyTypeObject.tp_hash` member and :ref:`numeric-hash`.
 .. c:macro:: Py_HASH_FNV
              Py_HASH_SIPHASH24
              Py_HASH_SIPHASH13
-             Py_HASH_EXTERNAL
 
    Numerical values to compare to :c:macro:`Py_HASH_ALGORITHM` to determine
-   which algorithm is used for hashing. The built-in hash algorithm can be
-   configured via the configure :option:`--with-hash-algorithm` option.
-
-   :c:macro:`!Py_HASH_EXTERNAL` has value ``0`` and indicates a hash
-   implementation supplied by the application embedding Python; see
-   :c:var:`PyHash_Func`.
+   which algorithm is used for hashing. The hash algorithm can be configured
+   via the configure :option:`--with-hash-algorithm` option.
 
    .. versionadded:: 3.4
-      Add :c:macro:`!Py_HASH_FNV`, :c:macro:`!Py_HASH_SIPHASH24`, and
-      :c:macro:`!Py_HASH_EXTERNAL`.
+      Add :c:macro:`!Py_HASH_FNV` and :c:macro:`!Py_HASH_SIPHASH24`.
 
    .. versionadded:: 3.11
       Add :c:macro:`!Py_HASH_SIPHASH13`.
@@ -138,19 +132,6 @@ See also the :c:member:`PyTypeObject.tp_hash` member and :ref:`numeric-hash`.
    .. versionadded:: 3.4
 
 
-.. c:var:: PyHash_FuncDef PyHash_Func
-
-   When Python is built with :c:macro:`Py_HASH_ALGORITHM` set to
-   :c:macro:`Py_HASH_EXTERNAL`, the application embedding Python must define
-   this variable to supply a hash implementation instead of using one of
-   Python's built-in hash algorithms.
-
-   .. versionadded:: 3.4
-
-   .. deprecated-removed:: 3.15 3.19
-      Use one of the built-in hash algorithms instead.
-
-
 .. c:function:: PyHash_FuncDef* PyHash_GetFuncDef(void)
 
    Get the hash function definition.
@@ -169,25 +150,6 @@ See also the :c:member:`PyTypeObject.tp_hash` member and :ref:`numeric-hash`.
    The function cannot fail: it cannot return ``-1``.
 
    .. versionadded:: 3.13
-
-
-.. c:function:: Py_hash_t Py_HashBuffer(const void *ptr, Py_ssize_t len)
-
-   Compute and return the hash value of a buffer of *len* bytes
-   starting at address *ptr*. The hash is guaranteed to match that of
-   :class:`bytes`, :class:`memoryview`, and other built-in objects
-   that implement the :ref:`buffer protocol <bufferobjects>`.
-
-   Use this function to implement hashing for immutable objects whose
-   :c:member:`~PyTypeObject.tp_richcompare` function compares to another
-   object's buffer.
-
-   *len* must be greater than or equal to ``0``.
-
-   This function always succeeds.
-
-   .. versionadded:: 3.14
-
 
 .. c:function:: Py_hash_t PyObject_GenericHash(PyObject *obj)
 

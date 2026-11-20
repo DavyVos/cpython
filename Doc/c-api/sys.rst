@@ -138,7 +138,7 @@ Operating System Utilities
    signal handlers.
 
    This function is async-signal-safe and this function cannot fail.
-   The caller must hold an :term:`attached thread state`.
+   The caller must hold an attached thread state.
 
 
 .. c:function:: wchar_t* Py_DecodeLocale(const char* arg, size_t *size)
@@ -152,28 +152,27 @@ Operating System Utilities
       <c-preinit>` and so that the LC_CTYPE locale is properly configured: see
       the :c:func:`Py_PreInitialize` function.
 
-   Decode a byte string from the :term:`filesystem encoding <filesystem
-   encoding and error handler>` with the :ref:`surrogateescape error handler
-   <surrogateescape>`.
-
-   Undecodable bytes are decoded as characters in range U+DC80..U+DCFF. If a
-   byte sequence can be decoded as a surrogate character, escape the bytes
-   using the surrogateescape error handler instead of decoding them.
+   Decode a byte string from the :term:`filesystem encoding and error handler`.
+   If the error handler is :ref:`surrogateescape error handler
+   <surrogateescape>`, undecodable bytes are decoded as characters in range
+   U+DC80..U+DCFF; and if a byte sequence can be decoded as a surrogate
+   character, the bytes are escaped using the surrogateescape error handler
+   instead of decoding them.
 
    Return a pointer to a newly allocated wide character string, use
    :c:func:`PyMem_RawFree` to free the memory. If size is not ``NULL``, write
    the number of wide characters excluding the null character into ``*size``
 
-   On memory allocation failure, set *\*size* to ``(size_t)-1`` and return
-   ``NULL``.
-
-   On decode error, set *\*size* to ``(size_t)-2`` and return ``NULL``.
-   Decoding errors should never happen, unless there is a bug in the C
-   library.
+   Return ``NULL`` on decoding error or memory allocation error. If *size* is
+   not ``NULL``, ``*size`` is set to ``(size_t)-1`` on memory error or set to
+   ``(size_t)-2`` on decoding error.
 
    The :term:`filesystem encoding and error handler` are selected by
    :c:func:`PyConfig_Read`: see :c:member:`~PyConfig.filesystem_encoding` and
    :c:member:`~PyConfig.filesystem_errors` members of :c:type:`PyConfig`.
+
+   Decoding errors should never happen, unless there is a bug in the C
+   library.
 
    Use the :c:func:`Py_EncodeLocale` function to encode the character string
    back to a byte string.
@@ -196,19 +195,17 @@ Operating System Utilities
 
 .. c:function:: char* Py_EncodeLocale(const wchar_t *text, size_t *error_pos)
 
-   Encode a wide character string to the :term:`filesystem encoding <filesystem
-   encoding and error handler>` with the :ref:`surrogateescape error handler
-   <surrogateescape>`. Surrogate characters in the range U+DC80..U+DCFF are
-   encoded to bytes 0x80..0xFF.
+   Encode a wide character string to the :term:`filesystem encoding and error
+   handler`. If the error handler is :ref:`surrogateescape error handler
+   <surrogateescape>`, surrogate characters in the range U+DC80..U+DCFF are
+   converted to bytes 0x80..0xFF.
 
    Return a pointer to a newly allocated byte string, use :c:func:`PyMem_Free`
-   to free the memory.
+   to free the memory. Return ``NULL`` on encoding error or memory allocation
+   error.
 
-   On memory allocation failure, set *\*error_pos* to ``(size_t)-1`` and return
-   ``NULL``.
-
-   On encoding error, set *\*error_pos* to the index of the first unencodable
-   character and return ``NULL``.
+   If error_pos is not ``NULL``, ``*error_pos`` is set to ``(size_t)-1`` on
+   success,  or set to the index of the invalid character on encoding error.
 
    The :term:`filesystem encoding and error handler` are selected by
    :c:func:`PyConfig_Read`: see :c:member:`~PyConfig.filesystem_encoding` and
@@ -237,38 +234,6 @@ Operating System Utilities
       The function now uses the UTF-8 encoding on Windows if
       :c:member:`PyPreConfig.legacy_windows_fs_encoding` is zero.
 
-.. c:function:: FILE* Py_fopen(PyObject *path, const char *mode)
-
-   Similar to :c:func:`!fopen`, but *path* is a Python object and
-   an exception is set on error.
-
-   *path* must be a :class:`str` object, a :class:`bytes` object,
-   or a :term:`path-like object`.
-
-   On success, return the new file pointer.
-   On error, set an exception and return ``NULL``.
-
-   The file must be closed by :c:func:`Py_fclose` rather than calling directly
-   :c:func:`!fclose`.
-
-   The file descriptor is created non-inheritable (:pep:`446`).
-
-   The caller must have an :term:`attached thread state`.
-
-   .. versionadded:: 3.14
-
-
-.. c:function:: int Py_fclose(FILE *file)
-
-   Close a file that was opened by :c:func:`Py_fopen`.
-
-   On success, return ``0``.
-   On error, return ``EOF`` and ``errno`` is set to indicate the error.
-   In either case, any further access (including another call to
-   :c:func:`Py_fclose`) to the stream results in undefined behavior.
-
-   .. versionadded:: 3.14
-
 
 .. _systemfunctions:
 
@@ -279,63 +244,24 @@ These are utility functions that make functionality from the :mod:`sys` module
 accessible to C code.  They all work with the current interpreter thread's
 :mod:`sys` module's dict, which is contained in the internal thread state structure.
 
-.. c:function:: PyObject *PySys_GetAttr(PyObject *name)
-
-   Get the attribute *name* of the :mod:`sys` module.
-   Return a :term:`strong reference`.
-   Raise :exc:`RuntimeError` and return ``NULL`` if it does not exist or
-   if the :mod:`sys` module cannot be found.
-
-   If the non-existing object should not be treated as a failure, you can use
-   :c:func:`PySys_GetOptionalAttr` instead.
-
-   .. versionadded:: 3.15
-
-.. c:function:: PyObject *PySys_GetAttrString(const char *name)
-
-   This is the same as :c:func:`PySys_GetAttr`, but *name* is
-   specified as a :c:expr:`const char*` UTF-8 encoded bytes string,
-   rather than a :c:expr:`PyObject*`.
-
-   If the non-existing object should not be treated as a failure, you can use
-   :c:func:`PySys_GetOptionalAttrString` instead.
-
-   .. versionadded:: 3.15
-
-.. c:function:: int PySys_GetOptionalAttr(PyObject *name, PyObject **result)
-
-   Variant of :c:func:`PySys_GetAttr` which doesn't raise
-   exception if the object does not exist.
-
-   * Set *\*result* to a new :term:`strong reference` to the object and
-     return ``1`` if the object exists.
-   * Set *\*result* to ``NULL`` and return ``0`` without setting an exception
-     if the object does not exist.
-   * Set an exception, set *\*result* to ``NULL``, and return ``-1``,
-     if an error occurred.
-
-   .. versionadded:: 3.15
-
-.. c:function:: int PySys_GetOptionalAttrString(const char *name, PyObject **result)
-
-   This is the same as :c:func:`PySys_GetOptionalAttr`, but *name* is
-   specified as a :c:expr:`const char*` UTF-8 encoded bytes string,
-   rather than a :c:expr:`PyObject*`.
-
-   .. versionadded:: 3.15
-
 .. c:function:: PyObject *PySys_GetObject(const char *name)
 
-   Similar to :c:func:`PySys_GetAttrString`, but return a :term:`borrowed
-   reference` and return ``NULL`` *without* setting exception on failure.
-
-   Preserves exception that was set before the call.
+   Return the object *name* from the :mod:`sys` module or ``NULL`` if it does
+   not exist, without setting an exception.
 
 .. c:function:: int PySys_SetObject(const char *name, PyObject *v)
 
    Set *name* in the :mod:`sys` module to *v* unless *v* is ``NULL``, in which
    case *name* is deleted from the sys module. Returns ``0`` on success, ``-1``
    on error.
+
+.. c:function:: void PySys_ResetWarnOptions()
+
+   Reset :data:`sys.warnoptions` to an empty list. This function may be
+   called prior to :c:func:`Py_Initialize`.
+
+   .. deprecated-removed:: 3.13 3.15
+      Clear :data:`sys.warnoptions` and :data:`!warnings.filters` instead.
 
 .. c:function:: void PySys_WriteStdout(const char *format, ...)
 
@@ -436,10 +362,10 @@ accessible to C code.  They all work with the current interpreter thread's
    This function is safe to call before :c:func:`Py_Initialize`. When called
    after runtime initialization, existing audit hooks are notified and may
    silently abort the operation by raising an error subclassed from
-   :class:`RuntimeError` (other errors will not be silenced).
+   :class:`Exception` (other errors will not be silenced).
 
-   The hook function is always called with an :term:`attached thread state` by
-   the Python interpreter that raised the event.
+   The hook function is always called with the GIL held by the Python
+   interpreter that raised the event.
 
    See :pep:`578` for a detailed description of auditing.  Functions in the
    runtime and standard library that raise events are listed in the
@@ -450,7 +376,7 @@ accessible to C code.  They all work with the current interpreter thread's
 
       If the interpreter is initialized, this function raises an auditing event
       ``sys.addaudithook`` with no arguments. If any existing hooks raise an
-      exception derived from :class:`RuntimeError`, the new hook will not be
+      exception derived from :class:`Exception`, the new hook will not be
       added and the exception is cleared. As a result, callers cannot assume
       that their hook has been added unless they control all existing hooks.
 
@@ -464,11 +390,6 @@ accessible to C code.  They all work with the current interpreter thread's
       *userData* is the argument passed to PySys_AddAuditHook().
 
    .. versionadded:: 3.8
-
-   .. versionchanged:: 3.8.1
-
-      Exceptions derived from :class:`Exception` but not :class:`RuntimeError`
-      are no longer suppressed.
 
 
 .. _processcontrol:

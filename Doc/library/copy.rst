@@ -84,7 +84,7 @@ returns an instance of the same type.
 
 Classes can use the same interfaces to control copying that they use to control
 pickling.  See the description of module :mod:`pickle` for information on these
-methods.  In fact, the :mod:`!copy` module uses the registered
+methods.  In fact, the :mod:`copy` module uses the registered
 pickle functions from the :mod:`copyreg` module.
 
 .. index::

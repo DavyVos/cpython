@@ -4,13 +4,7 @@ code that adds all the email6 features.
 
 import re
 import sys
-from email._policybase import (
-    Compat32,
-    Policy,
-    _extend_docstrings,
-    compat32,
-    validate_header_name
-)
+from email._policybase import Policy, Compat32, compat32, _extend_docstrings
 from email.utils import _has_surrogates
 from email.headerregistry import HeaderRegistry as HeaderRegistry
 from email.contentmanager import raw_data_manager
@@ -144,7 +138,6 @@ class EmailPolicy(Policy):
         CR or LF characters.
 
         """
-        validate_header_name(name)
         if hasattr(value, 'name') and value.name.lower() == name.lower():
             return (name, value)
         if isinstance(value, str) and len(value.splitlines())>1:
@@ -197,7 +190,7 @@ class EmailPolicy(Policy):
 
         If cte_type is 8bit, non-ASCII binary data is converted back into
         bytes.  Headers with binary data are not refolded, regardless of the
-        refold_source setting, since there is no way to know whether the binary
+        refold_header setting, since there is no way to know whether the binary
         data consists of single byte characters or multibyte characters.
 
         If utf8 is true, headers are encoded to utf8, otherwise to ascii with

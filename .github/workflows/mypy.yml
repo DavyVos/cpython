@@ -13,19 +13,15 @@ on:
       - "Lib/test/libregrtest/**"
       - "Lib/tomllib/**"
       - "Misc/mypy/**"
+      - "Tools/build/mypy.ini"
       - "Tools/build/check_extension_modules.py"
-      - "Tools/build/check_warnings.py"
       - "Tools/build/compute-changes.py"
-      - "Tools/build/consts_getter.py"
       - "Tools/build/deepfreeze.py"
-      - "Tools/build/generate-build-details.py"
-      - "Tools/build/generate_levenshtein_examples.py"
       - "Tools/build/generate_sbom.py"
       - "Tools/build/generate_stdlib_module_names.py"
-      - "Tools/build/mypy.ini"
-      - "Tools/build/umarshal.py"
-      - "Tools/build/update_file.py"
       - "Tools/build/verify_ensurepip_wheels.py"
+      - "Tools/build/update_file.py"
+      - "Tools/build/umarshal.py"
       - "Tools/cases_generator/**"
       - "Tools/check-c-api-docs/**"
       - "Tools/clinic/**"
@@ -71,7 +67,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@v10.2.0
         with:
-          python-version: "3.15"
+          python-version: "3.13"
           activate-environment: true
           cache-dependency-glob: Tools/requirements-dev.txt
       - run: uv pip install -r Tools/requirements-dev.txt

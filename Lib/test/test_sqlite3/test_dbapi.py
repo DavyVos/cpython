@@ -31,7 +31,6 @@ import unittest
 import urllib.parse
 import warnings
 
-from test import support
 from test.support import (
     SHORT_TIMEOUT, check_disallow_instantiation, requires_subprocess
 )
@@ -49,6 +48,17 @@ class ModuleTests(unittest.TestCase):
         self.assertEqual(sqlite.apilevel, "2.0",
                          "apilevel is %s, should be 2.0" % sqlite.apilevel)
 
+    def test_deprecated_version(self):
+        msg = "deprecated and will be removed in Python 3.14"
+        for attr in "version", "version_info":
+            with self.subTest(attr=attr):
+                with self.assertWarnsRegex(DeprecationWarning, msg) as cm:
+                    getattr(sqlite, attr)
+                self.assertEqual(cm.filename,  __file__)
+                with self.assertWarnsRegex(DeprecationWarning, msg) as cm:
+                    getattr(sqlite.dbapi2, attr)
+                self.assertEqual(cm.filename,  __file__)
+
     def test_thread_safety(self):
         self.assertIn(sqlite.threadsafety, {0, 1, 3},
                       "threadsafety is %d, should be 0, 1 or 3" %
@@ -60,61 +70,45 @@ class ModuleTests(unittest.TestCase):
                          sqlite.paramstyle)
 
     def test_warning(self):
-        self.assertIsSubclass(sqlite.Warning, Exception)
+        self.assertTrue(issubclass(sqlite.Warning, Exception),
+                     "Warning is not a subclass of Exception")
 
     def test_error(self):
-        self.assertIsSubclass(sqlite.Error, Exception)
+        self.assertTrue(issubclass(sqlite.Error, Exception),
+                        "Error is not a subclass of Exception")
 
     def test_interface_error(self):
-        self.assertIsSubclass(sqlite.InterfaceError, sqlite.Error)
+        self.assertTrue(issubclass(sqlite.InterfaceError, sqlite.Error),
+                        "InterfaceError is not a subclass of Error")
 
     def test_database_error(self):
-        self.assertIsSubclass(sqlite.DatabaseError, sqlite.Error)
+        self.assertTrue(issubclass(sqlite.DatabaseError, sqlite.Error),
+                        "DatabaseError is not a subclass of Error")
 
     def test_data_error(self):
-        self.assertIsSubclass(sqlite.DataError, sqlite.DatabaseError)
+        self.assertTrue(issubclass(sqlite.DataError, sqlite.DatabaseError),
+                        "DataError is not a subclass of DatabaseError")
 
     def test_operational_error(self):
-        self.assertIsSubclass(sqlite.OperationalError, sqlite.DatabaseError)
+        self.assertTrue(issubclass(sqlite.OperationalError, sqlite.DatabaseError),
+                        "OperationalError is not a subclass of DatabaseError")
 
     def test_integrity_error(self):
-        self.assertIsSubclass(sqlite.IntegrityError, sqlite.DatabaseError)
+        self.assertTrue(issubclass(sqlite.IntegrityError, sqlite.DatabaseError),
+                        "IntegrityError is not a subclass of DatabaseError")
 
     def test_internal_error(self):
-        self.assertIsSubclass(sqlite.InternalError, sqlite.DatabaseError)
+        self.assertTrue(issubclass(sqlite.InternalError, sqlite.DatabaseError),
+                        "InternalError is not a subclass of DatabaseError")
 
     def test_programming_error(self):
-        self.assertIsSubclass(sqlite.ProgrammingError, sqlite.DatabaseError)
+        self.assertTrue(issubclass(sqlite.ProgrammingError, sqlite.DatabaseError),
+                        "ProgrammingError is not a subclass of DatabaseError")
 
     def test_not_supported_error(self):
-        self.assertIsSubclass(sqlite.NotSupportedError, sqlite.DatabaseError)
-
-    def _test_sqlite_version(self, v, string):
-        self.assertIsInstance(v[:], tuple)
-        self.assertEqual(len(v), 3)
-        self.assertIsInstance(v[0], int)
-        self.assertIsInstance(v[1], int)
-        self.assertIsInstance(v[2], int)
-        self.assertIsInstance(v.major, int)
-        self.assertIsInstance(v.minor, int)
-        self.assertIsInstance(v.patch, int)
-        self.assertEqual(v[0], v.major)
-        self.assertEqual(v[1], v.minor)
-        self.assertEqual(v[2], v.patch)
-        self.assertGreaterEqual(v.major, 3)
-        self.assertGreaterEqual(v.minor, 0)
-        self.assertGreaterEqual(v.patch, 0)
-        self.assertEqual(string, '%d.%d.%d' % v)
-
-    def test_sqlite_version(self):
-        if support.verbose:
-            print(f'SQLITE_VERSION = {sqlite.SQLITE_VERSION}', flush=True)
-            print(f'sqlite_version = {sqlite.sqlite_version}', flush=True)
-            print(f'SQLITE_VERSION_INFO = {sqlite.SQLITE_VERSION_INFO}', flush=True)
-            print(f'sqlite_version_info = {sqlite.sqlite_version_info}', flush=True)
-        self._test_sqlite_version(sqlite.SQLITE_VERSION_INFO, sqlite.SQLITE_VERSION)
-        self._test_sqlite_version(sqlite.sqlite_version_info, sqlite.sqlite_version)
-        self.assertEqual(sqlite.SQLITE_VERSION_INFO[0], sqlite.sqlite_version_info[0])
+        self.assertTrue(issubclass(sqlite.NotSupportedError,
+                                   sqlite.DatabaseError),
+                        "NotSupportedError is not a subclass of DatabaseError")
 
     def test_module_constants(self):
         consts = [
@@ -291,7 +285,7 @@ class ModuleTests(unittest.TestCase):
             consts.append("SQLITE_IOERR_CORRUPTFS")
         for const in consts:
             with self.subTest(const=const):
-                self.assertHasAttr(sqlite, const)
+                self.assertTrue(hasattr(sqlite, const))
 
     def test_error_code_on_exception(self):
         err_msg = "unable to open database file"
@@ -305,7 +299,7 @@ class ModuleTests(unittest.TestCase):
                 sqlite.connect(db)
             e = cm.exception
             self.assertEqual(e.sqlite_errorcode, err_code)
-            self.assertStartsWith(e.sqlite_errorname, "SQLITE_CANTOPEN")
+            self.assertTrue(e.sqlite_errorname.startswith("SQLITE_CANTOPEN"))
 
     def test_extended_error_code_on_exception(self):
         with memory_database() as con:
@@ -442,7 +436,7 @@ class ConnectionTests(unittest.TestCase):
         ]
         for exc in exceptions:
             with self.subTest(exc=exc):
-                self.assertHasAttr(self.cx, exc)
+                self.assertTrue(hasattr(self.cx, exc))
                 self.assertIs(getattr(sqlite, exc), getattr(self.cx, exc))
 
     def test_interrupt_on_closed_db(self):
@@ -585,9 +579,17 @@ class ConnectionTests(unittest.TestCase):
                 cx.execute("insert into u values(0)")
 
     def test_connect_positional_arguments(self):
-        with self.assertRaisesRegex(TypeError,
-                r'connect\(\) takes at most 1 positional arguments'):
-            sqlite.connect(":memory:", 1.0)
+        regex = (
+            r"Passing more than 1 positional argument to sqlite3.connect\(\)"
+            " is deprecated. Parameters 'timeout', 'detect_types', "
+            "'isolation_level', 'check_same_thread', 'factory', "
+            "'cached_statements' and 'uri' will become keyword-only "
+            "parameters in Python 3.15."
+        )
+        with self.assertWarnsRegex(DeprecationWarning, regex) as cm:
+            cx = sqlite.connect(":memory:", 1.0)
+            cx.close()
+        self.assertEqual(cm.filename, __file__)
 
     def test_connection_resource_warning(self):
         with self.assertWarns(ResourceWarning):
@@ -905,8 +907,9 @@ class CursorTests(unittest.TestCase):
         msg = "Binding.*is a named parameter"
         for query, params in dataset:
             with self.subTest(query=query, params=params):
-                with self.assertRaisesRegex(sqlite.ProgrammingError, msg) as cm:
+                with self.assertWarnsRegex(DeprecationWarning, msg) as cm:
                     self.cu.execute(query, params)
+                self.assertEqual(cm.filename,  __file__)
 
     def test_execute_indexed_nameless_params(self):
         # See gh-117995: "'?1' is considered a named placeholder"
@@ -1432,34 +1435,9 @@ class BlobTests(unittest.TestCase):
     def test_blob_get_slice_with_skip(self):
         self.assertEqual(self.blob[0:10:2], b"ti lb")
 
-    def test_blob_get_slice_with_negative_step(self):
-        # gh-150449: negative-step slices must not crash
-        self.assertEqual(self.blob[9:0:-2], self.data[9:0:-2])
-        self.assertEqual(self.blob[9::-2], self.data[9::-2])
-        self.assertEqual(self.blob[::-1], self.data[::-1])
-        # When start <= stop with a negative step the slice is empty; this
-        # must return b"" rather than crashing or raising an exception.
-        self.assertEqual(self.blob[3:8:-1], self.data[3:8:-1])   # b""
-        self.assertEqual(self.blob[5:5:-1], self.data[5:5:-1])   # b""
-        # Extreme step values: cur += (size_t)step must not overflow.
-        self.assertEqual(self.blob[5::sys.maxsize], self.data[5::sys.maxsize])
-        self.assertEqual(self.blob[::-sys.maxsize - 1], self.data[::-sys.maxsize - 1])
-
     def test_blob_set_slice(self):
         self.blob[0:5] = b"12345"
         expected = b"12345" + self.data[5:]
-        actual = self.cx.execute("select b from test").fetchone()[0]
-        self.assertEqual(actual, expected)
-
-    def test_blob_set_slice_with_step_keeps_bytes_intact(self):
-        # The buffer used for the read-patch-write cycle must not be the
-        # bytes object read from the blob: for a single byte it is an
-        # immortal singleton.
-        old_byte = self.data[5]
-        self.blob[5:6:2] = b"\xab"
-        self.assertEqual(bytes([old_byte])[0], old_byte)
-        self.assertEqual(self.blob[5:6], b"\xab")
-        expected = self.data[:5] + b"\xab" + self.data[6:]
         actual = self.cx.execute("select b from test").fetchone()[0]
         self.assertEqual(actual, expected)
 
@@ -1484,43 +1462,6 @@ class BlobTests(unittest.TestCase):
         actual = self.cx.execute("select b from test").fetchone()[0]
         expected = b"1h2s3b4o5 " + self.data[10:]
         self.assertEqual(actual, expected)
-
-    def test_blob_set_slice_with_negative_step(self):
-        # gh-150449: negative-step slice assignment must not crash
-        expected = bytearray(self.data)
-        expected[9:0:-2] = b"12345"
-        self.blob[9:0:-2] = b"12345"
-        actual = self.cx.execute("select b from test").fetchone()[0]
-        self.assertEqual(actual, bytes(expected))
-
-        # Also verify a slice that includes index 0
-        expected2 = bytearray(self.data)
-        expected2[9::-2] = b"12345"
-        self.blob[9::-2] = b"12345"
-        actual2 = self.cx.execute("select b from test").fetchone()[0]
-        self.assertEqual(actual2, bytes(expected2))
-
-        # When start <= stop with a negative step the slice is empty;
-        # assigning b"" to it must be a no-op (blob contents unchanged).
-        state_before = bytes(self.blob[:])
-        self.blob[3:8:-1] = b""
-        self.assertEqual(bytes(self.blob[:]), state_before)
-
-    def test_blob_set_slice_with_extreme_positive_step(self):
-        expected = bytearray(self.data)
-        expected[5::sys.maxsize] = b"\xab"
-        self.blob[5::sys.maxsize] = b"\xab"
-        actual = self.cx.execute("select b from test").fetchone()[0]
-        self.assertEqual(actual, bytes(expected))
-        self.assertEqual(actual[5], 0xab)
-
-    def test_blob_set_slice_with_extreme_negative_step(self):
-        expected = bytearray(self.data)
-        expected[::-sys.maxsize - 1] = b"\xcd"
-        self.blob[::-sys.maxsize - 1] = b"\xcd"
-        actual = self.cx.execute("select b from test").fetchone()[0]
-        self.assertEqual(actual, bytes(expected))
-        self.assertEqual(actual[-1], 0xcd)
 
     def test_blob_mapping_invalid_index_type(self):
         msg = "indices must be integers"
@@ -1584,7 +1525,7 @@ class BlobTests(unittest.TestCase):
             self.blob + self.blob
         with self.assertRaisesRegex(TypeError, "unsupported operand"):
             self.blob * 5
-        with self.assertRaisesRegex(TypeError, "is not.+iterable"):
+        with self.assertRaisesRegex(TypeError, "is not iterable"):
             b"a" in self.blob
 
     def test_blob_context_manager(self):
@@ -2146,8 +2087,8 @@ class RowTests(unittest.TestCase):
         cu = self.cx.execute("SELECT 1")
         row = cu.fetchone()
 
-        self.assertIsSubclass(sqlite.Row, Sequence)
-        self.assertIsInstance(row, Sequence)
+        self.assertTrue(issubclass(sqlite.Row, Sequence))
+        self.assertTrue(isinstance(row, Sequence))
 
 
 if __name__ == "__main__":

@@ -9,11 +9,21 @@
 #endif
 
 #include "pycore_call.h"          // _PyObject_CallNoArgs()
-#include "pycore_lock.h"          // _PyOnceFlag_CallOnce()
 #include "pycore_runtime.h"       // _Py_ID()
+
+#include <stdbool.h>
+
+#ifdef MS_WIN32
+#  include <malloc.h>
+#endif
 
 #include <ffi.h>
 #include "ctypes.h"
+
+#ifdef HAVE_ALLOCA_H
+/* AIX needs alloca.h for alloca() */
+#include <alloca.h>
+#endif
 
 /**************************************************************/
 
@@ -128,7 +138,6 @@ is_narrow_int_ffi_type(int type)
 static void _CallPythonObject(ctypes_state *st,
                               void *mem,
                               ffi_type *restype,
-                              PyObject *restype_obj,
                               SETFUNC setfunc,
                               PyObject *callable,
                               PyObject *converters,
@@ -218,9 +227,9 @@ static void _CallPythonObject(ctypes_state *st,
 
     result = PyObject_Vectorcall(callable, args, nargs, NULL);
     if (result == NULL) {
-        PyErr_FormatUnraisable("Exception ignored while "
-                               "calling ctypes callback function %R",
-                               callable);
+        PyErr_FormatUnraisable(
+                "Exception ignored on calling ctypes callback function %R",
+                callable);
     }
 
 #ifdef MS_WIN32
@@ -238,11 +247,11 @@ static void _CallPythonObject(ctypes_state *st,
     Py_XDECREF(error_object);
 
     if (restype != &ffi_type_void && result) {
+        assert(setfunc);
 
         /* libffi's closure contract requires integral results narrower
            than ffi_arg to fill a whole register, sign-extended if signed;
-           setfunc() only writes restype->size bytes. Structs and unions
-           are never narrow integers, so they always write to mem directly. */
+           setfunc() only writes restype->size bytes. */
         union {
             ffi_arg arg;
             int8_t s8;
@@ -256,94 +265,63 @@ static void _CallPythonObject(ctypes_state *st,
                      is_narrow_int_ffi_type(restype->type);
         void *resmem = narrow ? (void *)&narrow_res : mem;
 
-        if (setfunc == NULL) {
-            /* gh-49960: struct/union return. There is no setfunc for these
-               types, so copy the bytes out of the CData object directly.
-               The struct is copied by value and no object is kept alive, so
-               any pointer it contains must reference memory the caller keeps
-               alive - the same contract C imposes. */
-            assert(!narrow);
-            /* Use a real subtype check rather than PyObject_IsInstance():
-               a metaclass __instancecheck__ could otherwise accept an object
-               whose buffer is smaller than restype->size. */
-            if (PyObject_TypeCheck(result, (PyTypeObject *)restype_obj)) {
-                /* restype_obj is a struct or union type (enforced in
-                   _ctypes_alloc_callback), so its instances are CData. */
-                assert(CDataObject_Check(st, result));
-                CDataObject *cd = (CDataObject *)result;
-                Py_BEGIN_CRITICAL_SECTION(cd);
-                memcpy(mem, cd->b_ptr, restype->size);
-                Py_END_CRITICAL_SECTION();
+        /* keep is an object we have to keep alive so that the result
+           stays valid.  If there is no such object, the setfunc will
+           have returned Py_None.
+
+           If there is such an object, we have no choice than to keep
+           it alive forever - but a refcount and/or memory leak will
+           be the result.  EXCEPT when restype is py_object - Python
+           itself knows how to manage the refcount of these objects.
+        */
+        PyObject *keep = setfunc(resmem, result, 0);
+
+        if (narrow && keep != NULL) {
+            ffi_arg widened;
+            switch (restype->type) {
+            case FFI_TYPE_SINT8:
+                widened = (ffi_arg)(ffi_sarg)narrow_res.s8;
+                break;
+            case FFI_TYPE_SINT16:
+                widened = (ffi_arg)(ffi_sarg)narrow_res.s16;
+                break;
+            case FFI_TYPE_SINT32:
+                widened = (ffi_arg)(ffi_sarg)narrow_res.s32;
+                break;
+            case FFI_TYPE_UINT8:
+                widened = narrow_res.u8;
+                break;
+            case FFI_TYPE_UINT16:
+                widened = narrow_res.u16;
+                break;
+            case FFI_TYPE_UINT32:
+                widened = narrow_res.u32;
+                break;
+            default:
+                Py_UNREACHABLE();
             }
-            else {
-                PyErr_Format(PyExc_TypeError,
-                             "ctypes callback function returned unexpected "
-                             "type %T", result);
-                PyErr_FormatUnraisable(
-                        "Exception ignored while converting result "
-                        "of ctypes callback function %R",
-                        callable);
-            }
+            memcpy(mem, &widened, sizeof(ffi_arg));
         }
-        else {
-            /* keep is an object we have to keep alive so that the result
-               stays valid.  If there is no such object, the setfunc will
-               have returned Py_None.
 
-               If there is such an object, we have no choice than to keep
-               it alive forever - but a refcount and/or memory leak will
-               be the result.  EXCEPT when restype is py_object - Python
-               itself knows how to manage the refcount of these objects.
-            */
-            PyObject *keep = setfunc(resmem, result, restype->size);
-
-            if (narrow && keep != NULL) {
-                ffi_arg widened;
-                switch (restype->type) {
-                case FFI_TYPE_SINT8:
-                    widened = (ffi_arg)(ffi_sarg)narrow_res.s8;
-                    break;
-                case FFI_TYPE_SINT16:
-                    widened = (ffi_arg)(ffi_sarg)narrow_res.s16;
-                    break;
-                case FFI_TYPE_SINT32:
-                    widened = (ffi_arg)(ffi_sarg)narrow_res.s32;
-                    break;
-                case FFI_TYPE_UINT8:
-                    widened = narrow_res.u8;
-                    break;
-                case FFI_TYPE_UINT16:
-                    widened = narrow_res.u16;
-                    break;
-                case FFI_TYPE_UINT32:
-                    widened = narrow_res.u32;
-                    break;
-                default:
-                    Py_UNREACHABLE();
-                }
-                memcpy(mem, &widened, sizeof(ffi_arg));
+        if (keep == NULL) {
+            /* Could not convert callback result. */
+            PyErr_FormatUnraisable(
+                    "Exception ignored on converting result "
+                    "of ctypes callback function %R",
+                    callable);
+        }
+        else if (setfunc != _ctypes_get_fielddesc("O")->setfunc) {
+            if (keep == Py_None) {
+                /* Nothing to keep */
+                Py_DECREF(keep);
             }
-
-            if (keep == NULL) {
-                /* Could not convert callback result. */
+            else if (PyErr_WarnEx(PyExc_RuntimeWarning,
+                                  "memory leak in callback function.",
+                                  1) == -1) {
                 PyErr_FormatUnraisable(
-                        "Exception ignored while converting result "
+                        "Exception ignored on converting result "
                         "of ctypes callback function %R",
                         callable);
-            }
-            else if (setfunc != _ctypes_get_fielddesc("O")->setfunc) {
-                if (keep == Py_None) {
-                    /* Nothing to keep */
-                    Py_DECREF(keep);
-                }
-                else if (PyErr_WarnEx(PyExc_RuntimeWarning,
-                                      "memory leak in callback function.",
-                                      1) == -1) {
-                    PyErr_FormatUnraisable(
-                            "Exception ignored while converting result "
-                            "of ctypes callback function %R",
-                            callable);
-                }
             }
         }
     }
@@ -377,7 +355,6 @@ static void closure_fcn(ffi_cif *cif,
     _CallPythonObject(st,
                       resp,
                       p->ffi_restype,
-                      p->restype,
                       p->setfunc,
                       p->callable,
                       p->converters,
@@ -413,27 +390,6 @@ static CThunkObject* CThunkObject_new(ctypes_state *st, Py_ssize_t nargs)
     return p;
 }
 
-static _PyOnceFlag closure_alloc_init_once = {0};
-
-// This is done lazily with a once flag rather than in the module exec function,
-// because allocating a closure can have some side effects that affect the whole
-// process (gh-135893).
-static int
-closure_alloc_init(void *Py_UNUSED(arg))
-{
-    // See https://github.com/python/cpython/issues/128485
-    // This allocates some memory and then frees it to ensure that libffi's
-    // dlmalloc allocator initializes itself exactly once, avoiding data races
-    // between threads that don't share a GIL.
-    void *codeloc = NULL;
-    void *ptr = Py_ffi_closure_alloc(sizeof(void *), &codeloc);
-    if (ptr == NULL) {
-        return -1;
-    }
-    Py_ffi_closure_free(ptr);
-    return 0;
-}
-
 CThunkObject *_ctypes_alloc_callback(ctypes_state *st,
                                     PyObject *callable,
                                     PyObject *converters,
@@ -452,12 +408,6 @@ CThunkObject *_ctypes_alloc_callback(ctypes_state *st,
         return NULL;
 
     assert(CThunk_CheckExact(st, (PyObject *)p));
-
-    if (_PyOnceFlag_CallOnce(&closure_alloc_init_once,
-                             closure_alloc_init, NULL) < 0) {
-        PyErr_NoMemory();
-        goto error;
-    }
 
     p->pcl_write = Py_ffi_closure_alloc(sizeof(ffi_closure), &p->pcl_exec);
     if (p->pcl_write == NULL) {
@@ -483,25 +433,10 @@ CThunkObject *_ctypes_alloc_callback(ctypes_state *st,
             goto error;
         }
 
-        /* gh-49960: structs and unions have no setfunc (that is reserved for
-           "simple" types), but can still be returned by value. Leaving
-           p->setfunc as NULL signals the struct-return path in
-           _CallPythonObject. */
-        if (info == NULL
-            || (
-                info->setfunc == NULL
-                && !PyCStructTypeObject_Check(st, restype)
-                && !PyObject_TypeCheck(restype, st->UnionType_Type)
-            )
-        ) {
-            PyErr_SetString(PyExc_TypeError,
-                            "invalid result type for callback function");
-            goto error;
-        }
-        if (info->setfunc == NULL) {
-            /* The cif built below depends on the struct/union layout, so
-               _fields_ must not be (re)assigned after this point. */
-            stginfo_set_dict_final(info);
+        if (info == NULL || info->setfunc == NULL) {
+          PyErr_SetString(PyExc_TypeError,
+                          "invalid result type for callback function");
+          goto error;
         }
         p->setfunc = info->setfunc;
         p->ffi_restype = &info->ffi_type_pointer;
@@ -597,31 +532,39 @@ long Call_GetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
 {
     PyObject *func, *result;
     long retval;
+    static PyObject *context;
 
-    func = PyImport_ImportModuleAttrString("ctypes", "DllGetClassObject");
+    if (context == NULL)
+        context = PyUnicode_InternFromString("_ctypes.DllGetClassObject");
+
+    func = _PyImport_GetModuleAttrString("ctypes", "DllGetClassObject");
     if (!func) {
+        PyErr_WriteUnraisable(context ? context : Py_None);
         /* There has been a warning before about this already */
-        goto error;
+        return E_FAIL;
     }
 
     {
         PyObject *py_rclsid = PyLong_FromVoidPtr((void *)rclsid);
         if (py_rclsid == NULL) {
             Py_DECREF(func);
-            goto error;
+            PyErr_WriteUnraisable(context ? context : Py_None);
+            return E_FAIL;
         }
         PyObject *py_riid = PyLong_FromVoidPtr((void *)riid);
         if (py_riid == NULL) {
             Py_DECREF(func);
             Py_DECREF(py_rclsid);
-            goto error;
+            PyErr_WriteUnraisable(context ? context : Py_None);
+            return E_FAIL;
         }
         PyObject *py_ppv = PyLong_FromVoidPtr(ppv);
         if (py_ppv == NULL) {
             Py_DECREF(py_rclsid);
             Py_DECREF(py_riid);
             Py_DECREF(func);
-            goto error;
+            PyErr_WriteUnraisable(context ? context : Py_None);
+            return E_FAIL;
         }
         result = PyObject_CallFunctionObjArgs(func,
                                               py_rclsid,
@@ -634,21 +577,17 @@ long Call_GetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
     }
     Py_DECREF(func);
     if (!result) {
-        goto error;
+        PyErr_WriteUnraisable(context ? context : Py_None);
+        return E_FAIL;
     }
 
     retval = PyLong_AsLong(result);
     if (PyErr_Occurred()) {
-        Py_DECREF(result);
-        goto error;
+        PyErr_WriteUnraisable(context ? context : Py_None);
+        retval = E_FAIL;
     }
     Py_DECREF(result);
     return retval;
-
-error:
-    PyErr_FormatUnraisable("Exception ignored while calling "
-                           "ctypes.DllGetClassObject");
-    return E_FAIL;
 }
 
 STDAPI DllGetClassObject(REFCLSID rclsid,
@@ -667,30 +606,43 @@ STDAPI DllGetClassObject(REFCLSID rclsid,
 
 long Call_CanUnloadNow(void)
 {
-    PyObject *func = PyImport_ImportModuleAttrString("ctypes",
-                                                     "DllCanUnloadNow");
+    PyObject *mod, *func, *result;
+    long retval;
+    static PyObject *context;
+
+    if (context == NULL)
+        context = PyUnicode_InternFromString("_ctypes.DllCanUnloadNow");
+
+    mod = PyImport_ImportModule("ctypes");
+    if (!mod) {
+/*              OutputDebugString("Could not import ctypes"); */
+        /* We assume that this error can only occur when shutting
+           down, so we silently ignore it */
+        PyErr_Clear();
+        return E_FAIL;
+    }
+    /* Other errors cannot be raised, but are printed to stderr */
+    func = PyObject_GetAttrString(mod, "DllCanUnloadNow");
+    Py_DECREF(mod);
     if (!func) {
-        goto error;
+        PyErr_WriteUnraisable(context ? context : Py_None);
+        return E_FAIL;
     }
 
-    PyObject *result = _PyObject_CallNoArgs(func);
+    result = _PyObject_CallNoArgs(func);
     Py_DECREF(func);
     if (!result) {
-        goto error;
+        PyErr_WriteUnraisable(context ? context : Py_None);
+        return E_FAIL;
     }
 
-    long retval = PyLong_AsLong(result);
+    retval = PyLong_AsLong(result);
     if (PyErr_Occurred()) {
-        Py_DECREF(result);
-        goto error;
+        PyErr_WriteUnraisable(context ? context : Py_None);
+        retval = E_FAIL;
     }
     Py_DECREF(result);
     return retval;
-
-error:
-    PyErr_FormatUnraisable("Exception ignored while calling "
-                           "ctypes.DllCanUnloadNow");
-    return E_FAIL;
 }
 
 /*

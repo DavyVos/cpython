@@ -10,11 +10,12 @@
 
   See the source code for LLVMFuzzerTestOneInput for details. */
 
-#ifndef Py_BUILD_CORE_MODULE
-#  define Py_BUILD_CORE_MODULE 1
+#ifndef Py_BUILD_CORE
+#  define Py_BUILD_CORE 1
 #endif
 
 #include <Python.h>
+#include "pycore_pyhash.h"        // _Py_HashBytes()
 #include <stdlib.h>
 #include <inttypes.h>
 
@@ -38,18 +39,23 @@ static int fuzz_builtin_float(const char* data, size_t size) {
 static int fuzz_builtin_int(const char* data, size_t size) {
     /* Ignore test cases with very long ints to avoid timeouts
        int("9" * 1000000) is not a very interesting test caase */
-    if (size < 1 || size > MAX_INT_TEST_SIZE) {
+    if (size > MAX_INT_TEST_SIZE) {
         return 0;
     }
-    // Use the first byte to pick a base
-    int base = ((unsigned char) data[0]) % 37;
+    /* Pick a random valid base. (When the fuzzed function takes extra
+       parameters, it's somewhat normal to hash the input to generate those
+       parameters. We want to exercise all code paths, so we do so here.) */
+    int base = _Py_HashBytes(data, size) % 37;
     if (base == 1) {
         // 1 is the only number between 0 and 36 that is not a valid base.
         base = 0;
     }
-
-    data += 1;
-    size -= 1;
+    if (base == -1) {
+        return 0;  // An error occurred, bail early.
+    }
+    if (base < 0) {
+        base = -base;
+    }
 
     PyObject* s = PyUnicode_FromStringAndSize(data, size);
     if (s == NULL) {
@@ -126,10 +132,6 @@ static int fuzz_struct_unpack(const char* data, size_t size) {
     /* The pascal format string will throw a negative size when passing 0
        like: struct.unpack('0p', b'') */
     if (unpacked == NULL && PyErr_ExceptionMatches(PyExc_SystemError)) {
-        PyErr_Clear();
-    }
-    /* Ignore any ValueError, these are triggered by non-ASCII format. */
-    if (unpacked == NULL && PyErr_ExceptionMatches(PyExc_ValueError)) {
         PyErr_Clear();
     }
     /* Ignore any struct.error exceptions, these can be caused by invalid
@@ -325,10 +327,6 @@ static int fuzz_sre_match(const char* data, size_t size) {
 
     PyObject* pattern = compiled_patterns[idx];
     PyObject* match_callable = PyObject_GetAttrString(pattern, "match");
-    if (match_callable == NULL) {
-        Py_DECREF(to_match);
-        return 0;
-    }
 
     PyObject* matches = PyObject_CallOneArg(match_callable, to_match);
 
@@ -520,8 +518,8 @@ static int fuzz_pycompile(const char* data, size_t size) {
         return 0;
     }
 
-    // Need 3 bytes for parameter selection
-    if (size < 3) {
+    // Need 2 bytes for parameter selection
+    if (size < 2) {
         return 0;
     }
 
@@ -533,39 +531,25 @@ static int fuzz_pycompile(const char* data, size_t size) {
     unsigned char optimize_idx = (unsigned char) data[1];
     int optimize = optimize_vals[optimize_idx % NUM_OPTIMIZE_VALS];
 
-    // Use third byte to determine compiler flags to use.
-    unsigned char flags_byte = (unsigned char) data[2];
-    PyCompilerFlags flags = _PyCompilerFlags_INIT;
-    if (flags_byte & 0x01) {
-        flags.cf_flags |= PyCF_DONT_IMPLY_DEDENT;
-    }
-    if (flags_byte & 0x02) {
-        flags.cf_flags |= PyCF_ONLY_AST;
-    }
-    if (flags_byte & 0x04) {
-        flags.cf_flags |= PyCF_IGNORE_COOKIE;
-    }
-    if (flags_byte & 0x08) {
-        flags.cf_flags |= PyCF_TYPE_COMMENTS;
-    }
-    if (flags_byte & 0x10) {
-        flags.cf_flags |= PyCF_ALLOW_TOP_LEVEL_AWAIT;
-    }
-    if (flags_byte & 0x20) {
-        flags.cf_flags |= PyCF_ALLOW_INCOMPLETE_INPUT;
-    }
-    if (flags_byte & 0x40) {
-        flags.cf_flags |= PyCF_OPTIMIZED_AST;
-    }
-
     char pycompile_scratch[MAX_PYCOMPILE_TEST_SIZE];
 
     // Create a NUL-terminated C string from the remaining input
-    memcpy(pycompile_scratch, data + 3, size - 3);
+    memcpy(pycompile_scratch, data + 2, size - 2);
     // Put a NUL terminator just after the copied data. (Space was reserved already.)
-    pycompile_scratch[size - 3] = '\0';
+    pycompile_scratch[size - 2] = '\0';
 
-    PyObject *result = Py_CompileStringExFlags(pycompile_scratch, "<fuzz input>", start, &flags, optimize);
+    // XXX: instead of always using NULL for the `flags` value to
+    // `Py_CompileStringExFlags`, there are many flags that conditionally
+    // change parser behavior:
+    //
+    //     #define PyCF_TYPE_COMMENTS 0x1000
+    //     #define PyCF_ALLOW_TOP_LEVEL_AWAIT 0x2000
+    //     #define PyCF_ONLY_AST 0x0400
+    //
+    // It would be good to test various combinations of these, too.
+    PyCompilerFlags *flags = NULL;
+
+    PyObject *result = Py_CompileStringExFlags(pycompile_scratch, "<fuzz input>", start, flags, optimize);
     if (result == NULL) {
         /* Compilation failed, most likely from a syntax error. If it was a
            SystemError we abort. There's no non-bug reason to raise a

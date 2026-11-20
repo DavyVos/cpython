@@ -36,15 +36,11 @@ class abstractclassmethod(classmethod):
             def my_abstract_classmethod(cls, ...):
                 ...
 
-    .. deprecated-removed: 3.3 3.21
-
     """
 
     __isabstractmethod__ = True
 
     def __init__(self, callable):
-        import warnings
-        warnings._deprecated('abc.abstractclassmethod', remove=(3, 21))
         callable.__isabstractmethod__ = True
         super().__init__(callable)
 
@@ -60,15 +56,11 @@ class abstractstaticmethod(staticmethod):
             def my_abstract_staticmethod(...):
                 ...
 
-    .. deprecated-removed: 3.3 3.21
-
     """
 
     __isabstractmethod__ = True
 
     def __init__(self, callable):
-        import warnings
-        warnings._deprecated('abc.abstractstaticmethod', remove=(3, 21))
         callable.__isabstractmethod__ = True
         super().__init__(callable)
 
@@ -84,22 +76,9 @@ class abstractproperty(property):
             def my_abstract_property(self):
                 ...
 
-    .. deprecated-removed: 3.3 3.21
-
     """
 
     __isabstractmethod__ = True
-
-    def __init__(
-        self,
-        fget=None,
-        fset=None,
-        fdel=None,
-        doc=None,
-    ):
-        import warnings
-        warnings._deprecated('abc.abstractproperty', remove=(3, 21))
-        super().__init__(fget, fset, fdel, doc)
 
 
 try:

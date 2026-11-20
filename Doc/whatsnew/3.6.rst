@@ -45,7 +45,7 @@
    when researching a change.
 
 This article explains the new features in Python 3.6, compared to 3.5.
-Python 3.6 was released on December 23, 2016.  See the
+Python 3.6 was released on December 23, 2016.  See the
 `changelog <https://docs.python.org/3.6/whatsnew/changelog.html>`_ for a full
 list of changes.
 
@@ -517,7 +517,7 @@ Applications that do not use str to represent paths should use
 :func:`os.fsencode` and :func:`os.fsdecode` to ensure their bytes are
 correctly encoded. To revert to the previous behaviour, set
 :envvar:`PYTHONLEGACYWINDOWSFSENCODING` or call
-:func:`!sys._enablelegacywindowsfsencoding`.
+:func:`sys._enablelegacywindowsfsencoding`.
 
 See :pep:`529` for more information and discussion of code modifications that
 may be required.
@@ -2006,10 +2006,10 @@ deprecated.
 importlib
 ~~~~~~~~~
 
-The ``importlib.machinery.SourceFileLoader.load_module`` and
-``importlib.machinery.SourcelessFileLoader.load_module`` methods
+The :meth:`importlib.machinery.SourceFileLoader.load_module` and
+:meth:`importlib.machinery.SourcelessFileLoader.load_module` methods
 are now deprecated. They were the only remaining implementations of
-``importlib.abc.Loader.load_module`` in :mod:`importlib` that had not
+:meth:`importlib.abc.Loader.load_module` in :mod:`importlib` that had not
 been deprecated in previous versions of Python in favour of
 :meth:`importlib.abc.Loader.exec_module`.
 
@@ -2111,11 +2111,11 @@ API and Feature Removals
   name for a given path.
   (Contributed by Yury Selivanov in :issue:`13248`.)
 
-* ``trace.Ignore`` class and ``trace.usage``, ``trace.modname``,
-  ``trace.fullmodname``, ``trace.find_lines_from_code``,
-  ``trace.find_lines``, ``trace.find_strings``,
-  ``trace.find_executable_linenos`` methods were removed from the
-  :mod:`trace` module. They were undocumented methods deprecated since
+* ``traceback.Ignore`` class and ``traceback.usage``, ``traceback.modname``,
+  ``traceback.fullmodname``, ``traceback.find_lines_from_code``,
+  ``traceback.find_lines``, ``traceback.find_strings``,
+  ``traceback.find_executable_lines`` methods were removed from the
+  :mod:`traceback` module. They were undocumented methods deprecated since
   Python 3.2 and equivalent functionality is available from private methods.
 
 * The ``tk_menuBar()`` and ``tk_bindForTraversal()`` dummy methods in
@@ -2173,7 +2173,7 @@ Changes in the Python API
 * :c:func:`PyErr_SetImportError` now sets :exc:`TypeError` when its **msg**
   argument is not set. Previously only ``NULL`` was returned.
 
-* The format of the :attr:`!codeobject.co_lnotab` attribute of code objects
+* The format of the :attr:`~codeobject.co_lnotab` attribute of code objects
   changed to support
   a negative line number delta. By default, Python does not emit bytecode with
   a negative line number delta. Functions using :attr:`frame.f_lineno`,
@@ -2373,7 +2373,7 @@ There have been several major changes to the :term:`bytecode` in Python 3.6.
   (Contributed by Eric Smith in :issue:`25483` and
   Serhiy Storchaka in :issue:`27078`.)
 
-* The new :opcode:`!BUILD_CONST_KEY_MAP` opcode to optimize the creation
+* The new :opcode:`BUILD_CONST_KEY_MAP` opcode to optimize the creation
   of dictionaries with constant keys.
   (Contributed by Serhiy Storchaka in :issue:`27140`.)
 

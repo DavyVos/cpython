@@ -6,6 +6,7 @@ from idlelib import configdialog
 from idlelib.editor import EditorWindow
 from test.support import requires
 requires('gui')
+from test.support.testcase import ExtraAssertions
 import unittest
 from unittest import mock
 from idlelib.idle_test.mock_idle import Func
@@ -77,7 +78,7 @@ class ConfigDialogTest(unittest.TestCase):
                 getattr(self.instance, name).assert_called_once_with()
 
 
-class ButtonTest(unittest.TestCase):
+class ButtonTest(unittest.TestCase, ExtraAssertions):
 
     def test_click_ok(self):
         d = dialog

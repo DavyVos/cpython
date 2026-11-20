@@ -9,7 +9,7 @@ import warnings
 
 
 MS_WINDOWS = (sys.platform == "win32")
-APPLE = (sys.platform in ("darwin", "ios", "tvos", "watchos", "visionos"))
+APPLE = (sys.platform in ("darwin", "ios", "tvos", "watchos"))
 
 COMMAND_TIMEOUT = 60.0
 
@@ -170,8 +170,6 @@ def collect_sys(info_add):
     else:
         text = 'No (sys.getobjects() missing)'
     info_add('build.Py_TRACE_REFS', text)
-
-    info_add('sys.is_remote_debug_enabled', sys.is_remote_debug_enabled())
 
 
 def collect_platform(info_add):
@@ -429,13 +427,27 @@ def collect_readline(info_add):
     except ImportError:
         return
 
+    def format_attr(attr, value):
+        if isinstance(value, int):
+            return "%#x" % value
+        else:
+            return value
+
     attributes = (
-        "backend",
-        "READLINE_VERSION_INFO",
-        "readline_version_info",
-        "readline_version",
+        "_READLINE_VERSION",
+        "_READLINE_RUNTIME_VERSION",
+        "_READLINE_LIBRARY_VERSION",
     )
-    copy_attributes(info_add, readline, 'readline.%s', attributes)
+    copy_attributes(info_add, readline, 'readline.%s', attributes,
+                    formatter=format_attr)
+
+    if not hasattr(readline, "_READLINE_LIBRARY_VERSION"):
+        # _READLINE_LIBRARY_VERSION has been added to CPython 3.7
+        doc = getattr(readline, '__doc__', '')
+        if 'libedit readline' in doc:
+            info_add('readline.library', 'libedit readline')
+        elif 'GNU readline' in doc:
+            info_add('readline.library', 'GNU readline')
 
 
 def run_command(cmd, check=True, **kwargs):
@@ -493,7 +505,7 @@ def collect_tkinter(info_add):
     except ImportError:
         pass
     else:
-        attributes = ('TK_PATCH_LEVEL', 'TCL_PATCH_LEVEL')
+        attributes = ('TK_VERSION', 'TCL_VERSION')
         copy_attributes(info_add, _tkinter, 'tkinter.%s', attributes)
 
     try:
@@ -558,7 +570,6 @@ def collect_sysconfig(info_add):
 
     for name in (
         'ABIFLAGS',
-        'ALT_SOABI',
         'ANDROID_API_LEVEL',
         'CC',
         'CCSHARED',
@@ -574,19 +585,15 @@ def collect_sysconfig(info_add):
         'PY_CFLAGS',
         'PY_CFLAGS_NODIST',
         'PY_CORE_LDFLAGS',
-        'PY_CORE_EXE_LDFLAGS',
         'PY_LDFLAGS',
         'PY_LDFLAGS_NODIST',
         'PY_STDMODULE_CFLAGS',
         'Py_DEBUG',
         'Py_ENABLE_SHARED',
         'Py_GIL_DISABLED',
-        'Py_REMOTE_DEBUG',
         'SHELL',
         'SOABI',
-        'SOABI_PLATFORM',
         'TEST_MODULES',
-        'VAPTH',
         'abs_builddir',
         'abs_srcdir',
         'prefix',
@@ -599,9 +606,18 @@ def collect_sysconfig(info_add):
         value = normalize_text(value)
         info_add('sysconfig[%s]' % name, value)
 
+    PY_CFLAGS = sysconfig.get_config_var('PY_CFLAGS')
+    NDEBUG = (PY_CFLAGS and '-DNDEBUG' in PY_CFLAGS)
+    if NDEBUG:
+        text = 'ignore assertions (macro defined)'
+    else:
+        text= 'build assertions (macro not defined)'
+    info_add('build.NDEBUG',text)
+
     for name in (
         'WITH_DOC_STRINGS',
         'WITH_DTRACE',
+        'WITH_FREELISTS',
         'WITH_MIMALLOC',
         'WITH_PYMALLOC',
         'WITH_VALGRIND',
@@ -634,7 +650,6 @@ def collect_ssl(info_add):
     attributes = (
         'OPENSSL_VERSION',
         'OPENSSL_VERSION_INFO',
-        'OPENSSL_API_VERSION_INFO',
         'HAS_SNI',
         'OP_ALL',
         'OP_NO_TLSv1_1',
@@ -690,7 +705,7 @@ def collect_sqlite(info_add):
     except ImportError:
         return
 
-    attributes = ('SQLITE_VERSION', 'sqlite_version')
+    attributes = ('sqlite_version',)
     copy_attributes(info_add, sqlite3, 'sqlite3.%s', attributes)
 
 
@@ -700,48 +715,8 @@ def collect_zlib(info_add):
     except ImportError:
         return
 
-    attributes = ('ZLIB_VERSION', 'zlib_version', 'ZLIBNG_VERSION')
+    attributes = ('ZLIB_VERSION', 'ZLIB_RUNTIME_VERSION')
     copy_attributes(info_add, zlib, 'zlib.%s', attributes)
-
-
-def collect_bz2(info_add):
-    try:
-        import _bz2
-    except ImportError:
-        return
-
-    attributes = ('bzlib_version',)
-    copy_attributes(info_add, _bz2, 'bz2.%s', attributes)
-
-
-def collect_lzma(info_add):
-    try:
-        import _lzma
-    except ImportError:
-        return
-
-    attributes = ('LZMA_VERSION', 'lzma_version')
-    copy_attributes(info_add, _lzma, 'lzma.%s', attributes)
-
-
-def collect_zstd(info_add):
-    try:
-        import _zstd
-    except ImportError:
-        return
-
-    attributes = ('ZSTD_VERSION', 'zstd_version')
-    copy_attributes(info_add, _zstd, 'zstd.%s', attributes)
-
-
-def collect_ctypes(info_add):
-    try:
-        import _ctypes
-    except ImportError:
-        return
-
-    attributes = ('LIBFFI_VERSION', 'libffi_version')
-    copy_attributes(info_add, _ctypes, 'ctypes.%s', attributes)
 
 
 def collect_expat(info_add):
@@ -750,7 +725,7 @@ def collect_expat(info_add):
     except ImportError:
         return
 
-    attributes = ('EXPAT_VERSION', 'VERSION_INFO', 'version_info')
+    attributes = ('EXPAT_VERSION',)
     copy_attributes(info_add, expat, 'expat.%s', attributes)
 
 
@@ -760,7 +735,7 @@ def collect_decimal(info_add):
     except ImportError:
         return
 
-    attributes = ('LIBMPDEC_VERSION', 'libmpdec_version')
+    attributes = ('__libmpdec_version__',)
     copy_attributes(info_add, _decimal, '_decimal.%s', attributes)
 
 
@@ -773,6 +748,7 @@ def collect_testcapi(info_add):
     for name in (
         'LONG_MAX',         # always 32-bit on Windows, 64-bit on 64-bit Unix
         'PY_SSIZE_T_MAX',
+        'Py_C_RECURSION_LIMIT',
         'SIZEOF_TIME_T',    # 32-bit or 64-bit depending on the platform
         'SIZEOF_WCHAR_T',   # 16-bit or 32-bit depending on the platform
     ):
@@ -842,7 +818,6 @@ def collect_support(info_add):
         'is_emscripten',
         'is_jython',
         'is_wasi',
-        'is_wasm32',
     )
     copy_attributes(info_add, support, 'support.%s', attributes)
 
@@ -855,8 +830,6 @@ def collect_support(info_add):
              support.check_sanitizer(memory=True))
     info_add('support.check_sanitizer(ub=True)',
              support.check_sanitizer(ub=True))
-    info_add('support.built_with_c_assertions',
-             support.built_with_c_assertions())
 
 
 def collect_support_os_helper(info_add):
@@ -906,17 +879,18 @@ def collect_support_threading_helper(info_add):
     copy_attributes(info_add, threading_helper, 'support_threading_helper.%s', attributes)
 
 
-def get_compiler_version(sysconfig_var):
+def collect_cc(info_add):
     import sysconfig
-    program = sysconfig.get_config_var(sysconfig_var)
-    if not program:
+
+    CC = sysconfig.get_config_var('CC')
+    if not CC:
         return
 
     try:
         import shlex
-        args = shlex.split(program)
+        args = shlex.split(CC)
     except ImportError:
-        args = program.split()
+        args = CC.split()
     args.append('--version')
 
     stdout = run_command(args)
@@ -930,42 +904,16 @@ def get_compiler_version(sysconfig_var):
 
     text = first_line(stdout)
     text = normalize_text(text)
-    if text:
-        text = f'[{program}] {text}'
-    return text
-
-
-def collect_cc(info_add):
-    # C compiler
-    version = get_compiler_version('CC')
-    if version:
-        info_add('CC.version', version)
-
-    # C++ compiler
-    version = get_compiler_version('CXX')
-    if version:
-        info_add('CXX.version', version)
-
-
-def collect_ndbm(info_add):
-    try:
-        import _dbm
-    except ImportError:
-        return
-
-    attributes = ('library', 'GDBM_VERSION_INFO', 'gdbm_version',
-                  'BDB_VERSION', 'bdb_version')
-    copy_attributes(info_add, _dbm, 'ndbm.%s', attributes)
+    info_add('CC.version', text)
 
 
 def collect_gdbm(info_add):
     try:
-        import _gdbm
+        from _gdbm import _GDBM_VERSION
     except ImportError:
         return
 
-    attributes = ('GDBM_VERSION_INFO', 'gdbm_version')
-    copy_attributes(info_add, _gdbm, 'gdbm.%s', attributes)
+    info_add('gdbm.GDBM_VERSION', '.'.join(map(str, _GDBM_VERSION)))
 
 
 def collect_get_config(info_add):
@@ -1035,7 +983,7 @@ def collect_windows(info_add):
     # windows.RtlAreLongPathsEnabled: RtlAreLongPathsEnabled()
     # windows.is_admin: IsUserAnAdmin()
     try:
-        import ctypes.util
+        import ctypes
         if not hasattr(ctypes, 'WinDLL'):
             raise ImportError
     except ImportError:
@@ -1044,33 +992,27 @@ def collect_windows(info_add):
         ntdll = ctypes.WinDLL('ntdll')
         BOOLEAN = ctypes.c_ubyte
         try:
-            @ctypes.util.wrap_dll_function(ntdll)
-            def RtlAreLongPathsEnabled() -> BOOLEAN:
-                pass
+            RtlAreLongPathsEnabled = ntdll.RtlAreLongPathsEnabled
         except AttributeError:
             res = '<function not available>'
         else:
+            RtlAreLongPathsEnabled.restype = BOOLEAN
+            RtlAreLongPathsEnabled.argtypes = ()
             res = bool(RtlAreLongPathsEnabled())
         info_add('windows.RtlAreLongPathsEnabled', res)
 
-        @ctypes.util.wrap_dll_function(ctypes.windll.shell32)
-        def IsUserAnAdmin() -> BOOLEAN:
-            pass
-        info_add('windows.is_admin', bool(IsUserAnAdmin()))
+        shell32 = ctypes.windll.shell32
+        IsUserAnAdmin = shell32.IsUserAnAdmin
+        IsUserAnAdmin.restype = BOOLEAN
+        IsUserAnAdmin.argtypes = ()
+        info_add('windows.is_admin', IsUserAnAdmin())
 
     try:
         import _winapi
-    except ImportError:
+        dll_path = _winapi.GetModuleFileName(sys.dllhandle)
+        info_add('windows.dll_path', dll_path)
+    except (ImportError, AttributeError):
         pass
-    else:
-        try:
-            dll_path = _winapi.GetModuleFileName(sys.dllhandle)
-            info_add('windows.dll_path', dll_path)
-        except AttributeError:
-            pass
-
-        call_func(info_add, 'windows.ansi_code_page', _winapi, 'GetACP')
-        call_func(info_add, 'windows.oem_code_page', _winapi, 'GetOEMCP')
 
     # Get operating system caption and version using WMI
     data = wmi_query("SELECT Caption, Version FROM Win32_OperatingSystem")
@@ -1355,12 +1297,6 @@ def collect_system(info_add):
             info_add('system.hardware', hardware)
 
 
-def collect_importlib(info_add):
-    import importlib.machinery
-    info_add('importlib.extension_suffixes',
-             importlib.machinery.EXTENSION_SUFFIXES)
-
-
 def collect_info(info):
     error = False
     info_add = info.add
@@ -1372,20 +1308,16 @@ def collect_info(info):
         collect_urandom,
 
         collect_builtins,
-        collect_bz2,
         collect_cc,
         collect_curses,
         collect_datetime,
         collect_decimal,
-        collect_ctypes,
         collect_expat,
         collect_fips,
         collect_gdb,
-        collect_ndbm,
         collect_gdbm,
         collect_get_config,
         collect_locale,
-        collect_lzma,
         collect_os,
         collect_platform,
         collect_pwd,
@@ -1404,10 +1336,8 @@ def collect_info(info):
         collect_tkinter,
         collect_windows,
         collect_zlib,
-        collect_zstd,
         collect_libregrtest_utils,
         collect_system,
-        collect_importlib,
 
         # Collecting from tests should be last as they have side effects.
         collect_test_socket,

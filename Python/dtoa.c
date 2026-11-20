@@ -123,10 +123,8 @@
 
 #include "Python.h"
 #include "pycore_dtoa.h"          // _PY_SHORT_FLOAT_REPR
-#include "pycore_interp_structs.h"// struct Bigint
 #include "pycore_pystate.h"       // _PyInterpreterState_GET()
 #include <stdlib.h>               // exit()
-
 
 /* if _PY_SHORT_FLOAT_REPR == 0, then don't even try to compile
    the following code */
@@ -143,7 +141,8 @@
 #ifdef DOUBLE_IS_LITTLE_ENDIAN_IEEE754
 #  define IEEE_8087
 #endif
-#if defined(DOUBLE_IS_BIG_ENDIAN_IEEE754)
+#if defined(DOUBLE_IS_BIG_ENDIAN_IEEE754) ||  \
+  defined(DOUBLE_IS_ARM_MIXED_ENDIAN_IEEE754)
 #  define IEEE_MC68k
 #endif
 #if defined(IEEE_8087) + defined(IEEE_MC68k) != 1
@@ -152,7 +151,8 @@
 
 /* The code below assumes that the endianness of integers matches the
    endianness of the two 32-bit words of a double.  Check this. */
-#if defined(WORDS_BIGENDIAN) && defined(DOUBLE_IS_LITTLE_ENDIAN_IEEE754)
+#if defined(WORDS_BIGENDIAN) && (defined(DOUBLE_IS_LITTLE_ENDIAN_IEEE754) || \
+                                 defined(DOUBLE_IS_ARM_MIXED_ENDIAN_IEEE754))
 #error "doubles and ints have incompatible endianness"
 #endif
 
@@ -161,7 +161,7 @@
 #endif
 
 
-typedef uint32_t ULong;
+// ULong is defined in pycore_dtoa.h.
 typedef int32_t Long;
 typedef uint64_t ULLong;
 
@@ -1409,7 +1409,7 @@ _Py_dg_strtod(const char *s00, char **se)
     switch (c) {
     case '-':
         sign = 1;
-        _Py_FALLTHROUGH;
+        /* fall through */
     case '+':
         c = *++s;
     }
@@ -1478,7 +1478,7 @@ _Py_dg_strtod(const char *s00, char **se)
         switch (c) {
         case '-':
             esign = 1;
-            _Py_FALLTHROUGH;
+            /* fall through */
         case '+':
             c = *++s;
         }
@@ -2367,7 +2367,7 @@ _Py_dg_dtoa(double dd, int mode, int ndigits,
         break;
     case 2:
         leftright = 0;
-        _Py_FALLTHROUGH;
+        /* fall through */
     case 4:
         if (ndigits <= 0)
             ndigits = 1;
@@ -2375,7 +2375,7 @@ _Py_dg_dtoa(double dd, int mode, int ndigits,
         break;
     case 3:
         leftright = 0;
-        _Py_FALLTHROUGH;
+        /* fall through */
     case 5:
         /* -330 < k < 330 for any finite nonzero double.  Clamp ndigits so
            that ndigits + k + 1 stays within int range; no double has

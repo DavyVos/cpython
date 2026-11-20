@@ -66,17 +66,12 @@ tuple_set_item(PyObject *Py_UNUSED(module), PyObject *args)
 }
 
 static PyObject *
-_tuple_resize(PyObject *Py_UNUSED(module), PyObject *args, PyObject *kwargs)
+_tuple_resize(PyObject *Py_UNUSED(module), PyObject *args)
 {
-    static char *kwlist[] = {"obj", "newsize", "new", "compute_hash", NULL};
     PyObject *tup;
     Py_ssize_t newsize;
     int new = 1;
-    int compute_hash = 0;
-
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs,
-                                     "On|pi", kwlist,
-                                     &tup, &newsize, &new, &compute_hash)) {
+    if (!PyArg_ParseTuple(args, "On|p", &tup, &newsize, &new)) {
         return NULL;
     }
     if (new) {
@@ -89,24 +84,12 @@ _tuple_resize(PyObject *Py_UNUSED(module), PyObject *args, PyObject *kwargs)
         NULLABLE(tup);
         Py_XINCREF(tup);
     }
-
-    if (compute_hash) {
-        if (PyObject_Hash(tup) == -1) {
-            Py_DECREF(tup);
-            return NULL;
-        }
-    }
-
-    PyObject *old_tup = tup;
     int r = _PyTuple_Resize(&tup, newsize);
     if (r == -1) {
         assert(tup == NULL);
         return NULL;
     }
-    assert(tup != NULL);
-
-    Py_ssize_t refcnt = Py_REFCNT(tup);
-    return Py_BuildValue("Nnp", tup, refcnt, tup != old_tup);
+    return tup;
 }
 
 static PyObject *
@@ -121,40 +104,12 @@ _check_tuple_item_is_NULL(PyObject *Py_UNUSED(module), PyObject *args)
 }
 
 
-static PyObject *
-tuple_fromarray(PyObject* Py_UNUSED(module), PyObject *args)
-{
-    PyObject *src;
-    Py_ssize_t size = UNINITIALIZED_SIZE;
-    if (!PyArg_ParseTuple(args, "O|n", &src, &size)) {
-        return NULL;
-    }
-    if (src != Py_None && !PyTuple_Check(src)) {
-        PyErr_SetString(PyExc_TypeError, "expect a tuple");
-        return NULL;
-    }
-
-    PyObject **items;
-    if (src != Py_None) {
-        items = &PyTuple_GET_ITEM(src, 0);
-        if (size == UNINITIALIZED_SIZE) {
-            size = PyTuple_GET_SIZE(src);
-        }
-    }
-    else {
-        items = NULL;
-    }
-    return PyTuple_FromArray(items, size);
-}
-
-
 static PyMethodDef test_methods[] = {
     {"tuple_get_size", tuple_get_size, METH_O},
     {"tuple_get_item", tuple_get_item, METH_VARARGS},
     {"tuple_set_item", tuple_set_item, METH_VARARGS},
-    {"_tuple_resize", _PyCFunction_CAST(_tuple_resize), METH_VARARGS | METH_KEYWORDS},
+    {"_tuple_resize", _tuple_resize, METH_VARARGS},
     {"_check_tuple_item_is_NULL", _check_tuple_item_is_NULL, METH_VARARGS},
-    {"tuple_fromarray", tuple_fromarray, METH_VARARGS},
     {NULL},
 };
 

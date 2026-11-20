@@ -21,7 +21,6 @@
 # 3. This notice may not be removed or altered from any source distribution.
 
 import unittest
-import weakref
 import sqlite3 as sqlite
 from collections.abc import Sequence
 
@@ -72,9 +71,18 @@ class ConnectionFactoryTests(unittest.TestCase):
             def __init__(self, *args, **kwargs):
                 super(Factory, self).__init__(*args, **kwargs)
 
-        with self.assertRaisesRegex(TypeError,
-                r'connect\(\) takes at most 1 positional arguments'):
-            memory_database(5.0, 0, None, True, Factory)
+        regex = (
+            r"Passing more than 1 positional argument to _sqlite3.Connection\(\) "
+            r"is deprecated. Parameters 'timeout', 'detect_types', "
+            r"'isolation_level', 'check_same_thread', 'factory', "
+            r"'cached_statements' and 'uri' will become keyword-only "
+            r"parameters in Python 3.15."
+        )
+        with self.assertWarnsRegex(DeprecationWarning, regex) as cm:
+            with memory_database(5.0, 0, None, True, Factory) as con:
+                self.assertIsNone(con.isolation_level)
+                self.assertIsInstance(con, Factory)
+        self.assertEqual(cm.filename, __file__)
 
 
 class CursorFactoryTests(MemoryDatabaseMixin, unittest.TestCase):
@@ -156,17 +164,6 @@ class RowFactoryTests(MemoryDatabaseMixin, unittest.TestCase):
         # gh-149738: deleting text_factory should raise an exception
         with self.assertRaises(AttributeError):
             del self.con.text_factory
-
-    def test_replace_active_row_factory(self):
-        class Factory:
-            def row(self, cursor, values):
-                cursor.row_factory = None
-                return factory_ref() is not None
-
-        cursor = self.con.cursor()
-        cursor.row_factory = Factory().row
-        factory_ref = weakref.ref(cursor.row_factory)
-        self.assertIs(cursor.execute("select 1").fetchone(), True)
 
     def test_delete_cursor_row_factory(self):
         # gh-149738: deleting row_factory should raise an exception
@@ -312,7 +309,7 @@ class TextFactoryTests(MemoryDatabaseMixin, unittest.TestCase):
         austria = "Österreich"
         row = self.con.execute("select ?", (austria,)).fetchone()
         self.assertEqual(type(row[0]), str, "type of row[0] must be unicode")
-        self.assertEndsWith(row[0], "reich", "column must contain original data")
+        self.assertTrue(row[0].endswith("reich"), "column must contain original data")
 
 
 class TextFactoryTestsWithEmbeddedZeroBytes(unittest.TestCase):

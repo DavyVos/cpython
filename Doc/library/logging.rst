@@ -4,6 +4,9 @@
 .. module:: logging
    :synopsis: Flexible event logging system for applications.
 
+.. moduleauthor:: Vinay Sajip <vinay_sajip@red-dove.com>
+.. sectionauthor:: Vinay Sajip <vinay_sajip@red-dove.com>
+
 **Source code:** :source:`Lib/logging/__init__.py`
 
 .. index:: pair: Errors; logging
@@ -690,7 +693,7 @@ Formatter Objects
    :param defaults: A dictionary with default values to use in custom fields.
        For example,
        ``logging.Formatter('%(ip)s %(message)s', defaults={"ip": None})``
-   :type defaults: dict[str, typing.Any]
+   :type defaults: dict[str, Any]
 
    .. versionchanged:: 3.2
       Added the *style* parameter.
@@ -747,14 +750,14 @@ Formatter Objects
       .. versionchanged:: 3.3
          Previously, the default format was hard-coded as in this example:
          ``2010-09-06 22:38:15,292`` where the part before the comma is
-         handled by a strftime format string (``'%Y-%m-%d %H:%M:%S'``), and the
-         part after the comma is a millisecond value. Because strftime does not
+         handled by a strptime format string (``'%Y-%m-%d %H:%M:%S'``), and the
+         part after the comma is a millisecond value. Because strptime does not
          have a format placeholder for milliseconds, the millisecond value is
          appended using another format string, ``'%s,%03d'`` --- and both of these
          format strings have been hardcoded into this method. With the change,
          these strings are defined as class-level attributes which can be
          overridden at the instance level when desired. The names of the
-         attributes are ``default_time_format`` (for the strftime format string)
+         attributes are ``default_time_format`` (for the strptime format string)
          and ``default_msec_format`` (for appending the millisecond value).
 
       .. versionchanged:: 3.9
@@ -1211,7 +1214,7 @@ functions.
    most programs will want to carefully and explicitly control the logging
    configuration, and should therefore prefer creating a module-level logger and
    calling :meth:`Logger.debug` (or other level-specific methods) on it, as
-   described at the beginning of this documentation.
+   described at the beginnning of this documentation.
 
 
 .. function:: info(msg, *args, **kwargs)
@@ -1323,7 +1326,7 @@ functions.
       In Python versions earlier than 3.4, this function could also be passed a
       text level, and would return the corresponding numeric value of the level.
       This undocumented behaviour was considered a mistake, and was removed in
-      Python 3.4, but reinstated in 3.4.2 in order to retain backward compatibility.
+      Python 3.4, but reinstated in 3.4.2 due to retain backward compatibility.
 
 .. function:: getHandlerByName(name)
 
@@ -1348,9 +1351,8 @@ functions.
 
 .. function:: basicConfig(**kwargs)
 
-   Does basic configuration for the logging system by either creating a
-   :class:`StreamHandler` with a default :class:`Formatter`
-   or using the  given *formatter* instance, and adding it to the
+   Does basic configuration for the logging system by creating a
+   :class:`StreamHandler` with a default :class:`Formatter` and adding it to the
    root logger. The functions :func:`debug`, :func:`info`, :func:`warning`,
    :func:`error` and :func:`critical` will call :func:`basicConfig` automatically
    if no handlers are defined for the root logger.
@@ -1435,19 +1437,6 @@ functions.
    |              | which means that it will be treated the     |
    |              | same as passing 'errors'.                   |
    +--------------+---------------------------------------------+
-   | *formatter*  | If specified, set this formatter instance   |
-   |              | (see :ref:`formatter-objects`)              |
-   |              | for all involved handlers.                  |
-   |              | If not specified, the default is to create  |
-   |              | and use an instance of                      |
-   |              | :class:`logging.Formatter` based on         |
-   |              | arguments *format*, *datefmt* and *style*.  |
-   |              | When *formatter* is specified together with |
-   |              | any of the three arguments *format*,        |
-   |              | *datefmt* and *style*, a ``ValueError`` is  |
-   |              | raised to signal that these arguments would |
-   |              | lose meaning otherwise.                     |
-   +--------------+---------------------------------------------+
 
    .. versionchanged:: 3.2
       The *style* argument was added.
@@ -1463,9 +1452,6 @@ functions.
 
    .. versionchanged:: 3.9
       The *encoding* and *errors* arguments were added.
-
-   .. versionchanged:: 3.15
-      The *formatter* argument was added.
 
 .. function:: shutdown()
 
@@ -1548,7 +1534,7 @@ Module-Level Attributes
 Integration with the warnings module
 ------------------------------------
 
-The :func:`captureWarnings` function can be used to integrate :mod:`!logging`
+The :func:`captureWarnings` function can be used to integrate :mod:`logging`
 with the :mod:`warnings` module.
 
 .. function:: captureWarnings(capture)
@@ -1579,7 +1565,7 @@ with the :mod:`warnings` module.
       library.
 
    `Original Python logging package <https://old.red-dove.com/python_logging.html>`_
-      This is the original source for the :mod:`!logging` package.  The version of the
+      This is the original source for the :mod:`logging` package.  The version of the
       package available from this site is suitable for use with Python 1.5.2, 2.1.x
-      and 2.2.x, which do not include the :mod:`!logging` package in the standard
+      and 2.2.x, which do not include the :mod:`logging` package in the standard
       library.

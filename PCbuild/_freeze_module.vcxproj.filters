@@ -19,9 +19,6 @@
     <ClCompile Include="..\Modules\_tracemalloc.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Python\_strptime.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\Python\_warnings.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -37,7 +34,7 @@
     <ClCompile Include="..\Python\ast.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Python\ast_preprocess.c">
+    <ClCompile Include="..\Python\ast_opt.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Python\ast_unparse.c">
@@ -100,9 +97,6 @@
     <ClCompile Include="..\Python\perf_jit_trampoline.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Python\codegen.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\Python\compile.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -161,6 +155,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Python\flowgraph.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Python\formatter_unicode.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Python\frame.c">
@@ -232,15 +229,10 @@
     <ClCompile Include="..\Python\importdl.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Python\index_pool.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\Python\initconfig.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Python\instruction_sequence.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\Python\interpconfig.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -266,12 +258,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Python\jit.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Python\jit_publish.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Objects\lazyimportobject.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Objects\listobject.c">
@@ -334,9 +320,6 @@
     <ClCompile Include="..\Parser\parser.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Parser\parser_invalid.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\Python\parking_lot.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -379,9 +362,6 @@
     <ClCompile Include="..\Python\pystate.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Python\pystats.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\Python\pystrcmp.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -409,9 +389,6 @@
     <ClCompile Include="..\Objects\rangeobject.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Objects\sentinelobject.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\Objects\setobject.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -419,15 +396,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Objects\sliceobject.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Python\remote_debugging.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Python\slots.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Python\slots_generated.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Python\specialize.c">
@@ -469,28 +437,22 @@
     <ClCompile Include="..\Parser\lexer\lexer.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Parser\lexer\layout.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Parser\lexer\number.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Parser\lexer\string.c">
+    <ClCompile Include="..\Parser\lexer\buffer.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Parser\lexer\state.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Parser\tokenizer\decoder.c">
+    <ClCompile Include="..\Parser\tokenizer\string_tokenizer.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Parser\tokenizer\api.c">
+    <ClCompile Include="..\Parser\tokenizer\utf8_tokenizer.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Parser\tokenizer\reader.c">
+    <ClCompile Include="..\Parser\tokenizer\file_tokenizer.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Parser\tokenizer\source.c">
+    <ClCompile Include="..\Parser\tokenizer\readline_tokenizer.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Parser\tokenizer\helpers.c">
@@ -502,28 +464,13 @@
     <ClCompile Include="..\Python\tracemalloc.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Python\typecache.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Python\uniqueid.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\Objects\tupleobject.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Objects\typeobject.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\Objects\unicode_format.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\Objects\unicodectype.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Objects\unicode_formatter.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Objects\unicode_writer.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\Objects\unicodeobject.c">
@@ -558,9 +505,6 @@
     <None Include="..\Lib\zipimport.py">
       <Filter>Python Files</Filter>
     </None>
-    <None Include="..\Lib\_pybuiltins.py">
-      <Filter>Python Files</Filter>
-    </None>
     <None Include="..\Lib\abc.py">
       <Filter>Python Files</Filter>
     </None>
@@ -592,9 +536,6 @@
       <Filter>Python Files</Filter>
     </None>
     <None Include="..\Lib\stat.py">
-      <Filter>Python Files</Filter>
-    </None>
-    <None Include="..\Lib\linecache.py">
       <Filter>Python Files</Filter>
     </None>
     <None Include="..\Lib\importlib\util.py">

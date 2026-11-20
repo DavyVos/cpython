@@ -12,10 +12,12 @@ from analyzer import (
 from generators_common import (
     DEFAULT_INPUT,
     ROOT,
+    root_relative_path,
     write_header,
 )
 from cwriter import CWriter
 from typing import TextIO
+
 
 
 DEFAULT_OUTPUT = ROOT / "Lib/_opcode_metadata.py"
@@ -30,43 +32,35 @@ def get_specialized(analysis: Analysis) -> set[str]:
 
 
 def generate_specializations(analysis: Analysis, out: CWriter) -> None:
-    out.emit("_specializations = frozendict(\n")
+    out.emit("_specializations = {\n")
     for family in analysis.families.values():
-        out.emit(f'{family.name}=(\n')
-        seen = set()
+        out.emit(f'"{family.name}": [\n')
         for member in family.members:
-            if member.name in seen:
-                continue
-            seen.add(member.name)
             out.emit(f'    "{member.name}",\n')
-        out.emit("),\n")
-    out.emit(")\n\n")
+        out.emit("],\n")
+    out.emit("}\n\n")
 
 
 def generate_specialized_opmap(analysis: Analysis, out: CWriter) -> None:
-    out.emit("_specialized_opmap = frozendict(\n")
+    out.emit("_specialized_opmap = {\n")
     names = []
-    seen = set()
     for family in analysis.families.values():
         for member in family.members:
             if member.name == family.name:
                 continue
-            if member.name in seen:
-                continue
-            seen.add(member.name)
             names.append(member.name)
     for name in sorted(names):
-        out.emit(f"{name}={analysis.opmap[name]},\n")
-    out.emit(")\n\n")
+        out.emit(f"'{name}': {analysis.opmap[name]},\n")
+    out.emit("}\n\n")
 
 
 def generate_opmap(analysis: Analysis, out: CWriter) -> None:
     specialized = get_specialized(analysis)
-    out.emit("opmap = frozendict(\n")
+    out.emit("opmap = {\n")
     for inst, op in analysis.opmap.items():
         if inst not in specialized:
-            out.emit(f"{inst}={analysis.opmap[inst]},\n")
-    out.emit(")\n\n")
+            out.emit(f"'{inst}': {analysis.opmap[inst]},\n")
+    out.emit("}\n\n")
 
 
 def generate_py_metadata(

@@ -3,6 +3,8 @@
 IDLE --- Python editor and shell
 ================================
 
+.. moduleauthor:: Guido van Rossum <guido@python.org>
+
 **Source code:** :source:`Lib/idlelib/`
 
 .. index::
@@ -37,7 +39,8 @@ IDLE has the following features:
 
 The IDLE application is implemented in the :mod:`idlelib` package.
 
-.. include:: ../includes/optional-module.rst
+This is an optional module. If it is missing from your copy of CPython, look for documentation from your distributor (that is, whoever provided Python to you).
+If you are the distributor, see Requirements for optional modules.
 
 Menus
 -----
@@ -930,8 +933,6 @@ When running a tkinter program from an IDLE editor, one can comment out
 the mainloop call.  One then gets a shell prompt immediately and can
 interact with the live application.  One just has to remember to
 re-enable the mainloop call when running in standard Python.
-
-.. _idle-no-subprocess:
 
 Running without a subprocess
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,6 +1,12 @@
 
 /* UNIX password file access module */
 
+// Need limited C API version 3.13 for PyMem_RawRealloc()
+#include "pyconfig.h"   // Py_GIL_DISABLED
+#ifndef Py_GIL_DISABLED
+#  define Py_LIMITED_API 0x030d0000
+#endif
+
 #include "Python.h"
 #include "posixmodule.h"
 
@@ -63,11 +69,6 @@ get_pwd_state(PyObject *module)
 
 static struct PyModuleDef pwdmodule;
 
-/* Mutex to protect calls to getpwuid(), getpwnam(), and getpwent().
- * These functions return pointer to static data structure, which
- * may be overwritten by any subsequent calls. */
-static PyMutex pwd_db_mutex = {0};
-
 #define DEFAULT_BUFFER_SIZE 1024
 
 static PyObject *
@@ -121,7 +122,7 @@ error:
 /*[clinic input]
 pwd.getpwuid
 
-    uidobj as uid: uid_t
+    uidobj: object
     /
 
 Return the password database entry for the given numeric user ID.
@@ -130,14 +131,21 @@ See `help(pwd)` for more on password database entries.
 [clinic start generated code]*/
 
 static PyObject *
-pwd_getpwuid_impl(PyObject *module, uid_t uid)
-/*[clinic end generated code: output=631bad376fa670c3 input=506d3a592ef19799]*/
+pwd_getpwuid(PyObject *module, PyObject *uidobj)
+/*[clinic end generated code: output=c4ee1d4d429b86c4 input=ae64d507a1c6d3e8]*/
 {
     PyObject *retval = NULL;
+    uid_t uid;
     int nomem = 0;
     struct passwd *p;
     char *buf = NULL, *buf2 = NULL;
 
+    if (!_Py_Uid_Converter(uidobj, &uid)) {
+        if (PyErr_ExceptionMatches(PyExc_OverflowError))
+            PyErr_Format(PyExc_KeyError,
+                         "getpwuid(): uid not found");
+        return NULL;
+    }
 #ifdef HAVE_GETPWUID_R
     int status;
     Py_ssize_t bufsize;
@@ -174,15 +182,9 @@ pwd_getpwuid_impl(PyObject *module, uid_t uid)
 
     Py_END_ALLOW_THREADS
 #else
-    PyMutex_Lock(&pwd_db_mutex);
-    // The getpwuid() function is not required to be thread-safe.
-    // https://pubs.opengroup.org/onlinepubs/009604499/functions/getpwuid.html
     p = getpwuid(uid);
 #endif
     if (p == NULL) {
-#ifndef HAVE_GETPWUID_R
-        PyMutex_Unlock(&pwd_db_mutex);
-#endif
         PyMem_RawFree(buf);
         if (nomem == 1) {
             return PyErr_NoMemory();
@@ -198,8 +200,6 @@ pwd_getpwuid_impl(PyObject *module, uid_t uid)
     retval = mkpwent(module, p);
 #ifdef HAVE_GETPWUID_R
     PyMem_RawFree(buf);
-#else
-    PyMutex_Unlock(&pwd_db_mutex);
 #endif
     return retval;
 }
@@ -265,15 +265,9 @@ pwd_getpwnam_impl(PyObject *module, PyObject *name)
 
     Py_END_ALLOW_THREADS
 #else
-    PyMutex_Lock(&pwd_db_mutex);
-    // The getpwnam() function is not required to be thread-safe.
-    // https://pubs.opengroup.org/onlinepubs/009604599/functions/getpwnam.html
     p = getpwnam(name_chars);
 #endif
     if (p == NULL) {
-#ifndef HAVE_GETPWNAM_R
-        PyMutex_Unlock(&pwd_db_mutex);
-#endif
         if (nomem == 1) {
             PyErr_NoMemory();
         }
@@ -284,9 +278,6 @@ pwd_getpwnam_impl(PyObject *module, PyObject *name)
         goto out;
     }
     retval = mkpwent(module, p);
-#ifndef HAVE_GETPWNAM_R
-    PyMutex_Unlock(&pwd_db_mutex);
-#endif
 out:
     PyMem_RawFree(buf);
     Py_DECREF(bytes);
@@ -295,7 +286,6 @@ out:
 
 #ifdef HAVE_GETPWENT
 /*[clinic input]
-@permit_long_summary
 pwd.getpwall
 
 Return a list of all available password database entries, in arbitrary order.
@@ -305,37 +295,24 @@ See help(pwd) for more on password database entries.
 
 static PyObject *
 pwd_getpwall_impl(PyObject *module)
-/*[clinic end generated code: output=4853d2f5a0afac8a input=f8145e0d9a79e32c]*/
+/*[clinic end generated code: output=4853d2f5a0afac8a input=d7ecebfd90219b85]*/
 {
     PyObject *d;
     struct passwd *p;
     if ((d = PyList_New(0)) == NULL)
         return NULL;
-
-    PyMutex_Lock(&pwd_db_mutex);
-    int failure = 0;
-    PyObject *v = NULL;
-    // The setpwent(), getpwent() and endpwent() functions are not required to
-    // be thread-safe.
-    // https://pubs.opengroup.org/onlinepubs/009696799/functions/setpwent.html
     setpwent();
     while ((p = getpwent()) != NULL) {
-        v = mkpwent(module, p);
+        PyObject *v = mkpwent(module, p);
         if (v == NULL || PyList_Append(d, v) != 0) {
-            /* NOTE: cannot dec-ref here, while holding the mutex. */
-            failure = 1;
-            goto done;
+            Py_XDECREF(v);
+            Py_DECREF(d);
+            endpwent();
+            return NULL;
         }
         Py_DECREF(v);
     }
-
-done:
     endpwent();
-    PyMutex_Unlock(&pwd_db_mutex);
-    if (failure) {
-        Py_XDECREF(v);
-        Py_CLEAR(d);
-    }
     return d;
 }
 #endif
@@ -365,7 +342,6 @@ pwdmodule_exec(PyObject *module)
 }
 
 static PyModuleDef_Slot pwdmodule_slots[] = {
-    _Py_ABI_SLOT,
     {Py_mod_exec, pwdmodule_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {Py_mod_gil, Py_MOD_GIL_NOT_USED},

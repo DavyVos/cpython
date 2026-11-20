@@ -6,7 +6,6 @@ import doctest
 import unittest
 import weakref
 import inspect
-import textwrap
 import types
 
 from test import support
@@ -83,7 +82,7 @@ class FinalizationTest(unittest.TestCase):
         g = gen()
         next(g)
         g.send(g)
-        self.assertGreaterEqual(sys.getrefcount(g), 2)
+        self.assertGreater(sys.getrefcount(g), 2)
         self.assertFalse(finalized)
         del g
         support.gc_collect()
@@ -112,27 +111,6 @@ class FinalizationTest(unittest.TestCase):
             with self.assertRaises(StopIteration) as cm:
                 gen.send(2)
             self.assertEqual(cm.exception.value, 2)
-
-    def test_generator_resurrect(self):
-        # Test that a resurrected generator still has a valid gi_code
-        resurrected = []
-
-        # Resurrect a generator in a finalizer
-        exec(textwrap.dedent("""
-            def gen():
-                try:
-                    yield
-                except:
-                    resurrected.append(g)
-
-            g = gen()
-            next(g)
-        """), {"resurrected": resurrected})
-
-        support.gc_collect()
-
-        self.assertEqual(len(resurrected), 1)
-        self.assertIsInstance(resurrected[0].gi_code, types.CodeType)
 
     def test_exhausted_generator_frame_cycle(self):
         def g():
@@ -280,28 +258,6 @@ class GeneratorTest(unittest.TestCase):
         #This should not raise
         loop()
 
-    def test_genexpr_only_calls_dunder_iter_once(self):
-
-        class Iterator:
-
-            def __init__(self):
-                self.val = 0
-
-            def __next__(self):
-                if self.val == 2:
-                    raise StopIteration
-                self.val += 1
-                return self.val
-
-            # No __iter__ method
-
-        class C:
-
-            def __iter__(self):
-                return Iterator()
-
-        self.assertEqual([1,2], list(i for i in C()))
-
     def test_close_clears_frame(self):
         # gh-142766: Test that closing a generator clears its frame
         class DetectDelete:
@@ -357,25 +313,21 @@ class ModifyUnderlyingIterableTest(unittest.TestCase):
                 yield x
         return gen(range(10))
 
-    def process_tests(self, get_generator, changes_iterable):
-        if changes_iterable:
-            for obj in self.iterables:
-                g_obj = get_generator(obj)
-                with self.subTest(g_obj=g_obj, obj=obj):
-                    self.assertListEqual(list(g_obj), list(obj))
+    def process_tests(self, get_generator):
+        for obj in self.iterables:
+            g_obj = get_generator(obj)
+            with self.subTest(g_obj=g_obj, obj=obj):
+                self.assertListEqual(list(g_obj), list(obj))
 
-                g_iter = get_generator(iter(obj))
-                with self.subTest(g_iter=g_iter, obj=obj):
-                    self.assertListEqual(list(g_iter), list(obj))
+            g_iter = get_generator(iter(obj))
+            with self.subTest(g_iter=g_iter, obj=obj):
+                self.assertListEqual(list(g_iter), list(obj))
 
         err_regex = "'.*' object is not iterable"
         for obj in self.non_iterables:
             g_obj = get_generator(obj)
             with self.subTest(g_obj=g_obj):
-                if changes_iterable:
-                    self.assertRaisesRegex(TypeError, err_regex, list, g_obj)
-                else:
-                    next(g_obj)
+                self.assertRaisesRegex(TypeError, err_regex, list, g_obj)
 
     def test_modify_f_locals(self):
         def modify_f_locals(g, local, obj):
@@ -388,22 +340,22 @@ class ModifyUnderlyingIterableTest(unittest.TestCase):
         def get_generator_genfunc(obj):
             return modify_f_locals(self.genfunc(), 'it', obj)
 
-        self.process_tests(get_generator_genexpr, False)
-        self.process_tests(get_generator_genfunc, True)
+        self.process_tests(get_generator_genexpr)
+        self.process_tests(get_generator_genfunc)
 
     def test_new_gen_from_gi_code(self):
         def new_gen_from_gi_code(g, obj):
             generator_func = types.FunctionType(g.gi_code, {})
             return generator_func(obj)
 
-        for obj in self.non_iterables:
-            with self.assertRaises(TypeError):
-                new_gen_from_gi_code(self.genexpr(), obj)
+        def get_generator_genexpr(obj):
+            return new_gen_from_gi_code(self.genexpr(), obj)
 
         def get_generator_genfunc(obj):
             return new_gen_from_gi_code(self.genfunc(), obj)
 
-        self.process_tests(get_generator_genfunc, True)
+        self.process_tests(get_generator_genexpr)
+        self.process_tests(get_generator_genfunc)
 
 
 class ExceptionTest(unittest.TestCase):
@@ -906,8 +858,7 @@ class GeneratorStackTraceTest(unittest.TestCase):
         while frame:
             name = frame.f_code.co_name
             # Stop checking frames when we get to our test helper.
-            if (name.startswith('check_') or name.startswith('call_')
-                    or name.startswith('test')):
+            if name.startswith('check_') or name.startswith('call_'):
                 break
 
             names.append(name)
@@ -947,25 +898,6 @@ class GeneratorStackTraceTest(unittest.TestCase):
             gen.throw(RuntimeError)
 
         self.check_yield_from_example(call_throw)
-
-    def test_throw_with_yield_from_custom_generator(self):
-
-        class CustomGen:
-            def __init__(self, test):
-                self.test = test
-            def throw(self, *args):
-                self.test.check_stack_names(sys._getframe(), ['throw', 'g'])
-            def __iter__(self):
-                return self
-            def __next__(self):
-                return 42
-
-        def g(target):
-            yield from target
-
-        gen = g(CustomGen(self))
-        gen.send(None)
-        gen.throw(RuntimeError)
 
 
 class YieldFromTests(unittest.TestCase):
@@ -1174,7 +1106,7 @@ Specification: Generators and Exception Propagation
       File "<stdin>", line 1, in ?
       File "<stdin>", line 2, in g
       File "<stdin>", line 2, in f
-    ZeroDivisionError: division by zero
+    ZeroDivisionError: integer division or modulo by zero
     >>> next(k)  # and the generator cannot be resumed
     Traceback (most recent call last):
       File "<stdin>", line 1, in ?
@@ -1366,7 +1298,7 @@ From the Iterators list, about the types of these things.
 >>> type(i)
 <class 'generator'>
 >>> [s for s in dir(i) if not s.startswith('_')]
-['close', 'gi_code', 'gi_frame', 'gi_running', 'gi_state', 'gi_suspended', 'gi_yieldfrom', 'send', 'throw']
+['close', 'gi_code', 'gi_frame', 'gi_running', 'gi_suspended', 'gi_yieldfrom', 'send', 'throw']
 >>> from test.support import HAVE_DOCSTRINGS
 >>> print(i.__next__.__doc__ if HAVE_DOCSTRINGS else 'Implement next(self).')
 Implement next(self).
@@ -2729,15 +2661,11 @@ Our ill-behaved code should be invoked during GC:
 >>> with support.catch_unraisable_exception() as cm:
 ...     g = f()
 ...     next(g)
-...     gen_repr = repr(g)
 ...     del g
 ...
-...     cm.unraisable.err_msg == (f'Exception ignored while closing '
-...                               f'generator {gen_repr}')
 ...     cm.unraisable.exc_type == RuntimeError
 ...     "generator ignored GeneratorExit" in str(cm.unraisable.exc_value)
 ...     cm.unraisable.exc_traceback is not None
-True
 True
 True
 True
@@ -2845,12 +2773,10 @@ to test.
 ...         invoke("del failed")
 ...
 >>> with support.catch_unraisable_exception() as cm:
-...     leaker = Leaker()
-...     del_repr = repr(type(leaker).__del__)
-...     del leaker
+...     l = Leaker()
+...     del l
 ...
-...     cm.unraisable.err_msg == (f'Exception ignored while '
-...                               f'calling deallocator {del_repr}')
+...     cm.unraisable.object == Leaker.__del__
 ...     cm.unraisable.exc_type == RuntimeError
 ...     str(cm.unraisable.exc_value) == "del failed"
 ...     cm.unraisable.exc_traceback is not None

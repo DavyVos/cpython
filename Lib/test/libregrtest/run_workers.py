@@ -16,14 +16,13 @@ from test import support
 from test.support import os_helper, MS_WINDOWS
 
 from .logger import Logger
-from .reporter import Reporter
 from .result import TestResult, State
 from .results import TestResults
 from .runtests import RunTests, WorkerRunTests, JsonFile, JsonFileType
 from .single import PROGRESS_MIN_TIME
 from .utils import (
     StrPath, TestName,
-    format_duration, print_warning, count, plural, get_process_memory_usage)
+    format_duration, print_warning, count, plural, get_signal_name)
 from .worker import create_worker_process, USE_PROCESS_GROUP
 
 if MS_WINDOWS:
@@ -70,6 +69,7 @@ class MultiprocessIterator:
     def stop(self):
         with self.lock:
             self.tests_iter = None
+
 
 @dataclasses.dataclass(slots=True, frozen=True)
 class MultiprocessResult:
@@ -145,26 +145,14 @@ class WorkerThread(threading.Thread):
             return
         self._killed = True
 
-        use_killpg = USE_PROCESS_GROUP
-        if use_killpg:
-            try:
-                use_killpg = (os.getsid(popen.pid) != os.getsid(0))
-            except PermissionError:
-                # On OpenBSD getsid() is only allowed for a process in the
-                # same session, so the failure means that it is not.
-                use_killpg = True
-            except ProcessLookupError:
-                # The process completed in the meanwhile
-                return
-
-        if use_killpg:
+        if USE_PROCESS_GROUP:
             what = f"{self} process group"
         else:
             what = f"{self} process"
 
         print(f"Kill {what}", file=sys.stderr, flush=True)
         try:
-            if use_killpg:
+            if USE_PROCESS_GROUP:
                 os.killpg(popen.pid, signal.SIGKILL)
             else:
                 popen.kill()
@@ -272,22 +260,16 @@ class WorkerThread(threading.Thread):
                 json_file = JsonFile(json_fd, JsonFileType.UNIX_FD)
         return (json_file, json_tmpfile)
 
-    def create_worker_runtests(self, test_name: TestName,
-                               json_file: JsonFile,
-                               module_name: TestName | None = None,
-                               ) -> WorkerRunTests:
-        kwargs: dict[str, Any] = {}
-
-        if module_name is not None and test_name != module_name:
-            tests = (module_name,)
-            kwargs['match_tests'] = [(test_name, True)]
+    def create_worker_runtests(self, test_name: TestName, json_file: JsonFile) -> WorkerRunTests:
+        tests = (test_name,)
+        if self.runtests.rerun:
+            match_tests = self.runtests.get_match_tests(test_name)
         else:
-            tests = (test_name,)
-            if self.runtests.rerun:
-                match_tests = self.runtests.get_match_tests(test_name)
-                if match_tests:
-                    kwargs['match_tests'] = [(test, True) for test in match_tests]
+            match_tests = None
 
+        kwargs: dict[str, Any] = {}
+        if match_tests:
+            kwargs['match_tests'] = [(test, True) for test in match_tests]
         if self.runtests.output_on_failure:
             kwargs['verbose'] = True
             kwargs['output_on_failure'] = False
@@ -365,13 +347,11 @@ class WorkerThread(threading.Thread):
 
         return (result, stdout)
 
-    def _runtest(self, test_name: TestName,
-                 module_name: TestName | None = None) -> MultiprocessResult:
+    def _runtest(self, test_name: TestName) -> MultiprocessResult:
         with contextlib.ExitStack() as stack:
             stdout_file = self.create_stdout(stack)
             json_file, json_tmpfile = self.create_json_file(stack)
-            worker_runtests = self.create_worker_runtests(
-                test_name, json_file, module_name=module_name)
+            worker_runtests = self.create_worker_runtests(test_name, json_file)
 
             retcode: str | int | None
             retcode, tmp_files = self.run_tmp_files(worker_runtests,
@@ -384,7 +364,7 @@ class WorkerThread(threading.Thread):
                                   err_msg=None,
                                   state=State.TIMEOUT)
             if retcode != 0:
-                name = support.get_signal_name(retcode)
+                name = get_signal_name(retcode)
                 if name:
                     retcode = f"{retcode} ({name})"
                 raise WorkerError(self.test_name, f"Exit code {retcode}", stdout,
@@ -405,38 +385,26 @@ class WorkerThread(threading.Thread):
     def run(self) -> None:
         fail_fast = self.runtests.fail_fast
         fail_env_changed = self.runtests.fail_env_changed
-        single_process_per_case = self.runtests.single_process_per_case
         try:
-            stop = False
-            while not self._stopped and not stop:
+            while not self._stopped:
                 try:
-                    module_name, case_ids = next(self.pending)
+                    test_name = next(self.pending)
                 except StopIteration:
                     break
 
-                # All cases of a group run sequentially on this thread
-                for test_name in case_ids:
-                    if self._stopped:
-                        break
-                    self.start_time = time.monotonic()
-                    self.test_name = test_name
-                    try:
-                        mp_result = self._runtest(
-                            test_name,
-                            module_name if single_process_per_case else None)
-                    except WorkerError as exc:
-                        mp_result = exc.mp_result
-                    finally:
-                        self.test_name = _NOT_RUNNING
-                    mp_result.result.duration = time.monotonic() - self.start_time
-                    if single_process_per_case:
-                        # Report the test case, not the test module
-                        mp_result.result.test_name = test_name
-                    self.output.put((False, mp_result))
+                self.start_time = time.monotonic()
+                self.test_name = test_name
+                try:
+                    mp_result = self._runtest(test_name)
+                except WorkerError as exc:
+                    mp_result = exc.mp_result
+                finally:
+                    self.test_name = _NOT_RUNNING
+                mp_result.result.duration = time.monotonic() - self.start_time
+                self.output.put((False, mp_result))
 
-                    if mp_result.result.must_stop(fail_fast, fail_env_changed):
-                        stop = True
-                        break
+                if mp_result.result.must_stop(fail_fast, fail_env_changed):
+                    break
         except ExitThread:
             pass
         except BaseException:
@@ -479,12 +447,6 @@ class WorkerThread(threading.Thread):
                 print_warning(f"Failed to join {self} in {format_duration(dt)}")
                 break
 
-    def get_mem_usage(self):
-        popen = self._popen
-        if popen is None:
-            return
-        return get_process_memory_usage(popen.pid)
-
 
 def get_running(workers: list[WorkerThread]) -> str | None:
     running: list[str] = []
@@ -503,19 +465,17 @@ def get_running(workers: list[WorkerThread]) -> str | None:
 
 class RunWorkers:
     def __init__(self, num_workers: int, runtests: RunTests,
-                 logger: Logger, results: TestResults,
-                 reporter: Reporter) -> None:
+                 logger: Logger, results: TestResults) -> None:
         self.num_workers = num_workers
         self.runtests = runtests
-        self.logger = logger
         self.log = logger.log
         self.display_progress = logger.display_progress
         self.results: TestResults = results
-        self.reporter = reporter
         self.live_worker_count = 0
 
         self.output: queue.Queue[QueueContent] = queue.Queue()
-        self.pending = MultiprocessIterator(runtests.iter_case_groups())
+        tests_iter = runtests.iter_tests()
+        self.pending = MultiprocessIterator(tests_iter)
         self.timeout = runtests.timeout
         if self.timeout is not None:
             # Rely on faulthandler to kill a worker process. This timouet is
@@ -630,26 +590,12 @@ class RunWorkers:
             stdout = mp_result.worker_stdout
             if stdout:
                 print(stdout, flush=True)
-        # Report after the output: env changed warnings, crash traceback
-        self.reporter.test_result(result)
 
         return result
-
-    def get_mem_usage(self):
-        usage = 0
-        main_mem = get_process_memory_usage(os.getpid())
-        if main_mem:
-            usage += main_mem
-        for worker in self.workers:
-            worker_mem = worker.get_mem_usage()
-            if worker_mem:
-                usage += worker_mem
-        return usage
 
     def run(self) -> None:
         fail_fast = self.runtests.fail_fast
         fail_env_changed = self.runtests.fail_env_changed
-        self.logger.get_mem_usage = self.get_mem_usage
 
         self.start_workers()
 
@@ -674,4 +620,3 @@ class RunWorkers:
             # worker when we exit this function
             self.pending.stop()
             self.stop_workers()
-            self.logger.get_mem_usage = None

@@ -10,12 +10,11 @@ typedef struct {
 } CustomObject;
 
 static void
-Custom_dealloc(PyObject *op)
+Custom_dealloc(CustomObject *self)
 {
-    CustomObject *self = (CustomObject *) op;
     Py_XDECREF(self->first);
     Py_XDECREF(self->last);
-    Py_TYPE(self)->tp_free(self);
+    Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
 static PyObject *
@@ -24,12 +23,12 @@ Custom_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     CustomObject *self;
     self = (CustomObject *) type->tp_alloc(type, 0);
     if (self != NULL) {
-        self->first = Py_GetConstant(Py_CONSTANT_EMPTY_STR);
+        self->first = PyUnicode_FromString("");
         if (self->first == NULL) {
             Py_DECREF(self);
             return NULL;
         }
-        self->last = Py_GetConstant(Py_CONSTANT_EMPTY_STR);
+        self->last = PyUnicode_FromString("");
         if (self->last == NULL) {
             Py_DECREF(self);
             return NULL;
@@ -40,9 +39,8 @@ Custom_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 }
 
 static int
-Custom_init(PyObject *op, PyObject *args, PyObject *kwds)
+Custom_init(CustomObject *self, PyObject *args, PyObject *kwds)
 {
-    CustomObject *self = (CustomObject *) op;
     static char *kwlist[] = {"first", "last", "number", NULL};
     PyObject *first = NULL, *last = NULL;
 
@@ -67,16 +65,14 @@ static PyMemberDef Custom_members[] = {
 };
 
 static PyObject *
-Custom_getfirst(PyObject *op, void *closure)
+Custom_getfirst(CustomObject *self, void *closure)
 {
-    CustomObject *self = (CustomObject *) op;
     return Py_NewRef(self->first);
 }
 
 static int
-Custom_setfirst(PyObject *op, PyObject *value, void *closure)
+Custom_setfirst(CustomObject *self, PyObject *value, void *closure)
 {
-    CustomObject *self = (CustomObject *) op;
     if (value == NULL) {
         PyErr_SetString(PyExc_TypeError, "Cannot delete the first attribute");
         return -1;
@@ -91,16 +87,14 @@ Custom_setfirst(PyObject *op, PyObject *value, void *closure)
 }
 
 static PyObject *
-Custom_getlast(PyObject *op, void *closure)
+Custom_getlast(CustomObject *self, void *closure)
 {
-    CustomObject *self = (CustomObject *) op;
     return Py_NewRef(self->last);
 }
 
 static int
-Custom_setlast(PyObject *op, PyObject *value, void *closure)
+Custom_setlast(CustomObject *self, PyObject *value, void *closure)
 {
-    CustomObject *self = (CustomObject *) op;
     if (value == NULL) {
         PyErr_SetString(PyExc_TypeError, "Cannot delete the last attribute");
         return -1;
@@ -115,22 +109,21 @@ Custom_setlast(PyObject *op, PyObject *value, void *closure)
 }
 
 static PyGetSetDef Custom_getsetters[] = {
-    {"first", Custom_getfirst, Custom_setfirst,
+    {"first", (getter) Custom_getfirst, (setter) Custom_setfirst,
      "first name", NULL},
-    {"last", Custom_getlast, Custom_setlast,
+    {"last", (getter) Custom_getlast, (setter) Custom_setlast,
      "last name", NULL},
     {NULL}  /* Sentinel */
 };
 
 static PyObject *
-Custom_name(PyObject *op, PyObject *Py_UNUSED(dummy))
+Custom_name(CustomObject *self, PyObject *Py_UNUSED(ignored))
 {
-    CustomObject *self = (CustomObject *) op;
     return PyUnicode_FromFormat("%S %S", self->first, self->last);
 }
 
 static PyMethodDef Custom_methods[] = {
-    {"name", Custom_name, METH_NOARGS,
+    {"name", (PyCFunction) Custom_name, METH_NOARGS,
      "Return the name, combining the first and last name"
     },
     {NULL}  /* Sentinel */
@@ -144,8 +137,8 @@ static PyTypeObject CustomType = {
     .tp_itemsize = 0,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
     .tp_new = Custom_new,
-    .tp_init = Custom_init,
-    .tp_dealloc = Custom_dealloc,
+    .tp_init = (initproc) Custom_init,
+    .tp_dealloc = (destructor) Custom_dealloc,
     .tp_members = Custom_members,
     .tp_methods = Custom_methods,
     .tp_getset = Custom_getsetters,

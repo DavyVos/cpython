@@ -13,16 +13,16 @@
 Introduction
 ------------
 
-:mod:`!multiprocessing` is a package that supports spawning processes using an
-API similar to the :mod:`threading` module.  The :mod:`!multiprocessing` package
+:mod:`multiprocessing` is a package that supports spawning processes using an
+API similar to the :mod:`threading` module.  The :mod:`multiprocessing` package
 offers both local and remote concurrency, effectively side-stepping the
 :term:`Global Interpreter Lock <global interpreter lock>` by using
 subprocesses instead of threads.  Due
-to this, the :mod:`!multiprocessing` module allows the programmer to fully
+to this, the :mod:`multiprocessing` module allows the programmer to fully
 leverage multiple processors on a given machine.  It runs on both POSIX and
 Windows.
 
-The :mod:`!multiprocessing` module also introduces the
+The :mod:`multiprocessing` module also introduces the
 :class:`~multiprocessing.pool.Pool` object which offers a convenient means of
 parallelizing the execution of a function across multiple input values,
 distributing the input data across processes (data parallelism).  The following
@@ -43,7 +43,7 @@ will print to standard output ::
 
    [1, 4, 9]
 
-The :mod:`!multiprocessing` module also introduces APIs which do not have
+The :mod:`multiprocessing` module also introduces APIs which do not have
 analogs in the :mod:`threading` module, like the ability to :meth:`terminate
 <Process.terminate>`, :meth:`interrupt <Process.interrupt>` or :meth:`kill
 <Process.kill>` a running process.
@@ -61,7 +61,7 @@ analogs in the :mod:`threading` module, like the ability to :meth:`terminate
 The :class:`Process` class
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In :mod:`!multiprocessing`, processes are spawned by creating a :class:`Process`
+In :mod:`multiprocessing`, processes are spawned by creating a :class:`Process`
 object and then calling its :meth:`~Process.start` method.  :class:`Process`
 follows the API of :class:`threading.Thread`.  A trivial example of a
 multiprocess program is ::
@@ -111,7 +111,7 @@ trying to locate the *f* function in the ``__main__`` module.
 Contexts and start methods
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Depending on the platform, :mod:`!multiprocessing` supports three ways
+Depending on the platform, :mod:`multiprocessing` supports three ways
 to start a process.  These *start methods* are
 
   .. _multiprocessing-start-method-spawn:
@@ -135,11 +135,11 @@ to start a process.  These *start methods* are
     inherited by the child process.  Note that safely forking a
     multithreaded process is problematic.
 
-    Available on POSIX systems.
+    Available on POSIX systems.  Currently the default on POSIX except macOS.
 
-    .. versionchanged:: 3.14
-       This is no longer the default start method on any platform.
-       Code that requires *fork* must explicitly specify that via
+    .. note::
+       The default start method will change away from *fork* in Python 3.14.
+       Code that requires *fork* should explicitly specify that via
        :func:`get_context` or :func:`set_start_method`.
 
     .. versionchanged:: 3.12
@@ -159,21 +159,9 @@ to start a process.  These *start methods* are
     side-effect so it is generally safe for it to use :func:`os.fork`.
     No unnecessary resources are inherited.
 
-    Available on POSIX platforms which support passing file descriptors over
-    Unix pipes such as Linux.  The default on those, unless there is no
-    writable temporary directory (see :func:`tempfile.gettempdir`), which
-    the fork server requires; *spawn* is the default in that case.
+    Available on POSIX platforms which support passing file descriptors
+    over Unix pipes such as Linux.
 
-    .. versionchanged:: 3.14
-       This became the default start method on POSIX platforms.
-
-    .. versionchanged:: 3.16
-       *spawn* is now the default start method when there is no writable
-       temporary directory, for example on a read-only file system.
-       Previously *forkserver* remained the default there and starting a
-       process failed with an :exc:`OSError`.  The default is determined
-       when it is first needed rather than when :mod:`!multiprocessing`
-       is imported.  See :gh:`155717`.
 
 .. versionchanged:: 3.4
    *spawn* added on all POSIX platforms, and *forkserver* added for
@@ -186,13 +174,6 @@ to start a process.  These *start methods* are
    On macOS, the *spawn* start method is now the default.  The *fork* start
    method should be considered unsafe as it can lead to crashes of the
    subprocess as macOS system libraries may start threads. See :issue:`33725`.
-
-.. versionchanged:: 3.14
-
-   On POSIX platforms the default start method was changed from *fork* to
-   *forkserver* to retain the performance but avoid common multithreaded
-   process incompatibilities. See :gh:`84559`.
-
 
 On POSIX using the *spawn* or *forkserver* start methods will also
 start a *resource tracker* process which tracks the unlinked named
@@ -250,7 +231,7 @@ processes for a different context.  In particular, locks created using
 the *fork* context cannot be passed to processes started using the
 *spawn* or *forkserver* start methods.
 
-Libraries using :mod:`!multiprocessing` or
+Libraries using :mod:`multiprocessing` or
 :class:`~concurrent.futures.ProcessPoolExecutor` should be designed to allow
 their users to provide their own multiprocessing context.  Using a specific
 context of your own within a library can lead to incompatibilities with the
@@ -268,7 +249,7 @@ requires a specific start method.
 Exchanging objects between processes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-:mod:`!multiprocessing` supports two types of communication channel between
+:mod:`multiprocessing` supports two types of communication channel between
 processes:
 
 **Queues**
@@ -289,7 +270,7 @@ processes:
           p.join()
 
    Queues are thread and process safe.
-   Any object put into a :mod:`!multiprocessing` queue will be serialized.
+   Any object put into a :mod:`~multiprocessing` queue will be serialized.
 
 **Pipes**
 
@@ -323,7 +304,7 @@ processes:
 Synchronization between processes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-:mod:`!multiprocessing` contains equivalents of all the synchronization
+:mod:`multiprocessing` contains equivalents of all the synchronization
 primitives from :mod:`threading`.  For instance one can use a lock to ensure
 that only one process prints to standard output at a time::
 
@@ -354,7 +335,7 @@ avoid using shared state as far as possible.  This is particularly true when
 using multiple processes.
 
 However, if you really do need to use some shared data then
-:mod:`!multiprocessing` provides a couple of ways of doing so.
+:mod:`multiprocessing` provides a couple of ways of doing so.
 
 **Shared memory**
 
@@ -400,40 +381,35 @@ However, if you really do need to use some shared data then
    proxies.
 
    A manager returned by :func:`Manager` will support types
-   :class:`list`, :class:`dict`, :class:`set`, :class:`~managers.Namespace`, :class:`Lock`,
+   :class:`list`, :class:`dict`, :class:`~managers.Namespace`, :class:`Lock`,
    :class:`RLock`, :class:`Semaphore`, :class:`BoundedSemaphore`,
    :class:`Condition`, :class:`Event`, :class:`Barrier`,
    :class:`Queue`, :class:`Value` and :class:`Array`.  For example, ::
 
       from multiprocessing import Process, Manager
 
-      def f(d, l, s):
+      def f(d, l):
           d[1] = '1'
           d['2'] = 2
           d[0.25] = None
           l.reverse()
-          s.add('a')
-          s.add('b')
 
       if __name__ == '__main__':
           with Manager() as manager:
               d = manager.dict()
               l = manager.list(range(10))
-              s = manager.set()
 
-              p = Process(target=f, args=(d, l, s))
+              p = Process(target=f, args=(d, l))
               p.start()
               p.join()
 
               print(d)
               print(l)
-              print(s)
 
    will print ::
 
        {0.25: None, 1: '1', '2': 2}
        [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
-       {'a', 'b'}
 
    Server process managers are more flexible than using shared memory objects
    because they can be made to support arbitrary object types.  Also, a single
@@ -528,7 +504,7 @@ process which created it.
 Reference
 ---------
 
-The :mod:`!multiprocessing` package mostly replicates the API of the
+The :mod:`multiprocessing` package mostly replicates the API of the
 :mod:`threading` module.
 
 .. _global-start-method:
@@ -714,7 +690,7 @@ or creating these objects.
 
       The process's authentication key (a byte string).
 
-      When :mod:`!multiprocessing` is initialized the main process is assigned a
+      When :mod:`multiprocessing` is initialized the main process is assigned a
       random string using :func:`os.urandom`.
 
       When a :class:`Process` object is created, it will inherit the
@@ -737,25 +713,6 @@ or creating these objects.
       a file descriptor usable with primitives from the :mod:`select` module.
 
       .. versionadded:: 3.3
-
-   .. method:: interrupt()
-
-      Terminate the process. Works on POSIX using the :py:const:`~signal.SIGINT` signal.
-      Behavior on Windows is undefined.
-
-      By default, this terminates the child process by raising :exc:`KeyboardInterrupt`.
-      This behavior can be altered by setting the respective signal handler in the child
-      process :func:`signal.signal` for :py:const:`~signal.SIGINT`.
-
-      Note: if the child process catches and discards :exc:`KeyboardInterrupt`, the
-      process will not be terminated.
-
-      Note: the default behavior will also set :attr:`exitcode` to ``1`` as if an
-      uncaught exception was raised in the child process. To have a different
-      :attr:`exitcode` you may simply catch :exc:`KeyboardInterrupt` and call
-      ``exit(your_code)``.
-
-      .. versionadded:: 3.14
 
    .. method:: terminate()
 
@@ -815,7 +772,7 @@ or creating these objects.
 
 .. exception:: ProcessError
 
-   The base class of all :mod:`!multiprocessing` exceptions.
+   The base class of all :mod:`multiprocessing` exceptions.
 
 .. exception:: BufferTooShort
 
@@ -855,19 +812,19 @@ If you use :class:`JoinableQueue` then you **must** call
 semaphore used to count the number of unfinished tasks may eventually overflow,
 raising an exception.
 
-One difference from other Python queue implementations, is that :mod:`!multiprocessing`
+One difference from other Python queue implementations, is that :mod:`multiprocessing`
 queues serializes all objects that are put into them using :mod:`pickle`.
-The object returned by the get method is a re-created object that does not share
-memory with the original object.
+The object return by the get method is a re-created object that does not share memory
+with the original object.
 
 Note that one can also create a shared queue by using a manager object -- see
 :ref:`multiprocessing-managers`.
 
 .. note::
 
-   :mod:`!multiprocessing` uses the usual :exc:`queue.Empty` and
+   :mod:`multiprocessing` uses the usual :exc:`queue.Empty` and
    :exc:`queue.Full` exceptions to signal a timeout.  They are not available in
-   the :mod:`!multiprocessing` namespace so you need to import them from
+   the :mod:`multiprocessing` namespace so you need to import them from
    :mod:`queue`.
 
 .. note::
@@ -915,7 +872,7 @@ For an example of the usage of queues for interprocess communication see
 :ref:`multiprocessing-examples`.
 
 
-.. function:: Pipe(duplex=True)
+.. function:: Pipe([duplex])
 
    Returns a pair ``(conn1, conn2)`` of
    :class:`~multiprocessing.connection.Connection` objects representing the
@@ -1163,7 +1120,7 @@ Miscellaneous
 
 .. function:: freeze_support()
 
-   Add support for when a program which uses :mod:`!multiprocessing` has been
+   Add support for when a program which uses :mod:`multiprocessing` has been
    frozen to produce an executable.  (Has been tested with **py2exe**,
    **PyInstaller** and **cx_Freeze**.)
 
@@ -1199,7 +1156,7 @@ Miscellaneous
 .. function:: get_context(method=None)
 
    Return a context object which has the same attributes as the
-   :mod:`!multiprocessing` module.
+   :mod:`multiprocessing` module.
 
    If *method* is ``None`` then the default context is returned. Note that if
    the global start method has not been set, this will set it to the system default
@@ -1245,31 +1202,21 @@ Miscellaneous
    .. versionchanged:: 3.11
       Accepts a :term:`path-like object`.
 
-.. function:: set_forkserver_preload(module_names, *, on_error='ignore')
+.. function:: set_forkserver_preload(module_names)
 
    Set a list of module names for the forkserver main process to attempt to
    import so that their already imported state is inherited by forked
-   processes. This can be used as a performance enhancement to avoid repeated
-   work in every process.
+   processes. Any :exc:`ImportError` when doing so is silently ignored.
+   This can be used as a performance enhancement to avoid repeated work
+   in every process.
 
    For this to work, it must be called before the forkserver process has been
    launched (before creating a :class:`Pool` or starting a :class:`Process`).
-
-   The *on_error* parameter controls how :exc:`ImportError` exceptions during
-   module preloading are handled: ``"ignore"`` (default) silently ignores
-   failures, ``"warn"`` causes the forkserver subprocess to emit an
-   :exc:`ImportWarning` to stderr, and ``"fail"`` causes the forkserver
-   subprocess to exit with the exception traceback on stderr, making
-   subsequent process creation fail with :exc:`EOFError` or
-   :exc:`ConnectionError`.
 
    Only meaningful when using the ``'forkserver'`` start method.
    See :ref:`multiprocessing-start-methods`.
 
    .. versionadded:: 3.4
-
-   .. versionchanged:: 3.15
-      Added the *on_error* parameter.
 
 .. function:: set_start_method(method, force=False)
 
@@ -1290,7 +1237,7 @@ Miscellaneous
 
 .. note::
 
-   :mod:`!multiprocessing` contains no analogues of
+   :mod:`multiprocessing` contains no analogues of
    :func:`threading.active_count`, :func:`threading.enumerate`,
    :func:`threading.settrace`, :func:`threading.setprofile`,
    :class:`threading.Timer`, or :class:`threading.local`.
@@ -1469,12 +1416,6 @@ object -- see :ref:`multiprocessing-managers`.
    A solitary difference from its close analog exists: its ``acquire`` method's
    first argument is named *block*, as is consistent with :meth:`Lock.acquire`.
 
-   .. method:: locked()
-
-      Return a boolean indicating whether this object is locked right now.
-
-      .. versionadded:: 3.14
-
    .. note::
       On macOS, this is indistinguishable from :class:`Semaphore` because
       ``sem_getvalue()`` is not implemented on that platform.
@@ -1484,7 +1425,7 @@ object -- see :ref:`multiprocessing-managers`.
    A condition variable: an alias for :class:`threading.Condition`.
 
    If *lock* is specified then it should be a :class:`Lock` or :class:`RLock`
-   object from :mod:`!multiprocessing`.
+   object from :mod:`multiprocessing`.
 
    Instantiating this class may set the global start method. See
    :ref:`global-start-method` for more details.
@@ -1554,13 +1495,6 @@ object -- see :ref:`multiprocessing-managers`.
       when invoked on an unlocked lock, a :exc:`ValueError` is raised.
 
 
-   .. method:: locked()
-
-      Return a boolean indicating whether this object is locked right now.
-
-      .. versionadded:: 3.14
-
-
 .. class:: RLock()
 
    A recursive lock object: a close analog of :class:`threading.RLock`.  A
@@ -1624,13 +1558,6 @@ object -- see :ref:`multiprocessing-managers`.
       differs from the implemented behavior in :meth:`threading.RLock.release`.
 
 
-   .. method:: locked()
-
-      Return a boolean indicating whether this object is locked right now.
-
-      .. versionadded:: 3.14
-
-
 .. class:: Semaphore([value])
 
    A semaphore object: a close analog of :class:`threading.Semaphore`.
@@ -1640,22 +1567,6 @@ object -- see :ref:`multiprocessing-managers`.
 
    A solitary difference from its close analog exists: its ``acquire`` method's
    first argument is named *block*, as is consistent with :meth:`Lock.acquire`.
-
-
-   .. method:: get_value()
-
-      Return the current value of semaphore.
-
-      Note that this may raise :exc:`NotImplementedError` on platforms like
-      macOS where ``sem_getvalue()`` is not implemented.
-
-
-   .. method:: locked()
-
-      Return a boolean indicating whether this object is locked right now.
-
-      .. versionadded:: 3.14
-
 
 .. note::
 
@@ -1739,13 +1650,13 @@ inherited by child processes.
    programming languages handle strings.
 
 
-The :mod:`!multiprocessing.sharedctypes` module
-"""""""""""""""""""""""""""""""""""""""""""""""
+The :mod:`multiprocessing.sharedctypes` module
+""""""""""""""""""""""""""""""""""""""""""""""
 
 .. module:: multiprocessing.sharedctypes
    :synopsis: Allocate ctypes objects from shared memory.
 
-The :mod:`!multiprocessing.sharedctypes` module provides functions for allocating
+The :mod:`multiprocessing.sharedctypes` module provides functions for allocating
 :mod:`ctypes` objects from shared memory which can be inherited by child
 processes.
 
@@ -2135,15 +2046,6 @@ their parent process exits.  The manager classes are defined in the
 
       Create a shared :class:`list` object and return a proxy for it.
 
-   .. method:: set()
-               set(sequence)
-               set(mapping)
-
-      Create a shared :class:`set` object and return a proxy for it.
-
-      .. versionadded:: 3.14
-         :class:`set` support was added.
-
    .. versionchanged:: 3.6
       Shared objects are capable of being nested.  For example, a shared
       container object such as a shared list can contain other shared objects
@@ -2345,7 +2247,7 @@ demonstrates a level of control over the synchronization.
 
 .. note::
 
-   The proxy types in :mod:`!multiprocessing` do nothing to support comparisons
+   The proxy types in :mod:`multiprocessing` do nothing to support comparisons
    by value.  So, for instance, we have:
 
    .. doctest::
@@ -2462,11 +2364,10 @@ with the :class:`Pool` class.
    the process which created the pool.
 
    .. warning::
-      :class:`~multiprocessing.pool.Pool` objects have internal resources that
-      need to be properly managed (like any other resource) by using the pool as
-      a context manager or by calling :meth:`close` and :meth:`terminate`
-      manually. Failure to do this can lead to the process hanging on
-      finalization.
+      :class:`multiprocessing.pool` objects have internal resources that need to be
+      properly managed (like any other resource) by using the pool as a context manager
+      or by calling :meth:`close` and :meth:`terminate` manually. Failure to do this
+      can lead to the process hanging on finalization.
 
       Note that it is **not correct** to rely on the garbage collector to destroy the pool
       as CPython does not assure that the finalizer of the pool will be called
@@ -2547,7 +2448,7 @@ with the :class:`Pool` class.
       Callbacks should complete immediately since otherwise the thread which
       handles the results will get blocked.
 
-   .. method:: imap(func, iterable, chunksize=1, *, buffersize=None)
+   .. method:: imap(func, iterable[, chunksize])
 
       An iterator-based version of :meth:`.map`.
 
@@ -2561,26 +2462,11 @@ with the :class:`Pool` class.
       ``next(timeout)`` will raise :exc:`multiprocessing.TimeoutError` if the
       result cannot be returned within *timeout* seconds.
 
-      The *iterable* is collected immediately rather than lazily, unless a
-      *buffersize* is specified to limit the number of submitted tasks whose
-      results have not yet been yielded. If the buffer is full, iteration over
-      the *iterables* pauses until a result is yielded from the buffer.
-      To fully utilize pool's capacity when using this feature,
-      set *buffersize* at least to the number of processes in pool
-      (to consume *iterable* as you go), or even higher
-      (to prefetch the next ``N=buffersize-processes`` arguments).
-
-      .. versionchanged:: 3.16
-         Added the *buffersize* parameter.
-
-   .. method:: imap_unordered(func, iterable, chunksize=1, *, buffersize=None)
+   .. method:: imap_unordered(func, iterable[, chunksize])
 
       The same as :meth:`imap` except that the ordering of the results from the
       returned iterator should be considered arbitrary.  (Only when there is
       only one worker process is the order guaranteed to be "correct".)
-
-      .. versionchanged:: 3.16
-         Added the *buffersize* parameter.
 
    .. method:: starmap(func, iterable[, chunksize])
 
@@ -2688,7 +2574,7 @@ Usually message passing between processes is done using queues or by using
 :class:`~Connection` objects returned by
 :func:`~multiprocessing.Pipe`.
 
-However, the :mod:`!multiprocessing.connection` module allows some extra
+However, the :mod:`multiprocessing.connection` module allows some extra
 flexibility.  It basically gives a high level message oriented API for dealing
 with sockets or Windows named pipes.  It also has support for *digest
 authentication* using the :mod:`hmac` module, and for polling
@@ -2750,7 +2636,7 @@ multiple connections at the same time.
    assumed to be the fastest available.  See
    :ref:`multiprocessing-address-formats`.  Note that if *family* is
    ``'AF_UNIX'`` and address is ``None`` then the socket will be created in a
-   private temporary directory created using :func:`tempfile.mkdtemp`.
+   private temporary directory created using :func:`tempfile.mkstemp`.
 
    If the listener object uses a socket then *backlog* (1 by default) is passed
    to the :meth:`~socket.socket.listen` method of the socket once it has been
@@ -2967,7 +2853,7 @@ handler type) for messages from different processes to get mixed up.
 .. currentmodule:: multiprocessing
 .. function:: get_logger()
 
-   Returns the logger used by :mod:`!multiprocessing`.  If necessary, a new one
+   Returns the logger used by :mod:`multiprocessing`.  If necessary, a new one
    will be created.
 
    When first created the logger has level :const:`logging.NOTSET` and no
@@ -3005,18 +2891,18 @@ Below is an example session with logging turned on::
 For a full table of logging levels, see the :mod:`logging` module.
 
 
-The :mod:`!multiprocessing.dummy` module
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+The :mod:`multiprocessing.dummy` module
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. module:: multiprocessing.dummy
    :synopsis: Dumb wrapper around threading.
 
-:mod:`!multiprocessing.dummy` replicates the API of :mod:`!multiprocessing` but is
+:mod:`multiprocessing.dummy` replicates the API of :mod:`multiprocessing` but is
 no more than a wrapper around the :mod:`threading` module.
 
 .. currentmodule:: multiprocessing.pool
 
-In particular, the ``Pool`` function provided by :mod:`!multiprocessing.dummy`
+In particular, the ``Pool`` function provided by :mod:`multiprocessing.dummy`
 returns an instance of :class:`ThreadPool`, which is a subclass of
 :class:`Pool` that supports all the same method calls but uses a pool of
 worker threads rather than worker processes.
@@ -3061,7 +2947,7 @@ Programming guidelines
 ----------------------
 
 There are certain guidelines and idioms which should be adhered to when using
-:mod:`!multiprocessing`.
+:mod:`multiprocessing`.
 
 
 All start methods
@@ -3102,7 +2988,7 @@ Joining zombie processes
 Better to inherit than pickle/unpickle
 
     When using the *spawn* or *forkserver* start methods many types
-    from :mod:`!multiprocessing` need to be picklable so that child
+    from :mod:`multiprocessing` need to be picklable so that child
     processes can use them.  However, one should generally avoid
     sending shared objects to other processes using pipes or queues.
     Instead you should arrange the program so that a process which
@@ -3192,7 +3078,7 @@ Explicitly pass resources to child processes
 
 Beware of replacing :data:`sys.stdin` with a "file like object"
 
-    :mod:`!multiprocessing` originally unconditionally called::
+    :mod:`multiprocessing` originally unconditionally called::
 
         os.close(sys.stdin.fileno())
 

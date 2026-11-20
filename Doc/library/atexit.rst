@@ -4,6 +4,9 @@
 .. module:: atexit
    :synopsis: Register and execute cleanup functions.
 
+.. moduleauthor:: Skip Montanaro <skip.montanaro@gmail.com>
+.. sectionauthor:: Skip Montanaro <skip.montanaro@gmail.com>
+
 --------------
 
 The :mod:`!atexit` module defines functions to register and unregister
@@ -26,8 +29,7 @@ be raised is re-raised.
 
 In programs that use multiple interpreters, each interpreter has its own stack
 of exit handlers, which are executed when the interpreter shuts down
-(for example, with :meth:`concurrent.interpreters.Interpreter.close` or the
-C API :c:func:`Py_EndInterpreter`).
+(for example, with the C API function :c:func:`Py_EndInterpreter`).
 Registration functions in this module only affect the interpreter they are
 called from.
 
@@ -71,7 +73,7 @@ a cleanup function is undefined.
    Remove *func* from the list of exit handlers.
    :func:`unregister` silently does nothing if *func* was not previously
    registered.  If *func* has been registered more than once, every occurrence
-   of that function in the :mod:`!atexit` call stack will be removed.  Equality
+   of that function in the :mod:`atexit` call stack will be removed.  Equality
    comparisons (``==``) are used internally during unregistration, so function
    references do not need to have matching identities.
 
@@ -79,14 +81,14 @@ a cleanup function is undefined.
 .. seealso::
 
    Module :mod:`readline`
-      Useful example of :mod:`!atexit` to read and write :mod:`readline` history
+      Useful example of :mod:`atexit` to read and write :mod:`readline` history
       files.
 
 
 .. _atexit-example:
 
-:mod:`!atexit` Example
-----------------------
+:mod:`atexit` Example
+---------------------
 
 The following simple example demonstrates how a module can initialize a counter
 from a file when it is imported and save the counter's updated value

@@ -82,7 +82,7 @@ open_file(PyObject *filename, int *closeit)
         }
         return stdin;
     }
-    return Py_fopen(filename, "r");
+    return _Py_fopen_obj(filename, "r");
 }
 
 

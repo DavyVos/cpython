@@ -7,7 +7,6 @@
 #include "Python.h"
 #include "pycore_gc.h"
 #include "pycore_object.h"      // _PyObject_IS_GC()
-#include "pycore_pyatomic_ft_wrappers.h"  // FT_ATOMIC_LOAD_INT_RELAXED()
 #include "pycore_pystate.h"     // _PyInterpreterState_GET()
 
 typedef struct _gc_runtime_state GCState;
@@ -117,7 +116,7 @@ gc_set_debug_impl(PyObject *module, int flags)
 /*[clinic end generated code: output=7c8366575486b228 input=5e5ce15e84fbed15]*/
 {
     GCState *gcstate = get_gc_state();
-    FT_ATOMIC_STORE_INT_RELAXED(gcstate->debug, flags);
+    gcstate->debug = flags;
     Py_RETURN_NONE;
 }
 
@@ -132,7 +131,7 @@ gc_get_debug_impl(PyObject *module)
 /*[clinic end generated code: output=91242f3506cd1e50 input=91a101e1c3b98366]*/
 {
     GCState *gcstate = get_gc_state();
-    return FT_ATOMIC_LOAD_INT_RELAXED(gcstate->debug);
+    return gcstate->debug;
 }
 
 /*[clinic input]
@@ -159,26 +158,18 @@ gc_set_threshold_impl(PyObject *module, int threshold0, int group_right_1,
 {
     GCState *gcstate = get_gc_state();
 
-#ifndef Py_GIL_DISABLED
     gcstate->generations[0].threshold = threshold0;
     if (group_right_1) {
         gcstate->generations[1].threshold = threshold1;
     }
     if (group_right_2) {
         gcstate->generations[2].threshold = threshold2;
+
+        /* generations higher than 2 get the same threshold */
+        for (int i = 3; i < NUM_GENERATIONS; i++) {
+            gcstate->generations[i].threshold = gcstate->generations[2].threshold;
+        }
     }
-#else
-    PyInterpreterState *interp = _PyInterpreterState_GET();
-    _PyEval_StopTheWorld(interp);
-    gcstate->young.threshold = threshold0;
-    if (group_right_1) {
-        gcstate->old[0].threshold = threshold1;
-    }
-    if (group_right_2) {
-        gcstate->old[1].threshold = threshold2;
-    }
-    _PyEval_StartTheWorld(interp);
-#endif
     Py_RETURN_NONE;
 }
 
@@ -193,17 +184,10 @@ gc_get_threshold_impl(PyObject *module)
 /*[clinic end generated code: output=7902bc9f41ecbbd8 input=286d79918034d6e6]*/
 {
     GCState *gcstate = get_gc_state();
-#ifndef Py_GIL_DISABLED
     return Py_BuildValue("(iii)",
                          gcstate->generations[0].threshold,
                          gcstate->generations[1].threshold,
                          gcstate->generations[2].threshold);
-#else
-    return Py_BuildValue("(iii)",
-                         gcstate->young.threshold,
-                         gcstate->old[0].threshold,
-                         gcstate->old[1].threshold);
-#endif
 }
 
 /*[clinic input]
@@ -222,45 +206,35 @@ gc_get_count_impl(PyObject *module)
     _PyThreadStateImpl *tstate = (_PyThreadStateImpl *)_PyThreadState_GET();
     struct _gc_thread_state *gc = &tstate->gc;
 
-    // Don't flush: record_allocation() checks the threshold only when it fills.
-    int young = _Py_atomic_load_int_relaxed(&gcstate->young.count);
-    young += (int)gc->alloc_count;
-    if (young < 0) {
-        young = 0;
-    }
+    // Flush the local allocation count to the global count
+    _Py_atomic_add_int(&gcstate->generations[0].count, (int)gc->alloc_count);
+    gc->alloc_count = 0;
 #endif
 
-#ifndef Py_GIL_DISABLED
     return Py_BuildValue("(iii)",
                          gcstate->generations[0].count,
                          gcstate->generations[1].count,
                          gcstate->generations[2].count);
-#else
-    return Py_BuildValue("(iii)",
-                         young,
-                         gcstate->old[0].count,
-                         gcstate->old[1].count);
-#endif
 }
 
 /*[clinic input]
 gc.get_referrers
 
-    *objs: tuple
+    *objs as args: object
 
 Return the list of objects that directly refer to any of 'objs'.
 [clinic start generated code]*/
 
 static PyObject *
-gc_get_referrers_impl(PyObject *module, PyObject *objs)
-/*[clinic end generated code: output=929d6dff26f609b9 input=9102be7ebee69ee3]*/
+gc_get_referrers_impl(PyObject *module, PyObject *args)
+/*[clinic end generated code: output=296a09587f6a86b5 input=bae96961b14a0922]*/
 {
-    if (PySys_Audit("gc.get_referrers", "(O)", objs) < 0) {
+    if (PySys_Audit("gc.get_referrers", "(O)", args) < 0) {
         return NULL;
     }
 
     PyInterpreterState *interp = _PyInterpreterState_GET();
-    return _PyGC_GetReferrers(interp, objs);
+    return _PyGC_GetReferrers(interp, args);
 }
 
 /* Append obj to list; return true if error (out of memory), false if OK. */
@@ -294,28 +268,27 @@ append_referrents(PyObject *result, PyObject *args)
 /*[clinic input]
 gc.get_referents
 
-    *objs: tuple
+    *objs as args: object
 
 Return the list of objects that are directly referred to by 'objs'.
 [clinic start generated code]*/
 
 static PyObject *
-gc_get_referents_impl(PyObject *module, PyObject *objs)
-/*[clinic end generated code: output=6dfde40cd1588e1d input=55c078a6d0248fe0]*/
+gc_get_referents_impl(PyObject *module, PyObject *args)
+/*[clinic end generated code: output=d47dc02cefd06fe8 input=b3ceab0c34038cbf]*/
 {
-    if (PySys_Audit("gc.get_referents", "(O)", objs) < 0) {
+    if (PySys_Audit("gc.get_referents", "(O)", args) < 0) {
         return NULL;
     }
     PyInterpreterState *interp = _PyInterpreterState_GET();
     PyObject *result = PyList_New(0);
 
-    if (result == NULL) {
+    if (result == NULL)
         return NULL;
-    }
 
     // NOTE: stop the world is a no-op in default build
     _PyEval_StopTheWorld(interp);
-    int err = append_referrents(result, objs);
+    int err = append_referrents(result, args);
     _PyEval_StartTheWorld(interp);
 
     if (err < 0) {
@@ -326,7 +299,6 @@ gc_get_referents_impl(PyObject *module, PyObject *objs)
 }
 
 /*[clinic input]
-@permit_long_summary
 gc.get_objects
     generation: Py_ssize_t(accept={int, NoneType}, c_default="-1") = None
         Generation to extract the objects from.
@@ -339,7 +311,7 @@ collector that are in that generation.
 
 static PyObject *
 gc_get_objects_impl(PyObject *module, Py_ssize_t generation)
-/*[clinic end generated code: output=48b35fea4ba6cb0e input=89bca0d4a64e0135]*/
+/*[clinic end generated code: output=48b35fea4ba6cb0e input=3a819826fbde5eef]*/
 {
     if (PySys_Audit("gc.get_objects", "n", generation) < 0) {
         return NULL;
@@ -378,15 +350,9 @@ gc_get_stats_impl(PyObject *module)
     /* To get consistent values despite allocations while constructing
        the result list, we use a snapshot of the running stats. */
     GCState *gcstate = get_gc_state();
-#ifdef Py_GIL_DISABLED
-    PyMutex_Lock(&gcstate->stats_mutex);
-#endif
-    stats[0] = gcstate->generation_stats->young.items[gcstate->generation_stats->young.index];
-    stats[1] = gcstate->generation_stats->old[0].items[gcstate->generation_stats->old[0].index];
-    stats[2] = gcstate->generation_stats->old[1].items[gcstate->generation_stats->old[1].index];
-#ifdef Py_GIL_DISABLED
-    PyMutex_Unlock(&gcstate->stats_mutex);
-#endif
+    for (i = 0; i < NUM_GENERATIONS; i++) {
+        stats[i] = gcstate->generation_stats[i];
+    }
 
     PyObject *result = PyList_New(0);
     if (result == NULL)
@@ -395,12 +361,10 @@ gc_get_stats_impl(PyObject *module)
     for (i = 0; i < NUM_GENERATIONS; i++) {
         PyObject *dict;
         st = &stats[i];
-        dict = Py_BuildValue("{snsnsnsnsd}",
+        dict = Py_BuildValue("{snsnsn}",
                              "collections", st->collections,
                              "collected", st->collected,
-                             "uncollectable", st->uncollectable,
-                             "candidates", st->candidates,
-                             "duration", st->duration
+                             "uncollectable", st->uncollectable
                             );
         if (dict == NULL)
             goto error;
@@ -453,7 +417,6 @@ gc_is_finalized_impl(PyObject *module, PyObject *obj)
 }
 
 /*[clinic input]
-@permit_long_summary
 gc.freeze
 
 Freeze all current tracked objects and ignore them for future collections.
@@ -466,7 +429,7 @@ allocation which can cause copy-on-write.
 
 static PyObject *
 gc_freeze_impl(PyObject *module)
-/*[clinic end generated code: output=502159d9cdc4c139 input=02674706fc9c0de6]*/
+/*[clinic end generated code: output=502159d9cdc4c139 input=989012d0ba5a066f]*/
 {
     PyInterpreterState *interp = _PyInterpreterState_GET();
     _PyGC_Freeze(interp);
@@ -576,7 +539,6 @@ gcmodule_exec(PyObject *module)
 }
 
 static PyModuleDef_Slot gcmodule_slots[] = {
-    _Py_ABI_SLOT,
     {Py_mod_exec, gcmodule_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {Py_mod_gil, Py_MOD_GIL_NOT_USED},

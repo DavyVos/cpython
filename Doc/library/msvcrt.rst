@@ -4,14 +4,14 @@
 .. module:: msvcrt
    :synopsis: Miscellaneous useful routines from the MS VC++ runtime.
 
-**Source code:** :source:`PC/msvcrtmodule.c`
+.. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
 --------------
 
 These functions provide access to some useful capabilities on Windows platforms.
 Some higher-level modules use these functions to build the Windows
 implementations of their services. For example, the :mod:`getpass` module uses
-this in the implementation of the :func:`~getpass.getpass` function.
+this in the implementation of the :func:`getpass` function.
 
 Further documentation on these functions can be found in the Platform API
 documentation.
@@ -135,22 +135,12 @@ Console I/O
 
 .. function:: putch(char)
 
-   Print the byte string *char* to the console without buffering.  Raises
-   :exc:`OSError` on failure, for example when the process has no console
-   attached.
-
-   .. versionchanged:: 3.16
-      Failures are now reported by raising :exc:`OSError` instead of being
-      silently ignored.
+   Print the byte string *char* to the console without buffering.
 
 
 .. function:: putwch(unicode_char)
 
    Wide char variant of :func:`putch`, accepting a Unicode value.
-
-   .. versionchanged:: 3.16
-      Failures are now reported by raising :exc:`OSError` instead of being
-      silently ignored.
 
 
 .. function:: ungetch(char)

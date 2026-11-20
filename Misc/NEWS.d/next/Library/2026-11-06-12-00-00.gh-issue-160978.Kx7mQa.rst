@@ -1,3 +1,0 @@
-Fix :mod:`ctypes` handing out distinct array types for the same item type
-and length when the array type is created concurrently from several
-threads.

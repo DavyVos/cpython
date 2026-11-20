@@ -12,9 +12,9 @@ fi
 
 # Update this when updating to a new version after verifying that the changes
 # the update brings in are good. These values are used for verifying the SBOM, too.
-expected_libexpat_tag="R_2_10_0"
-expected_libexpat_version="2.10.0"
-expected_libexpat_sha256="5466a341f9c692ef7a958a6881311be597f8e1ce345984cf78414f54793dea4c"
+expected_libexpat_tag="R_2_9_0"
+expected_libexpat_version="2.9.0"
+expected_libexpat_sha256="16afbb9cefead2aa278105cf27d9f597bde7fbf3dbb85015857ca7ca6a4e89ba"
 
 expat_dir="$(realpath "$(dirname -- "${BASH_SOURCE[0]}")")"
 cd ${expat_dir}
@@ -31,7 +31,6 @@ declare -a lib_files
 lib_files=(
   ascii.h
   asciitab.h
-  entities.h
   expat.h
   expat_external.h
   fallthrough.h
@@ -63,13 +62,6 @@ rm libexpat.tar.gz
 # Step 3: Add the namespacing include to expat_external.h
 sed -i 's/#  define Expat_External_INCLUDED 1/&\n\/* Namespace external symbols to allow multiple libexpat version to\n   co-exist. \*\/\n#include "pyexpatns.h"/' expat_external.h
 
-if ! grep -q '#include "pyexpatns\.h"' expat_external.h; then
-  echo "
-Error: namespacing include not found in expat_external.h;
-This may be due to source changes and will require updating this script" >&2
-  exit 1
-fi
-
 # Step 4: Skip the Windows rand_s entropy path in xmlparse.c when
 # XML_POOR_ENTROPY is set.
 sed -z -i 's|#if defined(_WIN32)\n#  include "random_rand_s\.h"\n#endif /\* defined(_WIN32) \*/|#if defined(_WIN32) \&\& ! defined(XML_POOR_ENTROPY)\n#  include "random_rand_s.h"\n#endif /* defined(_WIN32) \&\& ! defined(XML_POOR_ENTROPY) */|' xmlparse.c
@@ -82,16 +74,11 @@ This may be due to source changes and will require updating this script" >&2
   exit 1
 fi
 
-echo '
+echo "
 Updated! next steps:
 - Verify all is okay:
     git diff
     git status
-- Update the sbom file:
-    Under the package "SPDXRef-PACKAGE-expat", update the "checksumValue",
-    "downloadLocation", "referenceLocator", and "versionInfo" fields.
-- Regenerate the sbom file:
+- Regenerate the sbom file
     make regen-sbom
-- Update the warning count in Tools/build/.warningignore_macos:
-    (use info from CI if not on a Mac)
-'
+"

@@ -1,7 +1,6 @@
 import errno
 import os
 import sys
-import types
 
 
 CAN_USE_PYREPL: bool
@@ -30,10 +29,12 @@ def interactive_console(mainmodule=None, quiet=False, pythonstartup=False):
             print(FAIL_REASON, file=sys.stderr)
         return sys._baserepl()
 
-    if not mainmodule:
-        mainmodule = types.ModuleType("__main__")
-
-    namespace = mainmodule.__dict__
+    if mainmodule:
+        namespace = mainmodule.__dict__
+    else:
+        import __main__
+        namespace = __main__.__dict__
+        namespace.pop("__pyrepl_interactive_console", None)
 
     # sys._baserepl() above does this internally, we do it here
     startup_path = os.getenv("PYTHONSTARTUP")

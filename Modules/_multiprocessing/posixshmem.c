@@ -77,7 +77,6 @@ _posixshmem_shm_open_impl(PyObject *module, PyObject *path, int flags,
 /*[clinic input]
 _posixshmem.shm_unlink
     path: unicode
-    /
 
 Remove a shared memory object (similar to unlink()).
 
@@ -89,7 +88,7 @@ associated memory region.
 
 static PyObject *
 _posixshmem_shm_unlink_impl(PyObject *module, PyObject *path)
-/*[clinic end generated code: output=42f8b23d134b9ff5 input=cf7a30ec6503cf78]*/
+/*[clinic end generated code: output=42f8b23d134b9ff5 input=239da7d9ea49e7db]*/
 {
     int rv;
     int async_err = 0;

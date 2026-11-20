@@ -6,9 +6,9 @@ machinery = test_util.import_importlib('importlib.machinery')
 
 import os.path
 import sys
-from test import support
 from test.support import import_helper
 from test.support import os_helper
+from test import support
 import traceback
 import types
 import unittest
@@ -231,9 +231,11 @@ class ReloadTests:
                     # Start as a plain module.
                     self.init.invalidate_caches()
                     path = os.path.join(cwd, name + '.py')
+                    cached = self.util.cache_from_source(path)
                     expected = {'__name__': name,
                                 '__package__': '',
                                 '__file__': path,
+                                '__cached__': cached,
                                 '__doc__': None,
                                 }
                     os_helper.create_empty_file(path)
@@ -250,9 +252,11 @@ class ReloadTests:
                     # Change to a package.
                     self.init.invalidate_caches()
                     init_path = os.path.join(cwd, name, '__init__.py')
+                    cached = self.util.cache_from_source(init_path)
                     expected = {'__name__': name,
                                 '__package__': name,
                                 '__file__': init_path,
+                                '__cached__': cached,
                                 '__path__': [os.path.dirname(init_path)],
                                 '__doc__': None,
                                 }
@@ -279,6 +283,7 @@ class ReloadTests:
                     # Start as a namespace package.
                     self.init.invalidate_caches()
                     bad_path = os.path.join(cwd, name, '__init.py')
+                    cached = self.util.cache_from_source(bad_path)
                     expected = {'__name__': name,
                                 '__package__': name,
                                 '__doc__': None,
@@ -307,9 +312,11 @@ class ReloadTests:
                     # Change to a regular package.
                     self.init.invalidate_caches()
                     init_path = os.path.join(cwd, name, '__init__.py')
+                    cached = self.util.cache_from_source(init_path)
                     expected = {'__name__': name,
                                 '__package__': name,
                                 '__file__': init_path,
+                                '__cached__': cached,
                                 '__path__': [os.path.dirname(init_path)],
                                 '__doc__': None,
                                 'eggs': None,
@@ -443,58 +450,6 @@ class StartupTests:
 (Frozen_StartupTests,
  Source_StartupTests
  ) = test_util.test_both(StartupTests, machinery=machinery)
-
-
-class TestModuleAll(unittest.TestCase):
-    def test_machinery(self):
-        extra = (
-            # from importlib._bootstrap and importlib._bootstrap_external
-            'AppleFrameworkLoader',
-            'BYTECODE_SUFFIXES',
-            'BuiltinImporter',
-            'DEBUG_BYTECODE_SUFFIXES',
-            'EXTENSION_SUFFIXES',
-            'ExtensionFileLoader',
-            'FileFinder',
-            'FrozenImporter',
-            'ModuleSpec',
-            'NamespaceLoader',
-            'OPTIMIZED_BYTECODE_SUFFIXES',
-            'PathFinder',
-            'SOURCE_SUFFIXES',
-            'SourceFileLoader',
-            'SourcelessFileLoader',
-            'WindowsRegistryFinder',
-        )
-        support.check__all__(self, machinery['Source'], extra=extra)
-
-    def test_util(self):
-        extra = (
-            # from importlib.abc, importlib._bootstrap
-            # and importlib._bootstrap_external
-            'Loader',
-            'MAGIC_NUMBER',
-            'cache_from_source',
-            'decode_source',
-            'module_from_spec',
-            'source_from_cache',
-            'spec_from_file_location',
-            'spec_from_loader',
-        )
-        support.check__all__(self, util['Source'], extra=extra)
-
-
-class TestDeprecations(unittest.TestCase):
-    def test_machinery_deprecated_attributes(self):
-        from importlib import machinery
-        attributes = (
-            'DEBUG_BYTECODE_SUFFIXES',
-            'OPTIMIZED_BYTECODE_SUFFIXES',
-        )
-        for attr in attributes:
-            with self.subTest(attr=attr):
-                with self.assertWarns(DeprecationWarning):
-                    getattr(machinery, attr)
 
 
 if __name__ == '__main__':

@@ -41,7 +41,6 @@ the `Python Package Index <https://pypi.org>`_.
    :maxdepth: 2
 
    intro.rst
-
    text.rst
    binary.rst
    datatypes.rst

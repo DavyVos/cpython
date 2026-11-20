@@ -4,6 +4,8 @@
 Argparse Tutorial
 *****************
 
+:author: Tshepang Mbambo
+
 .. currentmodule:: argparse
 
 This tutorial is intended to be a gentle introduction to :mod:`argparse`, the

@@ -48,26 +48,6 @@ class TestDecode:
         self.assertEqual(self.loads('[]'), [])
         self.assertEqual(self.loads('""'), "")
 
-    def test_object_hook(self):
-        s = '{"a":{"b":{}}}'
-
-        expected_result = {"a":{"b":{"x":1}, "x":1}, "x":1}
-        expected_hook_arguments = [
-            {}, {"b": {"x":1}}, {"a": {"b": {"x":1}, "x":1}}
-        ]
-
-        hook_arguments = []
-
-        def hook(x):
-            hook_arguments.append(x)
-            return {**x, "x":1}
-
-        result = self.loads(s, object_hook=hook)
-
-        self.assertEqual(result, expected_result)
-        self.assertEqual(hook_arguments, expected_hook_arguments)
-
-
     def test_object_pairs_hook(self):
         s = '{"xkd":1, "kcw":2, "art":3, "hxm":4, "qrt":5, "pad":6, "hoy":7}'
         p = [("xkd", 1), ("kcw", 2), ("art", 3), ("hxm", 4),
@@ -89,31 +69,6 @@ class TestDecode:
         self.assertEqual(self.loads('{"empty": {}}',
                                     object_pairs_hook=OrderedDict),
                          OrderedDict([('empty', OrderedDict())]))
-
-    def test_array_hook(self):
-        s = '[1, 2, 3]'
-        t = self.loads(s, array_hook=tuple)
-        self.assertEqual(t, (1, 2, 3))
-        self.assertEqual(type(t), tuple)
-
-        # Nested array in inner structure with object_hook
-        s = '{"xkd": [[1], [2], [3]]}'
-        p = frozendict(xkd=((1,), (2,), (3,)))
-        data = self.loads(s, object_hook=frozendict, array_hook=tuple)
-        self.assertEqual(data, p)
-        self.assertEqual(type(data), frozendict)
-        self.assertEqual(type(data["xkd"]), tuple)
-        for item in data["xkd"]:
-            self.assertEqual(type(item), tuple)
-
-        self.assertEqual(self.loads('[]', array_hook=tuple), ())
-
-    def test_load_array_hook(self):
-        # json.load must forward array_hook to loads
-        fp = StringIO('[10, 20, 30]')
-        result = self.json.load(fp, array_hook=tuple)
-        self.assertEqual(result, (10, 20, 30))
-        self.assertEqual(type(result), tuple)
 
     def test_decoder_optimizations(self):
         # Several optimizations were made that skip over calls to

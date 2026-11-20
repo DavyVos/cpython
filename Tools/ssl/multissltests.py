@@ -1,12 +1,12 @@
 #!./python
-"""Run Python tests against multiple installations of cryptography libraries
+"""Run Python tests against multiple installations of OpenSSL and LibreSSL
 
 The script
 
-  (1) downloads the tar bundle
+  (1) downloads OpenSSL / LibreSSL tar bundle
   (2) extracts it to ./src
-  (3) compiles the relevant library
-  (4) installs that library into ../multissl/$LIB/$VERSION/
+  (3) compiles OpenSSL / LibreSSL
+  (4) installs OpenSSL / LibreSSL into ../multissl/$LIB/$VERSION/
   (5) forces a recompilation of Python modules using the
       header and library files from ../multissl/$LIB/$VERSION/
   (6) runs Python's test suite
@@ -54,7 +54,6 @@ OPENSSL_RECENT_VERSIONS = [
     "3.4.8",
     "3.5.9",
     "3.6.5",
-    "4.0.3",
     # See make_ssl_data.py for notes on adding a new version.
 ]
 
@@ -62,10 +61,6 @@ LIBRESSL_OLD_VERSIONS = [
 ]
 
 LIBRESSL_RECENT_VERSIONS = [
-]
-
-AWSLC_RECENT_VERSIONS = [
-    "5.10.0",
 ]
 
 # store files in ../multissl
@@ -77,8 +72,9 @@ MULTISSL_DIR = os.path.abspath(os.path.join(PYTHONROOT, '..', 'multissl'))
 parser = argparse.ArgumentParser(
     prog='multissl',
     description=(
-        "Run CPython tests with multiple cryptography libraries/versions."
-    ),
+        "Run CPython tests with multiple OpenSSL and LibreSSL "
+        "versions."
+    )
 )
 parser.add_argument(
     '--debug',
@@ -109,17 +105,6 @@ parser.add_argument(
     ).format(LIBRESSL_RECENT_VERSIONS, LIBRESSL_OLD_VERSIONS)
 )
 parser.add_argument(
-    '--aws-lc',
-    # Soft-deprecated alias
-    '--awslc',
-    dest='awslc',
-    nargs='+',
-    default=(),
-    help=(
-        "AWS-LC versions, defaults to '{}' if no crypto library versions are given."
-    ).format(AWSLC_RECENT_VERSIONS)
-)
-parser.add_argument(
     '--tests',
     nargs='*',
     default=(),
@@ -128,7 +113,7 @@ parser.add_argument(
 parser.add_argument(
     '--base-directory',
     default=MULTISSL_DIR,
-    help="Base directory for crypto library sources and builds."
+    help="Base directory for OpenSSL / LibreSSL sources and builds."
 )
 parser.add_argument(
     '--no-network',
@@ -141,8 +126,8 @@ parser.add_argument(
     choices=['library', 'modules', 'tests'],
     default='tests',
     help=(
-        "Which steps to perform. 'library' downloads and compiles a crypto"
-        "library. 'module' also compiles Python modules. 'tests' builds "
+        "Which steps to perform. 'library' downloads and compiles OpenSSL "
+        "or LibreSSL. 'module' also compiles Python modules. 'tests' builds "
         "all and runs the test suite."
     )
 )
@@ -162,12 +147,6 @@ parser.add_argument(
     action='store_true',
     dest='keep_sources',
     help="Keep original sources for debugging."
-)
-parser.add_argument(
-    '--tsan',
-    action='store_true',
-    dest='tsan',
-    help="Build with thread sanitizer. (Disables fips in OpenSSL 3.x)."
 )
 
 
@@ -323,8 +302,6 @@ class AbstractBuilder(object):
         """Now build openssl"""
         log.info("Running build in {}".format(self.build_dir))
         cwd = self.build_dir
-        if self.args.tsan:
-            config_args += ("-fsanitize=thread",)
         cmd = [
             "./config", *config_args,
             "shared", "--debug",
@@ -438,11 +415,9 @@ class BuildOpenSSL(AbstractBuilder):
     def _post_install(self):
         if self.version.startswith("3."):
             self._post_install_3xx()
-        elif self.version.startswith("4."):
-            self._post_install_4xx()
 
     def _build_src(self, config_args=()):
-        if self.version.startswith(("3.", "4.")):
+        if self.version.startswith("3."):
             config_args += ("enable-fips",)
         super()._build_src(config_args)
 
@@ -457,9 +432,6 @@ class BuildOpenSSL(AbstractBuilder):
             # 3.0.0-beta2 uses lib64 on 64 bit platforms
             lib64 = self.lib_dir + "64"
             os.symlink(lib64, self.lib_dir)
-
-    def _post_install_4xx(self):
-        self._post_install_3xx()
 
     @property
     def short_version(self):
@@ -483,34 +455,6 @@ class BuildLibreSSL(AbstractBuilder):
     build_template = "libressl-{}"
 
 
-class BuildAWSLC(AbstractBuilder):
-    library = "AWS-LC"
-    url_templates = (
-        "https://github.com/aws/aws-lc/archive/refs/tags/v{v}.tar.gz",
-    )
-    src_template = "aws-lc-{}.tar.gz"
-    build_template = "aws-lc-{}"
-
-    def _build_src(self, config_args=()):
-        cwd = self.build_dir
-        log.info("Running build in {}".format(cwd))
-        env = os.environ.copy()
-        env["LD_RUN_PATH"] = self.lib_dir # set rpath
-        if self.system:
-            env['SYSTEM'] = self.system
-        cmd = [
-            "cmake",
-            "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
-            "-DCMAKE_PREFIX_PATH={}".format(self.install_dir),
-            "-DCMAKE_INSTALL_PREFIX={}".format(self.install_dir),
-            "-DBUILD_SHARED_LIBS=ON",
-            "-DBUILD_TESTING=OFF",
-            "-DFIPS=OFF",
-        ]
-        self._subprocess_call(cmd, cwd=cwd, env=env)
-        self._subprocess_call(["make", "-j{}".format(self.jobs)], cwd=cwd, env=env)
-
-
 def configure_make():
     if not os.path.isfile('Makefile'):
         log.info('Running ./configure')
@@ -525,10 +469,9 @@ def configure_make():
 
 def main():
     args = parser.parse_args()
-    if not args.openssl and not args.libressl and not args.awslc:
+    if not args.openssl and not args.libressl:
         args.openssl = list(OPENSSL_RECENT_VERSIONS)
         args.libressl = list(LIBRESSL_RECENT_VERSIONS)
-        args.awslc = list(AWSLC_RECENT_VERSIONS)
         if not args.disable_ancient:
             args.openssl.extend(OPENSSL_OLD_VERSIONS)
             args.libressl.extend(LIBRESSL_OLD_VERSIONS)
@@ -555,15 +498,22 @@ def main():
 
     # download and register builder
     builds = []
-    for build_class, versions in [
-        (BuildOpenSSL, args.openssl),
-        (BuildLibreSSL, args.libressl),
-        (BuildAWSLC, args.awslc),
-    ]:
-        for version in versions:
-            build = build_class(version, args)
-            build.install()
-            builds.append(build)
+
+    for version in args.openssl:
+        build = BuildOpenSSL(
+            version,
+            args
+        )
+        build.install()
+        builds.append(build)
+
+    for version in args.libressl:
+        build = BuildLibreSSL(
+            version,
+            args
+        )
+        build.install()
+        builds.append(build)
 
     if args.steps in {'modules', 'tests'}:
         for build in builds:
@@ -591,7 +541,7 @@ def main():
         else:
             print('Executed all SSL tests.')
 
-    print('OpenSSL / LibreSSL / AWS-LC versions:')
+    print('OpenSSL / LibreSSL versions:')
     for build in builds:
         print("    * {0.library} {0.version}".format(build))
 

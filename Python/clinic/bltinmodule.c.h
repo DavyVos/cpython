@@ -7,7 +7,6 @@ preserve
 #  include "pycore_runtime.h"     // _Py_ID()
 #endif
 #include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
-#include "pycore_unicodeobject.h" // _PyUnicode_AsUTF8NoNUL()
 
 PyDoc_STRVAR(builtin___import____doc__,
 "__import__($module, /, name, globals=None, locals=None, fromlist=(),\n"
@@ -48,11 +47,9 @@ builtin___import__(PyObject *module, PyObject *const *args, Py_ssize_t nargs, Py
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
         .ob_item = { &_Py_ID(name), &_Py_ID(globals), &_Py_ID(locals), &_Py_ID(fromlist), &_Py_ID(level), },
     };
     #undef NUM_KEYWORDS
@@ -77,8 +74,7 @@ builtin___import__(PyObject *module, PyObject *const *args, Py_ssize_t nargs, Py
     PyObject *fromlist = NULL;
     int level = 0;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 1, /*maxpos*/ 5, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 1, 5, 0, argsbuf);
     if (!args) {
         goto exit;
     }
@@ -115,103 +111,8 @@ exit:
     return return_value;
 }
 
-PyDoc_STRVAR(builtin___lazy_import____doc__,
-"__lazy_import__($module, /, name, globals=None, locals=None,\n"
-"                fromlist=(), level=0)\n"
-"--\n"
-"\n"
-"Lazily imports a module.\n"
-"\n"
-"Returns either the module to be imported or a imp.lazy_module object\n"
-"which indicates the module to be lazily imported.");
-
-#define BUILTIN___LAZY_IMPORT___METHODDEF    \
-    {"__lazy_import__", _PyCFunction_CAST(builtin___lazy_import__), METH_FASTCALL|METH_KEYWORDS, builtin___lazy_import____doc__},
-
-static PyObject *
-builtin___lazy_import___impl(PyObject *module, PyObject *name,
-                             PyObject *globals, PyObject *locals,
-                             PyObject *fromlist, int level);
-
-static PyObject *
-builtin___lazy_import__(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
-{
-    PyObject *return_value = NULL;
-    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-
-    #define NUM_KEYWORDS 5
-    static struct {
-        PyGC_Head _this_is_not_used;
-        PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
-        PyObject *ob_item[NUM_KEYWORDS];
-    } _kwtuple = {
-        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
-        .ob_item = { &_Py_ID(name), &_Py_ID(globals), &_Py_ID(locals), &_Py_ID(fromlist), &_Py_ID(level), },
-    };
-    #undef NUM_KEYWORDS
-    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
-
-    #else  // !Py_BUILD_CORE
-    #  define KWTUPLE NULL
-    #endif  // !Py_BUILD_CORE
-
-    static const char * const _keywords[] = {"name", "globals", "locals", "fromlist", "level", NULL};
-    static _PyArg_Parser _parser = {
-        .keywords = _keywords,
-        .fname = "__lazy_import__",
-        .kwtuple = KWTUPLE,
-    };
-    #undef KWTUPLE
-    PyObject *argsbuf[5];
-    Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
-    PyObject *name;
-    PyObject *globals = NULL;
-    PyObject *locals = NULL;
-    PyObject *fromlist = NULL;
-    int level = 0;
-
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 1, /*maxpos*/ 5, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
-    if (!args) {
-        goto exit;
-    }
-    name = args[0];
-    if (!noptargs) {
-        goto skip_optional_pos;
-    }
-    if (args[1]) {
-        globals = args[1];
-        if (!--noptargs) {
-            goto skip_optional_pos;
-        }
-    }
-    if (args[2]) {
-        locals = args[2];
-        if (!--noptargs) {
-            goto skip_optional_pos;
-        }
-    }
-    if (args[3]) {
-        fromlist = args[3];
-        if (!--noptargs) {
-            goto skip_optional_pos;
-        }
-    }
-    level = PyLong_AsInt(args[4]);
-    if (level == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-skip_optional_pos:
-    return_value = builtin___lazy_import___impl(module, name, globals, locals, fromlist, level);
-
-exit:
-    return return_value;
-}
-
 PyDoc_STRVAR(builtin_abs__doc__,
-"abs($module, number, /)\n"
+"abs($module, x, /)\n"
 "--\n"
 "\n"
 "Return the absolute value of the argument.");
@@ -256,7 +157,7 @@ PyDoc_STRVAR(builtin_ascii__doc__,
     {"ascii", (PyCFunction)builtin_ascii, METH_O, builtin_ascii__doc__},
 
 PyDoc_STRVAR(builtin_bin__doc__,
-"bin($module, integer, /)\n"
+"bin($module, number, /)\n"
 "--\n"
 "\n"
 "Return the binary representation of an integer.\n"
@@ -278,67 +179,6 @@ PyDoc_STRVAR(builtin_callable__doc__,
 
 #define BUILTIN_CALLABLE_METHODDEF    \
     {"callable", (PyCFunction)builtin_callable, METH_O, builtin_callable__doc__},
-
-PyDoc_STRVAR(filter_new__doc__,
-"filter(function, iterable, /)\n"
-"--\n"
-"\n"
-"Return an iterator over items of iterable where function(item) is true.\n"
-"\n"
-"If function is None, return the items that are true.");
-
-static PyObject *
-filter_new_impl(PyTypeObject *type, PyObject *func, PyObject *seq);
-
-static PyObject *
-filter_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
-{
-    PyObject *return_value = NULL;
-    PyTypeObject *base_tp = &PyFilter_Type;
-    PyObject *func;
-    PyObject *seq;
-
-    if ((type == base_tp || type->tp_init == base_tp->tp_init) &&
-        !_PyArg_NoKeywords("filter", kwargs)) {
-        goto exit;
-    }
-    if (!_PyArg_CheckPositional("filter", PyTuple_GET_SIZE(args), 2, 2)) {
-        goto exit;
-    }
-    func = PyTuple_GET_ITEM(args, 0);
-    seq = PyTuple_GET_ITEM(args, 1);
-    return_value = filter_new_impl(type, func, seq);
-
-exit:
-    return return_value;
-}
-
-static PyObject *
-filter_vectorcall(PyObject *type, PyObject *const *args,
-    size_t nargsf, PyObject *kwnames)
-{
-    PyObject *return_value = NULL;
-    Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
-    PyObject *func;
-    PyObject *seq;
-
-    assert(_PyType_CAST(type)->tp_new == filter_new);
-    /* Make sure the type object is immutable: the generated
-     * vectorcall doesn't deal e.g. with users reassigning __init__. */
-    assert(PyType_HasFeature(_PyType_CAST(type), Py_TPFLAGS_IMMUTABLETYPE));
-    if (!_PyArg_NoKwnames("filter", kwnames)) {
-        goto exit;
-    }
-    if (!_PyArg_CheckPositional("filter", nargs, 2, 2)) {
-        goto exit;
-    }
-    func = args[0];
-    seq = args[1];
-    return_value = filter_new_impl(_PyType_CAST(type), func, seq);
-
-exit:
-    return return_value;
-}
 
 PyDoc_STRVAR(builtin_format__doc__,
 "format($module, value, format_spec=\'\', /)\n"
@@ -396,8 +236,7 @@ PyDoc_STRVAR(builtin_chr__doc__,
 
 PyDoc_STRVAR(builtin_compile__doc__,
 "compile($module, /, source, filename, mode, flags=0,\n"
-"        dont_inherit=False, optimize=-1, *, module=None,\n"
-"        _feature_version=-1)\n"
+"        dont_inherit=False, optimize=-1, *, _feature_version=-1)\n"
 "--\n"
 "\n"
 "Compile source into a code object that can be executed by exec() or eval().\n"
@@ -420,7 +259,7 @@ PyDoc_STRVAR(builtin_compile__doc__,
 static PyObject *
 builtin_compile_impl(PyObject *module, PyObject *source, PyObject *filename,
                      const char *mode, int flags, int dont_inherit,
-                     int optimize, PyObject *modname, int feature_version);
+                     int optimize, int feature_version);
 
 static PyObject *
 builtin_compile(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
@@ -428,16 +267,14 @@ builtin_compile(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObj
     PyObject *return_value = NULL;
     #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
 
-    #define NUM_KEYWORDS 8
+    #define NUM_KEYWORDS 7
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
-        .ob_item = { &_Py_ID(source), &_Py_ID(filename), &_Py_ID(mode), &_Py_ID(flags), &_Py_ID(dont_inherit), &_Py_ID(optimize), &_Py_ID(module), &_Py_ID(_feature_version), },
+        .ob_item = { &_Py_ID(source), &_Py_ID(filename), &_Py_ID(mode), &_Py_ID(flags), &_Py_ID(dont_inherit), &_Py_ID(optimize), &_Py_ID(_feature_version), },
     };
     #undef NUM_KEYWORDS
     #define KWTUPLE (&_kwtuple.ob_base.ob_base)
@@ -446,14 +283,14 @@ builtin_compile(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObj
     #  define KWTUPLE NULL
     #endif  // !Py_BUILD_CORE
 
-    static const char * const _keywords[] = {"source", "filename", "mode", "flags", "dont_inherit", "optimize", "module", "_feature_version", NULL};
+    static const char * const _keywords[] = {"source", "filename", "mode", "flags", "dont_inherit", "optimize", "_feature_version", NULL};
     static _PyArg_Parser _parser = {
         .keywords = _keywords,
         .fname = "compile",
         .kwtuple = KWTUPLE,
     };
     #undef KWTUPLE
-    PyObject *argsbuf[8];
+    PyObject *argsbuf[7];
     Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 3;
     PyObject *source;
     PyObject *filename = NULL;
@@ -461,11 +298,9 @@ builtin_compile(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObj
     int flags = 0;
     int dont_inherit = 0;
     int optimize = -1;
-    PyObject *modname = Py_None;
     int feature_version = -1;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 3, /*maxpos*/ 6, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 3, 6, 0, argsbuf);
     if (!args) {
         goto exit;
     }
@@ -477,8 +312,13 @@ builtin_compile(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObj
         _PyArg_BadArgument("compile", "argument 'mode'", "str", args[2]);
         goto exit;
     }
-    mode = _PyUnicode_AsUTF8NoNUL(args[2]);
+    Py_ssize_t mode_length;
+    mode = PyUnicode_AsUTF8AndSize(args[2], &mode_length);
     if (mode == NULL) {
+        goto exit;
+    }
+    if (strlen(mode) != (size_t)mode_length) {
+        PyErr_SetString(PyExc_ValueError, "embedded null character");
         goto exit;
     }
     if (!noptargs) {
@@ -515,66 +355,17 @@ skip_optional_pos:
     if (!noptargs) {
         goto skip_optional_kwonly;
     }
-    if (args[6]) {
-        modname = args[6];
-        if (!--noptargs) {
-            goto skip_optional_kwonly;
-        }
-    }
-    feature_version = PyLong_AsInt(args[7]);
+    feature_version = PyLong_AsInt(args[6]);
     if (feature_version == -1 && PyErr_Occurred()) {
         goto exit;
     }
 skip_optional_kwonly:
-    return_value = builtin_compile_impl(module, source, filename, mode, flags, dont_inherit, optimize, modname, feature_version);
+    return_value = builtin_compile_impl(module, source, filename, mode, flags, dont_inherit, optimize, feature_version);
 
 exit:
     /* Cleanup for filename */
     Py_XDECREF(filename);
 
-    return return_value;
-}
-
-PyDoc_STRVAR(builtin_dir__doc__,
-"dir($module, object=<unrepresentable>, /)\n"
-"--\n"
-"\n"
-"Return an alphabetized list of the attributes of the object.\n"
-"\n"
-"If called without an argument, return the names in the current scope.\n"
-"Else, return an alphabetized list of names comprising (some of) the\n"
-"attributes of the given object, and of attributes reachable from it.\n"
-"If the object supplies a method named __dir__, it will be used;\n"
-"otherwise the default dir() logic is used and returns:\n"
-"  for a module object: the module\'s attributes.\n"
-"  for a class object:  its attributes, and recursively the attributes\n"
-"    of its bases.\n"
-"  for any other object: its attributes, its class\'s attributes, and\n"
-"    recursively the attributes of its class\'s base classes.");
-
-#define BUILTIN_DIR_METHODDEF    \
-    {"dir", _PyCFunction_CAST(builtin_dir), METH_FASTCALL, builtin_dir__doc__},
-
-static PyObject *
-builtin_dir_impl(PyObject *module, PyObject *arg);
-
-static PyObject *
-builtin_dir(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    PyObject *arg = NULL;
-
-    if (!_PyArg_CheckPositional("dir", nargs, 0, 1)) {
-        goto exit;
-    }
-    if (nargs < 1) {
-        goto skip_optional;
-    }
-    arg = args[0];
-skip_optional:
-    return_value = builtin_dir_impl(module, arg);
-
-exit:
     return return_value;
 }
 
@@ -637,11 +428,9 @@ builtin_eval(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
         .ob_item = { &_Py_ID(globals), &_Py_ID(locals), },
     };
     #undef NUM_KEYWORDS
@@ -664,8 +453,7 @@ builtin_eval(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject
     PyObject *globals = Py_None;
     PyObject *locals = Py_None;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 1, /*maxpos*/ 3, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 1, 3, 0, argsbuf);
     if (!args) {
         goto exit;
     }
@@ -718,11 +506,9 @@ builtin_exec(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
         .ob_item = { &_Py_ID(globals), &_Py_ID(locals), &_Py_ID(closure), },
     };
     #undef NUM_KEYWORDS
@@ -746,8 +532,7 @@ builtin_exec(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject
     PyObject *locals = Py_None;
     PyObject *closure = NULL;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 1, /*maxpos*/ 3, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 1, 3, 0, argsbuf);
     if (!args) {
         goto exit;
     }
@@ -844,19 +629,6 @@ PyDoc_STRVAR(builtin_id__doc__,
 #define BUILTIN_ID_METHODDEF    \
     {"id", (PyCFunction)builtin_id, METH_O, builtin_id__doc__},
 
-static PyObject *
-builtin_id_impl(PyModuleDef *self, PyObject *v);
-
-static PyObject *
-builtin_id(PyObject *self, PyObject *v)
-{
-    PyObject *return_value = NULL;
-
-    return_value = builtin_id_impl((PyModuleDef *)self, v);
-
-    return return_value;
-}
-
 PyDoc_STRVAR(builtin_setattr__doc__,
 "setattr($module, obj, name, value, /)\n"
 "--\n"
@@ -928,18 +700,16 @@ PyDoc_STRVAR(builtin_hash__doc__,
 "hash($module, obj, /)\n"
 "--\n"
 "\n"
-"Return the integer hash value for the given object.\n"
+"Return the hash value for the given object.\n"
 "\n"
-"Two objects that compare equal must also have the same hash value, but\n"
-"the reverse is not necessarily true.  Hash values may differ between\n"
-"Python processes.  Not all objects are hashable; calling hash() on an\n"
-"unhashable object raises TypeError.");
+"Two objects that compare equal must also have the same hash value, but the\n"
+"reverse is not necessarily true.");
 
 #define BUILTIN_HASH_METHODDEF    \
     {"hash", (PyCFunction)builtin_hash, METH_O, builtin_hash__doc__},
 
 PyDoc_STRVAR(builtin_hex__doc__,
-"hex($module, integer, /)\n"
+"hex($module, number, /)\n"
 "--\n"
 "\n"
 "Return the hexadecimal representation of an integer.\n"
@@ -950,82 +720,48 @@ PyDoc_STRVAR(builtin_hex__doc__,
 #define BUILTIN_HEX_METHODDEF    \
     {"hex", (PyCFunction)builtin_hex, METH_O, builtin_hex__doc__},
 
-PyDoc_STRVAR(builtin_iter__doc__,
-"iter($module, object, /, [stop_value], *, stop_exception=StopIteration)\n"
+PyDoc_STRVAR(builtin_aiter__doc__,
+"aiter($module, async_iterable, /)\n"
 "--\n"
 "\n"
-"Get an iterator from an object.\n"
+"Return an AsyncIterator for an AsyncIterable object.");
+
+#define BUILTIN_AITER_METHODDEF    \
+    {"aiter", (PyCFunction)builtin_aiter, METH_O, builtin_aiter__doc__},
+
+PyDoc_STRVAR(builtin_anext__doc__,
+"anext($module, aiterator, default=<unrepresentable>, /)\n"
+"--\n"
 "\n"
-"In the first form, the argument must supply its own iterator, or be a\n"
-"sequence.  In the second form, the callable is called until it returns\n"
-"the stop value or raises the specified exception.");
+"Return the next item from the async iterator.\n"
+"\n"
+"If default is given and the async iterator is exhausted,\n"
+"it is returned instead of raising StopAsyncIteration.");
 
-#define BUILTIN_ITER_METHODDEF    \
-    {"iter", _PyCFunction_CAST(builtin_iter), METH_FASTCALL|METH_KEYWORDS, builtin_iter__doc__},
-
-static PyObject *
-builtin_iter_impl(PyObject *module, PyObject *object, PyObject *stop_value,
-                  PyObject *stop_exception);
+#define BUILTIN_ANEXT_METHODDEF    \
+    {"anext", _PyCFunction_CAST(builtin_anext), METH_FASTCALL, builtin_anext__doc__},
 
 static PyObject *
-builtin_iter(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+builtin_anext_impl(PyObject *module, PyObject *aiterator,
+                   PyObject *default_value);
+
+static PyObject *
+builtin_anext(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
-    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
+    PyObject *aiterator;
+    PyObject *default_value = NULL;
 
-    #define NUM_KEYWORDS 2
-    static struct {
-        PyGC_Head _this_is_not_used;
-        PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
-        PyObject *ob_item[NUM_KEYWORDS];
-    } _kwtuple = {
-        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
-        .ob_item = { &_Py_ID(stop_value), &_Py_ID(stop_exception), },
-    };
-    #undef NUM_KEYWORDS
-    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
-
-    #else  // !Py_BUILD_CORE
-    #  define KWTUPLE NULL
-    #endif  // !Py_BUILD_CORE
-
-    static const char * const _keywords[] = {"", "stop_value", "stop_exception", NULL};
-    static _PyArg_Parser _parser = {
-        .keywords = _keywords,
-        .fname = "iter",
-        .kwtuple = KWTUPLE,
-    };
-    #undef KWTUPLE
-    PyObject *argsbuf[3];
-    Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
-    PyObject *object;
-    PyObject *stop_value = NULL;
-    PyObject *stop_exception = NULL;
-
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 1, /*maxpos*/ 2, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
-    if (!args) {
+    if (!_PyArg_CheckPositional("anext", nargs, 1, 2)) {
         goto exit;
     }
-    object = args[0];
-    if (!noptargs) {
-        goto skip_optional_pos;
+    aiterator = args[0];
+    if (nargs < 2) {
+        goto skip_optional;
     }
-    if (args[1]) {
-        stop_value = args[1];
-        if (!--noptargs) {
-            goto skip_optional_pos;
-        }
-    }
-skip_optional_pos:
-    if (!noptargs) {
-        goto skip_optional_kwonly;
-    }
-    stop_exception = args[2];
-skip_optional_kwonly:
-    return_value = builtin_iter_impl(module, object, stop_value, stop_exception);
+    default_value = args[1];
+skip_optional:
+    return_value = builtin_anext_impl(module, aiterator, default_value);
 
 exit:
     return return_value;
@@ -1064,7 +800,7 @@ builtin_locals(PyObject *module, PyObject *Py_UNUSED(ignored))
 }
 
 PyDoc_STRVAR(builtin_oct__doc__,
-"oct($module, integer, /)\n"
+"oct($module, number, /)\n"
 "--\n"
 "\n"
 "Return the octal representation of an integer.\n"
@@ -1116,11 +852,9 @@ builtin_pow(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject 
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
         .ob_item = { &_Py_ID(base), &_Py_ID(exp), &_Py_ID(mod), },
     };
     #undef NUM_KEYWORDS
@@ -1143,8 +877,7 @@ builtin_pow(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject 
     PyObject *exp;
     PyObject *mod = Py_None;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 2, /*maxpos*/ 3, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 2, 3, 0, argsbuf);
     if (!args) {
         goto exit;
     }
@@ -1162,7 +895,7 @@ exit:
 }
 
 PyDoc_STRVAR(builtin_print__doc__,
-"print($module, /, *objects, sep=\' \', end=\'\\n\', file=None, flush=False)\n"
+"print($module, /, *args, sep=\' \', end=\'\\n\', file=None, flush=False)\n"
 "--\n"
 "\n"
 "Prints the values to a stream, or to sys.stdout by default.\n"
@@ -1180,9 +913,8 @@ PyDoc_STRVAR(builtin_print__doc__,
     {"print", _PyCFunction_CAST(builtin_print), METH_FASTCALL|METH_KEYWORDS, builtin_print__doc__},
 
 static PyObject *
-builtin_print_impl(PyObject *module, PyObject * const *objects,
-                   Py_ssize_t objects_length, PyObject *sep, PyObject *end,
-                   PyObject *file, int flush);
+builtin_print_impl(PyObject *module, PyObject *args, PyObject *sep,
+                   PyObject *end, PyObject *file, int flush);
 
 static PyObject *
 builtin_print(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
@@ -1194,11 +926,9 @@ builtin_print(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
         .ob_item = { &_Py_ID(sep), &_Py_ID(end), &_Py_ID(file), &_Py_ID(flush), },
     };
     #undef NUM_KEYWORDS
@@ -1215,52 +945,49 @@ builtin_print(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
         .kwtuple = KWTUPLE,
     };
     #undef KWTUPLE
-    PyObject *argsbuf[4];
-    PyObject * const *fastargs;
+    PyObject *argsbuf[5];
     Py_ssize_t noptargs = 0 + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 0;
-    PyObject * const *objects;
-    Py_ssize_t objects_length;
+    PyObject *__clinic_args = NULL;
     PyObject *sep = Py_None;
     PyObject *end = Py_None;
     PyObject *file = Py_None;
     int flush = 0;
 
-    fastargs = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 0, /*maxpos*/ 0, /*minkw*/ 0, /*varpos*/ 1, argsbuf);
-    if (!fastargs) {
+    args = _PyArg_UnpackKeywordsWithVararg(args, nargs, NULL, kwnames, &_parser, 0, 0, 0, 0, argsbuf);
+    if (!args) {
         goto exit;
     }
+    __clinic_args = args[0];
     if (!noptargs) {
         goto skip_optional_kwonly;
     }
-    if (fastargs[0]) {
-        sep = fastargs[0];
+    if (args[1]) {
+        sep = args[1];
         if (!--noptargs) {
             goto skip_optional_kwonly;
         }
     }
-    if (fastargs[1]) {
-        end = fastargs[1];
+    if (args[2]) {
+        end = args[2];
         if (!--noptargs) {
             goto skip_optional_kwonly;
         }
     }
-    if (fastargs[2]) {
-        file = fastargs[2];
+    if (args[3]) {
+        file = args[3];
         if (!--noptargs) {
             goto skip_optional_kwonly;
         }
     }
-    flush = PyObject_IsTrue(fastargs[3]);
+    flush = PyObject_IsTrue(args[4]);
     if (flush < 0) {
         goto exit;
     }
 skip_optional_kwonly:
-    objects = args;
-    objects_length = nargs;
-    return_value = builtin_print_impl(module, objects, objects_length, sep, end, file, flush);
+    return_value = builtin_print_impl(module, __clinic_args, sep, end, file, flush);
 
 exit:
+    Py_XDECREF(__clinic_args);
     return return_value;
 }
 
@@ -1340,11 +1067,9 @@ builtin_round(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
         .ob_item = { &_Py_ID(number), &_Py_ID(ndigits), },
     };
     #undef NUM_KEYWORDS
@@ -1366,8 +1091,7 @@ builtin_round(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
     PyObject *number;
     PyObject *ndigits = Py_None;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 1, /*maxpos*/ 2, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 1, 2, 0, argsbuf);
     if (!args) {
         goto exit;
     }
@@ -1378,41 +1102,6 @@ builtin_round(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObjec
     ndigits = args[1];
 skip_optional_pos:
     return_value = builtin_round_impl(module, number, ndigits);
-
-exit:
-    return return_value;
-}
-
-PyDoc_STRVAR(builtin_vars__doc__,
-"vars($module, object=<unrepresentable>, /)\n"
-"--\n"
-"\n"
-"Show vars.\n"
-"\n"
-"Without arguments, equivalent to locals().\n"
-"With an argument, equivalent to object.__dict__.");
-
-#define BUILTIN_VARS_METHODDEF    \
-    {"vars", _PyCFunction_CAST(builtin_vars), METH_FASTCALL, builtin_vars__doc__},
-
-static PyObject *
-builtin_vars_impl(PyObject *module, PyObject *v);
-
-static PyObject *
-builtin_vars(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
-{
-    PyObject *return_value = NULL;
-    PyObject *v = NULL;
-
-    if (!_PyArg_CheckPositional("vars", nargs, 0, 1)) {
-        goto exit;
-    }
-    if (nargs < 1) {
-        goto skip_optional;
-    }
-    v = args[0];
-skip_optional:
-    return_value = builtin_vars_impl(module, v);
 
 exit:
     return return_value;
@@ -1444,11 +1133,9 @@ builtin_sum(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject 
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
         .ob_item = { &_Py_ID(start), },
     };
     #undef NUM_KEYWORDS
@@ -1470,8 +1157,7 @@ builtin_sum(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject 
     PyObject *iterable;
     PyObject *start = NULL;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 1, /*maxpos*/ 2, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 1, 2, 0, argsbuf);
     if (!args) {
         goto exit;
     }
@@ -1556,109 +1242,4 @@ builtin_issubclass(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
 exit:
     return return_value;
 }
-
-PyDoc_STRVAR(zip_new__doc__,
-"zip(*iterables, strict=False)\n"
-"--\n"
-"\n"
-"Iterate over several iterables in parallel, yielding tuples.\n"
-"\n"
-"The zip object yields n-length tuples, where n is the number of\n"
-"iterables passed as positional arguments to zip().  The i-th element\n"
-"in every tuple comes from the i-th iterable argument to zip().  This\n"
-"continues until the shortest argument is exhausted.\n"
-"\n"
-"If strict is true and one of the arguments is exhausted before the\n"
-"others, raise a ValueError.\n"
-"\n"
-"   >>> list(zip(\'abcdefg\', range(3), range(4)))\n"
-"   [(\'a\', 0, 0), (\'b\', 1, 1), (\'c\', 2, 2)]");
-
-static PyObject *
-zip_new_impl(PyTypeObject *type, PyObject * const *iterables,
-             Py_ssize_t iterables_length, int strict);
-
-static PyObject *
-zip_new_helper(PyTypeObject *type, PyObject *const *args,
-    Py_ssize_t nargs, Py_ssize_t nkw, PyObject *kwargs, PyObject *kwnames)
-{
-    PyObject *return_value = NULL;
-    #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-
-    #define NUM_KEYWORDS 1
-    static struct {
-        PyGC_Head _this_is_not_used;
-        PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
-        PyObject *ob_item[NUM_KEYWORDS];
-    } _kwtuple = {
-        .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
-        .ob_item = { &_Py_ID(strict), },
-    };
-    #undef NUM_KEYWORDS
-    #define KWTUPLE (&_kwtuple.ob_base.ob_base)
-
-    #else  // !Py_BUILD_CORE
-    #  define KWTUPLE NULL
-    #endif  // !Py_BUILD_CORE
-
-    static const char * const _keywords[] = {"strict", NULL};
-    static _PyArg_Parser _parser = {
-        .keywords = _keywords,
-        .fname = "zip",
-        .kwtuple = KWTUPLE,
-    };
-    #undef KWTUPLE
-    PyObject *argsbuf[1];
-    PyObject * const *fastargs;
-    Py_ssize_t noptargs = 0 + nkw - 0;
-    PyObject * const *iterables;
-    Py_ssize_t iterables_length;
-    int strict = 0;
-
-    fastargs = _PyArg_UnpackKeywords(args, nargs, kwargs, kwnames, &_parser,
-            /*minpos*/ 0, /*maxpos*/ 0, /*minkw*/ 0, /*varpos*/ 1, argsbuf);
-    if (!fastargs) {
-        goto exit;
-    }
-    if (!noptargs) {
-        goto skip_optional_kwonly;
-    }
-    strict = PyObject_IsTrue(fastargs[0]);
-    if (strict < 0) {
-        goto exit;
-    }
-skip_optional_kwonly:
-    iterables = args;
-    iterables_length = nargs;
-    return_value = zip_new_impl(type, iterables, iterables_length, strict);
-
-exit:
-    return return_value;
-}
-
-static PyObject *
-zip_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
-{
-    return zip_new_helper(type, _PyTuple_CAST(args)->ob_item,
-        PyTuple_GET_SIZE(args),
-        kwargs ? PyDict_GET_SIZE(kwargs) : 0,
-        kwargs, NULL);
-}
-
-static PyObject *
-zip_vectorcall(PyObject *type, PyObject *const *args,
-    size_t nargsf, PyObject *kwnames)
-{
-    Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
-
-    assert(_PyType_CAST(type)->tp_new == zip_new);
-    /* Make sure the type object is immutable: the generated
-     * vectorcall doesn't deal e.g. with users reassigning __init__. */
-    assert(PyType_HasFeature(_PyType_CAST(type), Py_TPFLAGS_IMMUTABLETYPE));
-    return zip_new_helper(_PyType_CAST(type), args, nargs,
-        kwnames ? PyTuple_GET_SIZE(kwnames) : 0,
-        NULL, kwnames);
-}
-/*[clinic end generated code: output=a67fa5cf74c85d07 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=8829159dfea1f8ad input=a9049054013a1b77]*/

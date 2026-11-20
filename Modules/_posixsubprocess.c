@@ -4,11 +4,9 @@
 #endif
 
 #include "Python.h"
-#include "pycore_fileutils.h"     // _Py_set_inheritable_async_safe()
-#include "pycore_interp.h"        // _PyInterpreterState_GetFinalizing()
-#include "pycore_pystate.h"       // _PyInterpreterState_GET()
+#include "pycore_fileutils.h"
+#include "pycore_pystate.h"
 #include "pycore_signal.h"        // _Py_RestoreSignals()
-
 #if defined(HAVE_PIPE2) && !defined(_GNU_SOURCE)
 #  define _GNU_SOURCE
 #endif
@@ -63,7 +61,7 @@
 # endif
 #endif
 
-#if defined(__CYGWIN__) || defined(__FreeBSD__) || (defined(__APPLE__) && defined(__MACH__)) || defined(__DragonFly__)
+#if defined(__FreeBSD__) || (defined(__APPLE__) && defined(__MACH__)) || defined(__DragonFly__)
 # define FD_DIR "/dev/fd"
 #else
 # define FD_DIR "/proc/self/fd"
@@ -83,6 +81,22 @@ static struct PyModuleDef _posixsubprocessmodule;
 module _posixsubprocess
 [clinic start generated code]*/
 /*[clinic end generated code: output=da39a3ee5e6b4b0d input=c62211df27cf7334]*/
+
+/*[python input]
+class pid_t_converter(CConverter):
+    type = 'pid_t'
+    format_unit = '" _Py_PARSE_PID "'
+
+    def parse_arg(self, argname, displayname, *, limited_capi):
+        return self.format_code("""
+            {paramname} = PyLong_AsPid({argname});
+            if ({paramname} == -1 && PyErr_Occurred()) {{{{
+                goto exit;
+            }}}}
+            """,
+            argname=argname)
+[python start generated code]*/
+/*[python end generated code: output=da39a3ee5e6b4b0d input=c94349aa1aad151d]*/
 
 #include "clinic/_posixsubprocess.c.h"
 
@@ -352,8 +366,7 @@ _close_range_except(int start_fd,
                     int (*closer)(int, int))
 {
     if (end_fd == -1) {
-        end_fd = safe_get_max_fd();
-        end_fd = Py_MIN(end_fd, INT_MAX);
+        end_fd = Py_MIN(safe_get_max_fd(), INT_MAX);
     }
     Py_ssize_t keep_seq_idx;
     /* As fds_to_keep is sorted we can loop through the list closing
@@ -373,26 +386,20 @@ _close_range_except(int start_fd,
     return 0;
 }
 
-#if defined(_Py_HAVE_GETDENTS64) \
-    || (defined(__linux__) && defined(HAVE_SYS_SYSCALL_H))
-
-#ifdef _Py_HAVE_GETDENTS64
-#  define py_dirent64 dirent64
-#else
+#if defined(__linux__) && defined(HAVE_SYS_SYSCALL_H)
 /* It doesn't matter if d_name has room for NAME_MAX chars; we're using this
  * only to read a directory of short file descriptor number names.  The kernel
  * will return an error if we didn't give it enough space.  Highly Unlikely.
  * This structure is very old and stable: It will not change unless the kernel
  * chooses to break compatibility with all existing binaries.  Highly Unlikely.
  */
-struct py_dirent64 {
+struct linux_dirent64 {
    unsigned long long d_ino;
    long long d_off;
    unsigned short d_reclen;     /* Length of this linux_dirent */
    unsigned char  d_type;
    char           d_name[256];  /* Filename (null-terminated) */
 };
-#endif  // !_Py_HAVE_GETDENTS64
 
 static int
 _brute_force_closer(int first, int last)
@@ -432,31 +439,19 @@ _close_open_fds_safe(int start_fd, int *fds_to_keep, Py_ssize_t fds_to_keep_len)
                             _brute_force_closer);
         return;
     } else {
-        char buffer[sizeof(struct py_dirent64)];
-        Py_ssize_t bytes;
-        while (1) {
-#ifdef _Py_HAVE_GETDENTS64
-            /* musl <1.2.4 headers expose `getdents64` as an alias for `getdents`, whose buffer parameter
-             * is `struct dirent *`. We use `void *` to support both that interface and the glibc declaration
-             * without an incompatible-pointer diagnostic.
-             */
-            bytes = getdents64(fd_dir_fd, (void *)buffer, sizeof(buffer));
-#else
-            bytes = syscall(SYS_getdents64, fd_dir_fd,
-                            (struct py_dirent64 *)buffer, sizeof(buffer));
-#endif
-            if (bytes <= 0) {
-                break;
-            }
-
-            struct py_dirent64 *entry;
+        char buffer[sizeof(struct linux_dirent64)];
+        int bytes;
+        while ((bytes = syscall(SYS_getdents64, fd_dir_fd,
+                                (struct linux_dirent64 *)buffer,
+                                sizeof(buffer))) > 0) {
+            struct linux_dirent64 *entry;
             int offset;
 #ifdef _Py_MEMORY_SANITIZER
             __msan_unpoison(buffer, bytes);
 #endif
             for (offset = 0; offset < bytes; offset += entry->d_reclen) {
                 int fd;
-                entry = (struct py_dirent64 *)(buffer + offset);
+                entry = (struct linux_dirent64 *)(buffer + offset);
                 if ((fd = _pos_int_from_ascii(entry->d_name)) < 0)
                     continue;  /* Not a number. */
                 if (fd != fd_dir_fd && fd >= start_fd &&
@@ -988,6 +983,7 @@ _posixsubprocess.fork_exec as subprocess_fork_exec
     uid as uid_object: object
     child_umask: int
     preexec_fn: object
+    allow_vfork: bool
     /
 
 Spawn a fresh new child process.
@@ -1024,8 +1020,8 @@ subprocess_fork_exec_impl(PyObject *module, PyObject *process_args,
                           pid_t pgid_to_set, PyObject *gid_object,
                           PyObject *extra_groups_packed,
                           PyObject *uid_object, int child_umask,
-                          PyObject *preexec_fn)
-/*[clinic end generated code: output=288464dc56e373c7 input=5e56eac3e036e349]*/
+                          PyObject *preexec_fn, int allow_vfork)
+/*[clinic end generated code: output=7ee4f6ee5cf22b5b input=53eb802a43d5c5fc]*/
 {
     PyObject *converted_args = NULL, *fast_args = NULL;
     PyObject *preexec_fn_args_tuple = NULL;
@@ -1218,19 +1214,6 @@ subprocess_fork_exec_impl(PyObject *module, PyObject *process_args,
         goto cleanup;
     }
 
-    /* NOTE: user-defined classes may be able to present different
-     * executable/argument/env lists to the eventual exec as to this hook.
-     * The audit hook receives the original object, so would nevertheless
-     * be able to detect weird behaviour, hence we do not add extra
-     * complexity or performance penalties to attempt to avoid this. */
-    if (PySys_Audit("_posixsubprocess.fork_exec",
-                    "OOO",
-                    executable_list,
-                    process_args,
-                    env_list) < 0) {
-        goto cleanup;
-    }
-
     /* This must be the last thing done before fork() because we do not
      * want to call PyOS_BeforeFork() if there is any chance of another
      * error leading to the cleanup: code without calling fork(). */
@@ -1247,7 +1230,7 @@ subprocess_fork_exec_impl(PyObject *module, PyObject *process_args,
 #ifdef VFORK_USABLE
     /* Use vfork() only if it's safe. See the comment above child_exec(). */
     sigset_t old_sigs;
-    if (preexec_fn == Py_None &&
+    if (preexec_fn == Py_None && allow_vfork &&
         uid == (uid_t)-1 && gid == (gid_t)-1 && extra_group_size < 0) {
         /* Block all signals to ensure that no signal handlers are run in the
          * child process while it shares memory with us. Note that signals
@@ -1345,7 +1328,6 @@ static PyMethodDef module_methods[] = {
 };
 
 static PyModuleDef_Slot _posixsubprocess_slots[] = {
-    _Py_ABI_SLOT,
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}

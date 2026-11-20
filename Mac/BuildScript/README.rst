@@ -74,7 +74,7 @@ download them.
     - builds the following third-party libraries
 
         * OpenSSL 3.5.x
-        * Tcl/Tk 9.0.x
+        * Tcl/Tk 8.6.x
         * NCurses
         * SQLite
         * XZ

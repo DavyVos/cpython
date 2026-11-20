@@ -17,32 +17,10 @@
 #endif
 
 #include "Python.h"
-#include "pycore_object.h"        // _PyObject_VisitType()
 #include "pycore_ucnhash.h"       // _PyUnicode_Name_CAPI
-#include "pycore_unicodectype.h"  // _PyUnicode_IsXidStart()
 
 #include <stdbool.h>
 #include <stddef.h>               // offsetof()
-
-/* helper macro to fixup start/end slice values */
-#define ADJUST_INDICES(start, end, len) \
-    do {                                \
-        if (end > len) {                \
-            end = len;                  \
-        }                               \
-        else if (end < 0) {             \
-            end += len;                 \
-            if (end < 0) {              \
-                end = 0;                \
-            }                           \
-        }                               \
-        if (start < 0) {                \
-            start += len;               \
-            if (start < 0) {            \
-                start = 0;              \
-            }                           \
-        }                               \
-    } while (0)
 
 /*[clinic input]
 module unicodedata
@@ -62,11 +40,6 @@ typedef struct {
     const unsigned char east_asian_width;       /* index into
                                                    _PyUnicode_EastAsianWidth */
     const unsigned char normalization_quick_check; /* see is_normalized() */
-    const unsigned char grapheme_cluster_break; /* index into
-                                                   _PyUnicode_GraphemeBreakNames */
-    const unsigned char incb;           /* index into
-                                           _PyUnicode_IndicConjunctBreakNames */
-    const unsigned char ext_pict;       /* true if Extended_Pictographic */
 } _PyUnicode_DatabaseRecord;
 
 typedef struct change_record {
@@ -96,19 +69,6 @@ _getrecord_ex(Py_UCS4 code)
     return &_PyUnicode_Database_Records[index];
 }
 
-typedef struct {
-    PyObject *SegmentType;
-    PyObject *GraphemeBreakIteratorType;
-} unicodedatastate;
-
-static inline unicodedatastate *
-get_unicodedata_state(PyObject *module)
-{
-    void *state = _PyModule_GetState(module);
-    assert(state != NULL);
-    return (unicodedatastate *)state;
-}
-
 /* ------------- Previous-version API ------------------------------------- */
 typedef struct previous_version {
     PyObject_HEAD
@@ -117,11 +77,9 @@ typedef struct previous_version {
     Py_UCS4 (*normalization)(Py_UCS4);
 } PreviousDBVersion;
 
-#define PreviousDBVersion_CAST(op)  ((PreviousDBVersion *)(op))
-
 #include "clinic/unicodedata.c.h"
 
-#define get_old_record(self, v)    (PreviousDBVersion_CAST(self)->getrecord(v))
+#define get_old_record(self, v)    ((((PreviousDBVersion*)self)->getrecord)(v))
 
 static PyMemberDef DB_members[] = {
         {"unidata_version", Py_T_STRING, offsetof(PreviousDBVersion, name), Py_READONLY},
@@ -291,7 +249,6 @@ unicodedata_UCD_numeric_impl(PyObject *self, int chr,
 }
 
 /*[clinic input]
-@permit_long_summary
 unicodedata.UCD.category
 
     self: self
@@ -303,7 +260,7 @@ Returns the general category assigned to the character chr as string.
 
 static PyObject *
 unicodedata_UCD_category_impl(PyObject *self, int chr)
-/*[clinic end generated code: output=8571539ee2e6783a input=1d729c67299e8a31]*/
+/*[clinic end generated code: output=8571539ee2e6783a input=27d6f3d85050bc06]*/
 {
     int index;
     Py_UCS4 c = (Py_UCS4)chr;
@@ -317,7 +274,6 @@ unicodedata_UCD_category_impl(PyObject *self, int chr)
 }
 
 /*[clinic input]
-@permit_long_summary
 unicodedata.UCD.bidirectional
 
     self: self
@@ -331,7 +287,7 @@ If no such value is defined, an empty string is returned.
 
 static PyObject *
 unicodedata_UCD_bidirectional_impl(PyObject *self, int chr)
-/*[clinic end generated code: output=d36310ce2039bb92 input=838f8a2203bd2990]*/
+/*[clinic end generated code: output=d36310ce2039bb92 input=b3d8f42cebfcf475]*/
 {
     int index;
     Py_UCS4 c = (Py_UCS4)chr;
@@ -347,7 +303,6 @@ unicodedata_UCD_bidirectional_impl(PyObject *self, int chr)
 }
 
 /*[clinic input]
-@permit_long_summary
 unicodedata.UCD.combining -> int
 
     self: self
@@ -361,7 +316,7 @@ Returns 0 if no combining class is defined.
 
 static int
 unicodedata_UCD_combining_impl(PyObject *self, int chr)
-/*[clinic end generated code: output=cad056d0cb6a5920 input=e05edfbb882ebfed]*/
+/*[clinic end generated code: output=cad056d0cb6a5920 input=9f2d6b2a95d0a22a]*/
 {
     int index;
     Py_UCS4 c = (Py_UCS4)chr;
@@ -375,7 +330,6 @@ unicodedata_UCD_combining_impl(PyObject *self, int chr)
 }
 
 /*[clinic input]
-@permit_long_summary
 unicodedata.UCD.mirrored -> int
 
     self: self
@@ -390,7 +344,7 @@ character in bidirectional text, 0 otherwise.
 
 static int
 unicodedata_UCD_mirrored_impl(PyObject *self, int chr)
-/*[clinic end generated code: output=2532dbf8121b50e6 input=6db28989e49cd9c8]*/
+/*[clinic end generated code: output=2532dbf8121b50e6 input=5dd400d351ae6f3b]*/
 {
     int index;
     Py_UCS4 c = (Py_UCS4)chr;
@@ -406,7 +360,6 @@ unicodedata_UCD_mirrored_impl(PyObject *self, int chr)
 }
 
 /*[clinic input]
-@permit_long_summary
 unicodedata.UCD.east_asian_width
 
     self: self
@@ -418,7 +371,7 @@ Returns the east asian width assigned to the character chr as string.
 
 static PyObject *
 unicodedata_UCD_east_asian_width_impl(PyObject *self, int chr)
-/*[clinic end generated code: output=484e8537d9ee8197 input=207c5f68fa475516]*/
+/*[clinic end generated code: output=484e8537d9ee8197 input=c4854798aab026e0]*/
 {
     int index;
     Py_UCS4 c = (Py_UCS4)chr;
@@ -445,7 +398,6 @@ unicodedata_UCD_east_asian_width_impl(PyObject *self, int chr)
 #define SCount  (LCount*NCount)
 
 /*[clinic input]
-@permit_long_summary
 unicodedata.UCD.decomposition
 
     self: self
@@ -459,7 +411,7 @@ An empty string is returned in case no such mapping is defined.
 
 static PyObject *
 unicodedata_UCD_decomposition_impl(PyObject *self, int chr)
-/*[clinic end generated code: output=7d699f3ec7565d27 input=84d628d1abfd01ec]*/
+/*[clinic end generated code: output=7d699f3ec7565d27 input=e4c12459ad68507b]*/
 {
     char decomp[256];
     int code, index, count;
@@ -472,7 +424,7 @@ unicodedata_UCD_decomposition_impl(PyObject *self, int chr)
     if (UCD_Check(self)) {
         const change_record *old = get_old_record(self, c);
         if (old->category_changed == 0)
-            return Py_GetConstant(Py_CONSTANT_EMPTY_STR); /* unassigned */
+            return PyUnicode_FromString(""); /* unassigned */
     }
 
     // Hangul Decomposition.
@@ -560,36 +512,39 @@ get_decomp_record(PyObject *self, Py_UCS4 code,
 #define CANONICAL_ORDERING_COUNTING_SORT_THRESHOLD 20
 
 static void
-canonical_ordering_sort_insertion(Py_UCS4 *data, Py_ssize_t length)
+canonical_ordering_sort_insertion(int kind, void *data,
+                                  Py_ssize_t start, Py_ssize_t end)
 {
-    for (Py_ssize_t i = 1; i < length; i++) {
-        Py_UCS4 code = data[i];
+    for (Py_ssize_t i = start + 1; i < end; i++) {
+        Py_UCS4 code = PyUnicode_READ(kind, data, i);
         unsigned char combining = _getrecord_ex(code)->combining;
         Py_ssize_t j = i;
 
-        while (j > 0) {
-            Py_UCS4 previous = data[j - 1];
+        while (j > start) {
+            Py_UCS4 previous = PyUnicode_READ(kind, data, j - 1);
             if (_getrecord_ex(previous)->combining <= combining) {
                 break;
             }
-            data[j] = previous;
+            PyUnicode_WRITE(kind, data, j, previous);
             j--;
         }
         if (j != i) {
-            data[j] = code;
+            PyUnicode_WRITE(kind, data, j, code);
         }
     }
 }
 
 static void
-canonical_ordering_sort_counting(Py_UCS4 *data, Py_ssize_t length,
+canonical_ordering_sort_counting(int kind, void *data,
+                                 Py_ssize_t start, Py_ssize_t end,
                                  Py_UCS4 *sortbuf)
 {
     Py_ssize_t counts[256] = {0};
+    Py_ssize_t run_length = end - start;
     Py_ssize_t total = 0;
 
-    for (Py_ssize_t i = 0; i < length; i++) {
-        Py_UCS4 code = data[i];
+    for (Py_ssize_t i = start; i < end; i++) {
+        Py_UCS4 code = PyUnicode_READ(kind, data, i);
         unsigned char combining = _getrecord_ex(code)->combining;
         counts[combining]++;
     }
@@ -601,12 +556,14 @@ canonical_ordering_sort_counting(Py_UCS4 *data, Py_ssize_t length,
     }
 
     /* Reuse counts[] as the next output slot for each CCC. */
-    for (Py_ssize_t i = 0; i < length; i++) {
-        Py_UCS4 code = data[i];
+    for (Py_ssize_t i = start; i < end; i++) {
+        Py_UCS4 code = PyUnicode_READ(kind, data, i);
         unsigned char combining = _getrecord_ex(code)->combining;
         sortbuf[counts[combining]++] = code;
     }
-    memcpy(data, sortbuf, length * sizeof(Py_UCS4));
+    for (Py_ssize_t i = 0; i < run_length; i++) {
+        PyUnicode_WRITE(kind, data, start + i, sortbuf[i]);
+    }
 }
 
 static PyObject*
@@ -615,8 +572,9 @@ nfd_nfkd(PyObject *self, PyObject *input, int k)
     PyObject *result;
     Py_UCS4 *output;
     Py_ssize_t i, o, osize;
-    int input_kind;
+    int input_kind, result_kind;
     const void *input_data;
+    void *result_data;
     /* Longest decomposition in Unicode 3.2: U+FDFA */
     Py_UCS4 stack[20];
     Py_ssize_t space, isize;
@@ -709,13 +667,23 @@ nfd_nfkd(PyObject *self, PyObject *input, int k)
         }
     }
 
+    result = PyUnicode_FromKindAndData(PyUnicode_4BYTE_KIND,
+                                       output, o);
+    PyMem_Free(output);
+    if (!result)
+        return NULL;
+
+    /* result is guaranteed to be ready, as it is compact. */
+    result_kind = PyUnicode_KIND(result);
+    result_data = PyUnicode_DATA(result);
+
     /* Sort each consecutive combining-character run canonically. */
     i = 0;
     while (i < o) {
         Py_ssize_t run_length, run_start;
         int needs_sort = 0;
 
-        Py_UCS4 ch = output[i];
+        Py_UCS4 ch = PyUnicode_READ(result_kind, result_data, i);
         prev = _getrecord_ex(ch)->combining;
         if (prev == 0) {
             i++;
@@ -724,7 +692,7 @@ nfd_nfkd(PyObject *self, PyObject *input, int k)
 
         run_start = i++;
         while (i < o) {
-            Py_UCS4 ch = output[i];
+            Py_UCS4 ch = PyUnicode_READ(result_kind, result_data, i);
             cur = _getrecord_ex(ch)->combining;
             if (cur == 0) {
                 break;
@@ -741,48 +709,44 @@ nfd_nfkd(PyObject *self, PyObject *input, int k)
 
         run_length = i - run_start;
         if (run_length < CANONICAL_ORDERING_COUNTING_SORT_THRESHOLD) {
-            canonical_ordering_sort_insertion(output + run_start, run_length);
+            canonical_ordering_sort_insertion(result_kind, result_data,
+                                              run_start, i);
             continue;
         }
 
         if (run_length > sortbuflen) {
-            Py_UCS4 *new_sortbuf = sortbuf;
-            PyMem_Resize(new_sortbuf, Py_UCS4, run_length);
+            Py_UCS4 *new_sortbuf = PyMem_Resize(sortbuf,
+                                                Py_UCS4,
+                                                run_length);
             if (new_sortbuf == NULL) {
                 PyErr_NoMemory();
                 PyMem_Free(sortbuf);
-                PyMem_Free(output);
+                Py_DECREF(result);
                 return NULL;
             }
             sortbuf = new_sortbuf;
             sortbuflen = run_length;
         }
 
-        canonical_ordering_sort_counting(output + run_start, run_length,
-                                         sortbuf);
+        canonical_ordering_sort_counting(result_kind, result_data,
+                                         run_start, i, sortbuf);
     }
     PyMem_Free(sortbuf);
-    result = PyUnicode_FromKindAndData(PyUnicode_4BYTE_KIND, output, o);
-    PyMem_Free(output);
     return result;
 }
 
 static int
 find_nfc_index(const struct reindex* nfc, Py_UCS4 code)
 {
-    /* The table is sorted by .start ascending with disjoint [start, start+count]
-       ranges and ends with a sentinel whose .start exceeds every codepoint, so
-       a single .start <= code test per entry also stops at the sentinel.  Find
-       the first entry past code, then range-check the candidate (entry i - 1). */
-    unsigned int i;
-    for (i = 0; (Py_UCS4)nfc[i].start <= code; i++) {
-    }
-    if (i == 0) {
-        return -1;
-    }
-    unsigned int start = nfc[i - 1].start;
-    if (code <= start + nfc[i - 1].count) {
-        return nfc[i - 1].index + (code - start);
+    unsigned int index;
+    for (index = 0; nfc[index].start; index++) {
+        unsigned int start = nfc[index].start;
+        if (code < start)
+            return -1;
+        if (code <= start + nfc[index].count) {
+            unsigned int delta = code - start;
+            return nfc[index].index + delta;
+        }
     }
     return -1;
 }
@@ -803,7 +767,7 @@ nfc_nfkc(PyObject *self, PyObject *input, int k)
     result = nfd_nfkd(self, input, k);
     if (!result)
         return NULL;
-
+    /* result will be "ready". */
     kind = PyUnicode_KIND(result);
     data = PyUnicode_DATA(result);
     len = PyUnicode_GET_LENGTH(result);
@@ -995,7 +959,6 @@ is_normalized_quickcheck(PyObject *self, PyObject *input, bool nfc, bool k,
 }
 
 /*[clinic input]
-@permit_long_summary
 unicodedata.UCD.is_normalized
 
     self: self
@@ -1011,7 +974,7 @@ Valid values for form are 'NFC', 'NFKC', 'NFD', and 'NFKD'.
 static PyObject *
 unicodedata_UCD_is_normalized_impl(PyObject *self, PyObject *form,
                                    PyObject *input)
-/*[clinic end generated code: output=11e5a3694e723ca5 input=de66aa679265300b]*/
+/*[clinic end generated code: output=11e5a3694e723ca5 input=a544f14cea79e508]*/
 {
     if (PyUnicode_GET_LENGTH(input) == 0) {
         /* special case empty input strings. */
@@ -1084,34 +1047,34 @@ unicodedata_UCD_normalize_impl(PyObject *self, PyObject *form,
     if (PyUnicode_GET_LENGTH(input) == 0) {
         /* Special case empty input strings, since resizing
            them  later would cause internal errors. */
-        return PyUnicode_FromObject(input);
+        return Py_NewRef(input);
     }
 
     if (PyUnicode_CompareWithASCIIString(form, "NFC") == 0) {
         if (is_normalized_quickcheck(self, input,
                                      true,  false, true) == YES) {
-            return PyUnicode_FromObject(input);
+            return Py_NewRef(input);
         }
         return nfc_nfkc(self, input, 0);
     }
     if (PyUnicode_CompareWithASCIIString(form, "NFKC") == 0) {
         if (is_normalized_quickcheck(self, input,
                                      true,  true,  true) == YES) {
-            return PyUnicode_FromObject(input);
+            return Py_NewRef(input);
         }
         return nfc_nfkc(self, input, 1);
     }
     if (PyUnicode_CompareWithASCIIString(form, "NFD") == 0) {
         if (is_normalized_quickcheck(self, input,
                                      false, false, true) == YES) {
-            return PyUnicode_FromObject(input);
+            return Py_NewRef(input);
         }
         return nfd_nfkd(self, input, 0);
     }
     if (PyUnicode_CompareWithASCIIString(form, "NFKD") == 0) {
         if (is_normalized_quickcheck(self, input,
                                      false, true,  true) == YES) {
-            return PyUnicode_FromObject(input);
+            return Py_NewRef(input);
         }
         return nfd_nfkd(self, input, 1);
     }
@@ -1472,7 +1435,9 @@ _getucname(PyObject *self,
         return 1;
     }
 
-    if (prefixid > 0) {
+    /* Only support CJK unified ideographs.
+     * Support for Tangut ideographs is a new feature in 3.15. */
+    if (prefixid == 1) {
         const char *prefix = derived_name_prefixes[prefixid];
         if (snprintf(buffer, buflen, "%s%04X", prefix, code) >= buflen) {
             return 0;
@@ -1600,7 +1565,7 @@ _getcode(const char* name, int namelen, Py_UCS4* code)
     }
 
     if (i < (int)Py_ARRAY_LENGTH(derived_name_prefixes)) {
-        Py_UCS4 v = parse_hex_code(name + prefixlen, namelen - (int)prefixlen);
+        Py_UCS4 v = parse_hex_code(name + prefixlen, namelen - prefixlen);
         if (find_prefix_id(v) != i) {
             return 0;
         }
@@ -1679,40 +1644,6 @@ unicodedata_UCD_name_impl(PyObject *self, int chr, PyObject *default_value)
 }
 
 /*[clinic input]
-unicodedata.isxidstart
-
-    chr: int(accept={str})
-    /
-
-Return True if the character has the XID_Start property, else False.
-
-[clinic start generated code]*/
-
-static PyObject *
-unicodedata_isxidstart_impl(PyObject *module, int chr)
-/*[clinic end generated code: output=7ae0e1a3915aa031 input=3812717f3a6bfc56]*/
-{
-    return PyBool_FromLong(_PyUnicode_IsXidStart(chr));
-}
-
-/*[clinic input]
-unicodedata.isxidcontinue
-
-    chr: int(accept={str})
-    /
-
-Return True if the character has the XID_Continue property, else False.
-
-[clinic start generated code]*/
-
-static PyObject *
-unicodedata_isxidcontinue_impl(PyObject *module, int chr)
-/*[clinic end generated code: output=517caa8b38c73aed input=a971ed6e57cac374]*/
-{
-    return PyBool_FromLong(_PyUnicode_IsXidContinue(chr));
-}
-
-/*[clinic input]
 unicodedata.UCD.lookup
 
     self: self
@@ -1762,493 +1693,11 @@ unicodedata_UCD_lookup_impl(PyObject *self, const char *name,
     return PyUnicode_FromOrdinal(code);
 }
 
-
-/* Grapheme Cluster Break algorithm */
-
-enum ExtPictState {
-    ExtPictState_Init,
-    // \p{Extended_Pictographic} Extend*
-    ExtPictState_Started,
-    // ... ZWJ
-    ExtPictState_ZWJ,
-    // ... \p{Extended_Pictographic}
-    ExtPictState_Matched,
-};
-
-enum InCBState {
-    InCBState_Init,
-    // \p{InCB=Linker} \p{InCB=Extend}*
-    InCBState_Linker,
-    // ... \p{InCB=Consonant}
-    InCBState_Matched,
-};
-
-typedef struct {
-    PyObject *str;
-    Py_ssize_t start;
-    Py_ssize_t pos;
-    Py_ssize_t end;
-    int gcb;
-    enum ExtPictState ep_state;
-    enum InCBState incb_state;
-    bool ri_flag;
-} _PyGraphemeBreak;
-
-static inline enum ExtPictState
-update_ext_pict_state(enum ExtPictState state, int gcb, bool ext_pict)
-{
-    if (ext_pict) {
-        return (state == ExtPictState_ZWJ) ? ExtPictState_Matched : ExtPictState_Started;
-    }
-    if (state == ExtPictState_Started || state == ExtPictState_Matched) {
-        if (gcb == GCB_Extend) {
-            return ExtPictState_Started;
-        }
-        if (gcb == GCB_ZWJ) {
-            return ExtPictState_ZWJ;
-        }
-    }
-    return ExtPictState_Init;
-}
-
-static inline enum InCBState
-update_incb_state(enum InCBState state, int incb)
-{
-    if (incb == InCB_Linker) {
-        return InCBState_Linker;
-    }
-    if (state == InCBState_Linker) {
-        if (incb == InCB_Extend) {
-            return InCBState_Linker;
-        }
-        if (incb == InCB_Consonant) {
-            return InCBState_Matched;
-        }
-    }
-    return InCBState_Init;
-}
-
-static inline bool
-update_ri_flag(bool flag, int gcb)
-{
-    if (gcb == GCB_Regional_Indicator) {
-        return !flag;
-    }
-    else {
-        return false;
-    }
-}
-
-static inline bool
-grapheme_break(int prev_gcb, int curr_gcb, enum ExtPictState ep_state,
-               bool ri_flag, enum InCBState incb_state)
-{
-    /* GB3 */
-    if (prev_gcb == GCB_CR && curr_gcb == GCB_LF) {
-        return false;
-    }
-
-    /* GB4 */
-    if (prev_gcb == GCB_CR ||
-        prev_gcb == GCB_LF ||
-        prev_gcb == GCB_Control)
-    {
-        return true;
-    }
-
-    /* GB5 */
-    if (curr_gcb == GCB_CR ||
-        curr_gcb == GCB_LF ||
-        curr_gcb == GCB_Control)
-    {
-        return true;
-    }
-
-    /* GB6 */
-    if (prev_gcb == GCB_L &&
-        (curr_gcb == GCB_L ||
-         curr_gcb == GCB_V ||
-         curr_gcb == GCB_LV ||
-         curr_gcb == GCB_LVT))
-    {
-        return false;
-    }
-
-    /* GB7 */
-    if ((prev_gcb == GCB_LV || prev_gcb == GCB_V) &&
-        (curr_gcb == GCB_V || curr_gcb == GCB_T))
-    {
-        return false;
-    }
-
-    /* GB8 */
-    if ((prev_gcb == GCB_LVT || prev_gcb == GCB_T) &&
-        curr_gcb == GCB_T)
-    {
-        return false;
-    }
-
-    /* GB9 */
-    if (curr_gcb == GCB_Extend || curr_gcb == GCB_ZWJ) {
-        return false;
-    }
-
-    /* GB9a */
-    if (curr_gcb == GCB_SpacingMark) {
-        return false;
-    }
-
-    /* GB9b */
-    if (prev_gcb == GCB_Prepend) {
-        return false;
-    }
-
-    /* GB9c */
-    if (incb_state == InCBState_Matched) {
-        return false;
-    }
-
-    /* GB11 */
-    if (ep_state == ExtPictState_Matched) {
-        return false;
-    }
-
-    /* GB12 and GB13 */
-    if (prev_gcb == GCB_Regional_Indicator && curr_gcb == prev_gcb) {
-        return ri_flag;
-    }
-
-    /* GB999 */
-    return true;
-}
-
-static void
-_Py_InitGraphemeBreak(_PyGraphemeBreak *iter, PyObject *str,
-                      Py_ssize_t start, Py_ssize_t end)
-{
-    iter->str = str;
-    iter->start = iter->pos = start;
-    iter->end = end;
-    iter->gcb = 0;
-    iter->ep_state = ExtPictState_Init;
-    iter->ri_flag = false;
-    iter->incb_state = InCBState_Init;
-}
-
-static Py_ssize_t
-_Py_NextGraphemeBreak(_PyGraphemeBreak *iter)
-{
-    if (iter->start >= iter->end) {
-        return -1;
-    }
-
-    int kind = PyUnicode_KIND(iter->str);
-    void *pstr = PyUnicode_DATA(iter->str);
-    while (iter->pos < iter->end) {
-        Py_UCS4 chr = PyUnicode_READ(kind, pstr, iter->pos);
-        const _PyUnicode_DatabaseRecord *record = _getrecord_ex(chr);
-        int gcb = record->grapheme_cluster_break;
-        iter->ep_state = update_ext_pict_state(iter->ep_state, gcb, record->ext_pict);
-        iter->ri_flag = update_ri_flag(iter->ri_flag, gcb);
-        iter->incb_state = update_incb_state(iter->incb_state, record->incb);
-        int prev_gcb = iter->gcb;
-        iter->gcb = gcb;
-        if (iter->pos != iter->start &&
-            grapheme_break(prev_gcb, gcb, iter->ep_state, iter->ri_flag,
-                           iter->incb_state))
-        {
-            iter->start = iter->pos;
-            return iter->pos++;
-        }
-        ++iter->pos;
-    }
-    iter->start = iter->pos;
-    return iter->pos;
-}
-
-
-/* Text Segment object */
-
-typedef struct {
-    PyObject_HEAD
-    PyObject *string;
-    Py_ssize_t start;
-    Py_ssize_t end;
-} SegmentObject;
-
-static void
-Segment_dealloc(PyObject *self)
-{
-    PyTypeObject *tp = Py_TYPE(self);
-    PyObject_GC_UnTrack(self);
-    Py_DECREF(((SegmentObject *)self)->string);
-    tp->tp_free(self);
-    Py_DECREF(tp);
-}
-
-static int
-Segment_traverse(PyObject *self, visitproc visit, void *arg)
-{
-    Py_VISIT(Py_TYPE(self));
-    Py_VISIT(((SegmentObject *)self)->string);
-    return 0;
-}
-
-static PyObject *
-Segment_str(PyObject *self)
-{
-    SegmentObject *s = (SegmentObject *)self;
-    return PyUnicode_Substring(s->string, s->start, s->end);
-}
-
-static PyObject *
-Segment_repr(PyObject *self)
-{
-    SegmentObject *s = (SegmentObject *)self;
-    return PyUnicode_FromFormat("<Segment %zd:%zd>", s->start, s->end);
-}
-
-static PyMemberDef Segment_members[] = {
-    {"start", Py_T_PYSSIZET, offsetof(SegmentObject, start), Py_READONLY,
-        PyDoc_STR("grapheme start")},
-    {"end", Py_T_PYSSIZET, offsetof(SegmentObject, end), Py_READONLY,
-        PyDoc_STR("grapheme end")},
-    {NULL}  /* Sentinel */
-};
-
-static PyType_Slot Segment_slots[] = {
-    {Py_tp_dealloc, Segment_dealloc},
-    {Py_tp_traverse, Segment_traverse},
-    {Py_tp_str, Segment_str},
-    {Py_tp_repr, Segment_repr},
-    {Py_tp_members, Segment_members},
-    {0, 0},
-};
-
-static PyType_Spec Segment_spec = {
-    .name = "unicodedata.Segment",
-    .basicsize = sizeof(SegmentObject),
-    .flags = (
-        Py_TPFLAGS_DEFAULT
-        | Py_TPFLAGS_HAVE_GC
-        | Py_TPFLAGS_DISALLOW_INSTANTIATION
-        | Py_TPFLAGS_IMMUTABLETYPE
-    ),
-    .slots = Segment_slots
-};
-
-
-/* Grapheme Cluster iterator */
-
-typedef struct {
-    PyObject_HEAD
-    _PyGraphemeBreak iter;
-} GraphemeBreakIterator;
-
-static void
-GBI_dealloc(PyObject *self)
-{
-    PyTypeObject *tp = Py_TYPE(self);
-    PyObject_GC_UnTrack(self);
-    Py_DECREF(((GraphemeBreakIterator *)self)->iter.str);
-    tp->tp_free(self);
-    Py_DECREF(tp);
-}
-
-static int
-GBI_traverse(PyObject *self, visitproc visit, void *arg)
-{
-    Py_VISIT(Py_TYPE(self));
-    Py_VISIT(((GraphemeBreakIterator *)self)->iter.str);
-    return 0;
-}
-
-static PyObject *
-GBI_iternext(PyObject *self)
-{
-    GraphemeBreakIterator *it = (GraphemeBreakIterator *)self;
-    Py_ssize_t start = it->iter.start;
-    Py_ssize_t pos = _Py_NextGraphemeBreak(&it->iter);
-
-    if (pos < 0) {
-        return NULL;
-    }
-    PyObject *module = PyType_GetModule(Py_TYPE(it));
-    PyObject *SegmentType = get_unicodedata_state(module)->SegmentType;
-    SegmentObject *s = PyObject_GC_New(SegmentObject,
-                                       (PyTypeObject *)SegmentType);
-    if (!s) {
-        return NULL;
-    }
-    s->string = Py_NewRef(it->iter.str);
-    s->start = start;
-    s->end = pos;
-    PyObject_GC_Track(s);
-    return (PyObject *)s;
-}
-
-
-static PyType_Slot GraphemeBreakIterator_slots[] = {
-    {Py_tp_dealloc, GBI_dealloc},
-    {Py_tp_iter, PyObject_SelfIter},
-    {Py_tp_iternext, GBI_iternext},
-    {Py_tp_traverse, GBI_traverse},
-    {0, 0},
-};
-
-static PyType_Spec GraphemeBreakIterator_spec = {
-    .name = "unicodedata.GraphemeBreakIterator",
-    .basicsize = sizeof(GraphemeBreakIterator),
-    .flags = (
-        Py_TPFLAGS_DEFAULT
-        | Py_TPFLAGS_HAVE_GC
-        | Py_TPFLAGS_DISALLOW_INSTANTIATION
-        | Py_TPFLAGS_IMMUTABLETYPE
-    ),
-    .slots = GraphemeBreakIterator_slots
-};
-
-
-/*[clinic input]
-unicodedata.iter_graphemes
-
-    unistr: unicode
-    start: Py_ssize_t = 0
-    end: Py_ssize_t(c_default="PY_SSIZE_T_MAX") = sys.maxsize
-    /
-
-Returns an iterator to iterate over grapheme clusters.
-
-It uses extended grapheme cluster rules from TR29.
-[clinic start generated code]*/
-
-static PyObject *
-unicodedata_iter_graphemes_impl(PyObject *module, PyObject *unistr,
-                                Py_ssize_t start, Py_ssize_t end)
-/*[clinic end generated code: output=b0b831944265d36f input=a1454d9e8135951f]*/
-{
-    PyObject *GraphemeBreakIteratorType = get_unicodedata_state(module)->GraphemeBreakIteratorType;
-    GraphemeBreakIterator *gbi = PyObject_GC_New(GraphemeBreakIterator,
-            (PyTypeObject *)GraphemeBreakIteratorType);
-    if (!gbi) {
-        return NULL;
-    }
-
-    Py_ssize_t len = PyUnicode_GET_LENGTH(unistr);
-    ADJUST_INDICES(start, end, len);
-    Py_INCREF(unistr);
-    _Py_InitGraphemeBreak(&gbi->iter, unistr, start, end);
-    PyObject_GC_Track(gbi);
-    return (PyObject*)gbi;
-}
-
-/*[clinic input]
-unicodedata.block
-
-    chr: int(accept={str})
-    /
-
-Return block assigned to the character chr.
-[clinic start generated code]*/
-
-static PyObject *
-unicodedata_block_impl(PyObject *module, int chr)
-/*[clinic end generated code: output=5f8b40c49eaec75a input=0834cf2642d6eaae]*/
-{
-    Py_UCS4 c = (Py_UCS4)chr;
-    int lo = 0, hi = BLOCK_COUNT - 1;
-    while (lo <= hi) {
-        int mid = (lo + hi) / 2;
-        if (c < _PyUnicode_Blocks[mid].start) {
-            hi = mid - 1;
-        }
-        else if (c > _PyUnicode_Blocks[mid].end) {
-            lo = mid + 1;
-        }
-        else {
-            size_t name = _PyUnicode_Blocks[mid].name;
-            return PyUnicode_FromString(_PyUnicode_BlockNames[name]);
-        }
-    }
-    // Otherwise, return the default value per
-    // https://www.unicode.org/versions/latest/core-spec/chapter-3/#G64189
-    return PyUnicode_FromString("No_Block");
-}
-
-/*[clinic input]
-unicodedata.grapheme_cluster_break
-
-    chr: int(accept={str})
-    /
-
-Returns the Grapheme_Cluster_Break property assigned to the character.
-[clinic start generated code]*/
-
-static PyObject *
-unicodedata_grapheme_cluster_break_impl(PyObject *module, int chr)
-/*[clinic end generated code: output=39542e0f63bba36f input=5da75e86435576fd]*/
-{
-    Py_UCS4 c = (Py_UCS4)chr;
-    int index = (int) _getrecord_ex(c)->grapheme_cluster_break;
-    return PyUnicode_FromString(_PyUnicode_GraphemeBreakNames[index]);
-}
-
-/*[clinic input]
-unicodedata.indic_conjunct_break
-
-    chr: int(accept={str})
-    /
-
-Returns the Indic_Conjunct_Break property assigned to the character.
-[clinic start generated code]*/
-
-static PyObject *
-unicodedata_indic_conjunct_break_impl(PyObject *module, int chr)
-/*[clinic end generated code: output=673eff2caf797f08 input=5c730f78e469f2e8]*/
-{
-    Py_UCS4 c = (Py_UCS4)chr;
-    int index = (int) _getrecord_ex(c)->incb;
-    return PyUnicode_FromString(_PyUnicode_IndicConjunctBreakNames[index]);
-}
-
-/*[clinic input]
-@permit_long_summary
-unicodedata.extended_pictographic
-
-    chr: int(accept={str})
-    /
-
-Returns the Extended_Pictographic property assigned to the character, as boolean.
-[clinic start generated code]*/
-
-static PyObject *
-unicodedata_extended_pictographic_impl(PyObject *module, int chr)
-/*[clinic end generated code: output=b6bbb349427370b1 input=250d7bd988997eb3]*/
-{
-    Py_UCS4 c = (Py_UCS4)chr;
-    int index = (int) _getrecord_ex(c)->ext_pict;
-    return PyBool_FromLong(index);
-}
-
-
 // List of functions used to define module functions *AND* unicodedata.UCD
 // methods. For module functions, self is the module. For UCD methods, self
 // is an UCD instance. The UCD_Check() macro is used to check if self is
 // an UCD instance.
 static PyMethodDef unicodedata_functions[] = {
-    // Module only functions.
-    UNICODEDATA_BLOCK_METHODDEF
-    UNICODEDATA_GRAPHEME_CLUSTER_BREAK_METHODDEF
-    UNICODEDATA_INDIC_CONJUNCT_BREAK_METHODDEF
-    UNICODEDATA_EXTENDED_PICTOGRAPHIC_METHODDEF
-    UNICODEDATA_ITER_GRAPHEMES_METHODDEF
-    UNICODEDATA_ISXIDSTART_METHODDEF
-    UNICODEDATA_ISXIDCONTINUE_METHODDEF
-
-    // The following definitions are shared between the module
-    // and the UCD class.
-#define DB_methods (unicodedata_functions + 7)
-
     UNICODEDATA_UCD_DECIMAL_METHODDEF
     UNICODEDATA_UCD_DIGIT_METHODDEF
     UNICODEDATA_UCD_NUMERIC_METHODDEF
@@ -2265,8 +1714,15 @@ static PyMethodDef unicodedata_functions[] = {
     {NULL, NULL}                /* sentinel */
 };
 
+static int
+ucd_traverse(PreviousDBVersion *self, visitproc visit, void *arg)
+{
+    Py_VISIT(Py_TYPE(self));
+    return 0;
+}
+
 static void
-ucd_dealloc(PyObject *self)
+ucd_dealloc(PreviousDBVersion *self)
 {
     PyTypeObject *tp = Py_TYPE(self);
     PyObject_GC_UnTrack(self);
@@ -2276,9 +1732,9 @@ ucd_dealloc(PyObject *self)
 
 static PyType_Slot ucd_type_slots[] = {
     {Py_tp_dealloc, ucd_dealloc},
-    {Py_tp_traverse, _PyObject_VisitType},
+    {Py_tp_traverse, ucd_traverse},
     {Py_tp_getattro, PyObject_GenericGetAttr},
-    {Py_tp_methods, DB_methods},
+    {Py_tp_methods, unicodedata_functions},
     {Py_tp_members, DB_members},
     {0, 0}
 };
@@ -2291,7 +1747,6 @@ static PyType_Spec ucd_type_spec = {
     .slots = ucd_type_slots
 };
 
-
 PyDoc_STRVAR(unicodedata_docstring,
 "This module provides access to the Unicode Character Database which\n\
 defines character properties for all Unicode characters. The data in\n\
@@ -2302,46 +1757,8 @@ The module uses the same names and symbols as defined by the\n\
 UnicodeData File Format " UNIDATA_VERSION ".");
 
 static int
-unicodedata_traverse(PyObject *module, visitproc visit, void *arg)
-{
-    unicodedatastate *state = get_unicodedata_state(module);
-    Py_VISIT(state->SegmentType);
-    Py_VISIT(state->GraphemeBreakIteratorType);
-    return 0;
-}
-
-static int
-unicodedata_clear(PyObject *module)
-{
-    unicodedatastate *state = get_unicodedata_state(module);
-    Py_CLEAR(state->SegmentType);
-    Py_CLEAR(state->GraphemeBreakIteratorType);
-    return 0;
-}
-
-static void
-unicodedata_free(void *module)
-{
-    unicodedata_clear((PyObject *)module);
-}
-
-static int
 unicodedata_exec(PyObject *module)
 {
-    unicodedatastate *state = get_unicodedata_state(module);
-
-    PyObject *SegmentType = PyType_FromModuleAndSpec(module, &Segment_spec, NULL);
-    if (SegmentType == NULL) {
-        return -1;
-    }
-    state->SegmentType = SegmentType;
-
-    PyObject *GraphemeBreakIteratorType = PyType_FromModuleAndSpec(module, &GraphemeBreakIterator_spec, NULL);
-    if (GraphemeBreakIteratorType == NULL) {
-        return -1;
-    }
-    state->GraphemeBreakIteratorType = GraphemeBreakIteratorType;
-
     if (PyModule_AddStringConstant(module, "unidata_version", UNIDATA_VERSION) < 0) {
         return -1;
     }
@@ -2373,7 +1790,6 @@ unicodedata_exec(PyObject *module)
 }
 
 static PyModuleDef_Slot unicodedata_slots[] = {
-    _Py_ABI_SLOT,
     {Py_mod_exec, unicodedata_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {Py_mod_gil, Py_MOD_GIL_NOT_USED},
@@ -2384,12 +1800,9 @@ static struct PyModuleDef unicodedata_module = {
     PyModuleDef_HEAD_INIT,
     .m_name = "unicodedata",
     .m_doc = unicodedata_docstring,
-    .m_size = sizeof(unicodedatastate),
+    .m_size = 0,
     .m_methods = unicodedata_functions,
     .m_slots = unicodedata_slots,
-    .m_traverse = unicodedata_traverse,
-    .m_clear = unicodedata_clear,
-    .m_free = unicodedata_free,
 };
 
 PyMODINIT_FUNC

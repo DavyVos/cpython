@@ -1,8 +1,11 @@
-:mod:`!ast` --- Abstract syntax trees
+:mod:`!ast` --- Abstract Syntax Trees
 =====================================
 
 .. module:: ast
    :synopsis: Abstract Syntax Tree classes and manipulation.
+
+.. sectionauthor:: Martin v. Löwis <martin@v.loewis.de>
+.. sectionauthor:: Georg Brandl <georg@python.org>
 
 .. testsetup::
 
@@ -12,7 +15,7 @@
 
 --------------
 
-The :mod:`!ast` module helps Python applications to process trees of the Python
+The :mod:`ast` module helps Python applications to process trees of the Python
 abstract syntax grammar.  The abstract syntax itself might change with each
 Python release; this module helps to find out programmatically what the current
 grammar looks like.
@@ -26,7 +29,7 @@ compiled into a Python code object using the built-in :func:`compile` function.
 
 .. _abstract-grammar:
 
-Abstract grammar
+Abstract Grammar
 ----------------
 
 The abstract grammar is currently defined as follows:
@@ -35,23 +38,21 @@ The abstract grammar is currently defined as follows:
    :language: asdl
 
 
-.. _ast_nodes:
-
 Node classes
 ------------
 
 .. class:: AST
 
-   This is the abstract base of all AST node classes.  The actual node classes are
+   This is the base of all AST node classes.  The actual node classes are
    derived from the :file:`Parser/Python.asdl` file, which is reproduced
    :ref:`above <abstract-grammar>`.  They are defined in the :mod:`!_ast` C
-   module and re-exported in :mod:`!ast`.
+   module and re-exported in :mod:`ast`.
 
    There is one class defined for each left-hand side symbol in the abstract
-   grammar (for example, :class:`!ast.stmt` or :class:`!ast.expr`).  In addition,
+   grammar (for example, :class:`ast.stmt` or :class:`ast.expr`).  In addition,
    there is one class defined for each constructor on the right-hand side; these
    classes inherit from the classes for the left-hand side trees.  For example,
-   :class:`ast.BinOp` inherits from :class:`!ast.expr`.  For production rules
+   :class:`ast.BinOp` inherits from :class:`ast.expr`.  For production rules
    with alternatives (aka "sums"), the left-hand side class is abstract: only
    instances of specific constructor nodes are ever created.
 
@@ -65,7 +66,7 @@ Node classes
 
       Each instance of a concrete class has one attribute for each child node,
       of the type as defined in the grammar.  For example, :class:`ast.BinOp`
-      instances have an attribute :attr:`!left` of type :class:`!ast.expr`.
+      instances have an attribute :attr:`left` of type :class:`ast.expr`.
 
       If these attributes are marked as optional in the grammar (using a
       question mark), the value might be ``None``.  If the attributes can have
@@ -104,11 +105,10 @@ Node classes
       one can get the source segment of a one-line expression node using
       ``source_line[node.col_offset : node.end_col_offset]``.
 
-   The constructors of AST node classes parse their arguments as follows:
+   The constructor of a class :class:`ast.T` parses its arguments as follows:
 
    * If there are positional arguments, there must be as many as there are items
-     in :attr:`!_fields`; they will be assigned to attributes with
-     the corresponding names.
+     in :attr:`T._fields`; they will be assigned as attributes of these names.
    * If there are keyword arguments, they will set the attributes of the same
      names to the given values.
 
@@ -142,18 +142,12 @@ Node classes
     :class:`Load() <ast.Load>`. Previously, omitted attributes would not exist on constructed
     nodes (accessing them raised :exc:`AttributeError`).
 
-.. versionchanged:: 3.14
+.. deprecated:: 3.8
 
-    The :meth:`~object.__repr__` output of :class:`~ast.AST` nodes includes
-    the values of the node fields.
-
-.. deprecated-removed:: 3.8 3.14
-
-   Previous versions of Python provided the AST classes :class:`!ast.Num`,
-   :class:`!ast.Str`, :class:`!ast.Bytes`, :class:`!ast.NameConstant` and
-   :class:`!ast.Ellipsis`, which were deprecated in Python 3.8. These classes
-   were removed in Python 3.14, and their functionality has been replaced with
-   :class:`ast.Constant`.
+   Old classes :class:`!ast.Num`, :class:`!ast.Str`, :class:`!ast.Bytes`,
+   :class:`!ast.NameConstant` and :class:`!ast.Ellipsis` are still available,
+   but they will be removed in future Python releases.  In the meantime,
+   instantiating them will return an instance of a different class.
 
 .. deprecated:: 3.9
 
@@ -167,16 +161,8 @@ Node classes
    Previous versions of Python allowed the creation of AST nodes that were missing
    required fields. Similarly, AST node constructors allowed arbitrary keyword
    arguments that were set as attributes of the AST node, even if they did not
-   match any of the fields of the AST node. These cases now raise a :exc:`TypeError`.
-
-.. deprecated-removed:: 3.15 3.20
-
-    In the :ref:`grammar above <abstract-grammar>`, the AST node classes that
-    correspond to production rules with variants (aka "sums") are abstract
-    classes. Previous versions of Python allowed for the creation of direct
-    instances of these abstract node classes. This behavior is deprecated and
-    will be removed in Python 3.20.
-
+   match any of the fields of the AST node. This behavior is deprecated and will
+   be removed in Python 3.15.
 
 .. note::
     The descriptions of the specific node classes displayed here
@@ -269,11 +255,12 @@ Root nodes
         >>> print(ast.dump(ast.parse('(int, str) -> List[int]', mode='func_type'), indent=4))
         FunctionType(
             argtypes=[
-                Name(id='int'),
-                Name(id='str')],
+                Name(id='int', ctx=Load()),
+                Name(id='str', ctx=Load())],
             returns=Subscript(
-                value=Name(id='List'),
-                slice=Name(id='int')))
+                value=Name(id='List', ctx=Load()),
+                slice=Name(id='int', ctx=Load()),
+                ctx=Load()))
 
    .. versionadded:: 3.8
 
@@ -313,9 +300,9 @@ Literals
    * ``conversion`` is an integer:
 
      * -1: no formatting
-     * 97 (``ord('a')``): ``!a`` :func:`ASCII <ascii>` formatting
-     * 114 (``ord('r')``): ``!r`` :func:`repr` formatting
-     * 115 (``ord('s')``): ``!s`` :func:`string <str>` formatting
+     * 115: ``!s`` string formatting
+     * 114: ``!r`` repr formatting
+     * 97: ``!a`` ascii formatting
 
    * ``format_spec`` is a :class:`JoinedStr` node representing the formatting
      of the value, or ``None`` if no format was specified. Both
@@ -335,75 +322,18 @@ Literals
                 values=[
                     Constant(value='sin('),
                     FormattedValue(
-                        value=Name(id='a'),
+                        value=Name(id='a', ctx=Load()),
                         conversion=-1),
                     Constant(value=') is '),
                     FormattedValue(
                         value=Call(
-                            func=Name(id='sin'),
+                            func=Name(id='sin', ctx=Load()),
                             args=[
-                                Name(id='a')]),
+                                Name(id='a', ctx=Load())]),
                         conversion=-1,
                         format_spec=JoinedStr(
                             values=[
                                 Constant(value='.3')]))]))
-
-
-.. class:: TemplateStr(values, /)
-
-   .. versionadded:: 3.14
-
-   Node representing a template string literal, comprising a series of
-   :class:`Interpolation` and :class:`Constant` nodes.
-   These nodes may be any order, and do not need to be interleaved.
-
-   .. doctest::
-
-        >>> expr = ast.parse('t"{name} finished {place:ordinal}"', mode='eval')
-        >>> print(ast.dump(expr, indent=4))
-        Expression(
-            body=TemplateStr(
-                values=[
-                    Interpolation(
-                        value=Name(id='name'),
-                        str='name',
-                        conversion=-1),
-                    Constant(value=' finished '),
-                    Interpolation(
-                        value=Name(id='place'),
-                        str='place',
-                        conversion=-1,
-                        format_spec=JoinedStr(
-                            values=[
-                                Constant(value='ordinal')]))]))
-
-.. class:: Interpolation(value, str, conversion, format_spec=None)
-
-   .. versionadded:: 3.14
-
-   Node representing a single interpolation field in a template string literal.
-
-   * ``value`` is any expression node (such as a literal, a variable, or a
-     function call).
-     This has the same meaning as ``FormattedValue.value``.
-   * ``str`` is a constant containing the text of the interpolation expression.
-
-     If ``str`` is set to ``None``, then ``value`` is used to generate code
-     when calling :func:`ast.unparse`. This no longer guarantees that the
-     generated code is identical to the original and is intended for code
-     generation.
-   * ``conversion`` is an integer:
-
-     * -1: no conversion
-     * 97 (``ord('a')``): ``!a`` :func:`ASCII <ascii>` conversion
-     * 114 (``ord('r')``): ``!r`` :func:`repr` conversion
-     * 115 (``ord('s')``): ``!s`` :func:`string <str>` conversion
-
-     This has the same meaning as ``FormattedValue.conversion``.
-   * ``format_spec`` is a :class:`JoinedStr` node representing the formatting
-     of the value, or ``None`` if no format was specified. Both
-     ``conversion`` and ``format_spec`` can be set at the same time.
-     This has the same meaning as ``FormattedValue.format_spec``.
 
 
 .. class:: List(elts, ctx)
@@ -421,14 +351,16 @@ Literals
                 elts=[
                     Constant(value=1),
                     Constant(value=2),
-                    Constant(value=3)]))
+                    Constant(value=3)],
+                ctx=Load()))
         >>> print(ast.dump(ast.parse('(1, 2, 3)', mode='eval'), indent=4))
         Expression(
             body=Tuple(
                 elts=[
                     Constant(value=1),
                     Constant(value=2),
-                    Constant(value=3)]))
+                    Constant(value=3)],
+                ctx=Load()))
 
 
 .. class:: Set(elts)
@@ -466,7 +398,7 @@ Literals
                     None],
                 values=[
                     Constant(value=1),
-                    Name(id='d')]))
+                    Name(id='d', ctx=Load())]))
 
 
 Variables
@@ -492,7 +424,7 @@ Variables
         Module(
             body=[
                 Expr(
-                    value=Name(id='a'))])
+                    value=Name(id='a', ctx=Load()))])
 
         >>> print(ast.dump(ast.parse('a = 1'), indent=4))
         Module(
@@ -530,7 +462,7 @@ Variables
                                     value=Name(id='b', ctx=Store()),
                                     ctx=Store())],
                             ctx=Store())],
-                    value=Name(id='it'))])
+                    value=Name(id='it', ctx=Load()))])
 
 
 .. _ast-expressions:
@@ -553,7 +485,7 @@ Expressions
                 Expr(
                     value=UnaryOp(
                         op=USub(),
-                        operand=Name(id='a')))])
+                        operand=Name(id='a', ctx=Load())))])
 
 
 .. class:: UnaryOp(op, operand)
@@ -576,7 +508,7 @@ Expressions
         Expression(
             body=UnaryOp(
                 op=Not(),
-                operand=Name(id='x')))
+                operand=Name(id='x', ctx=Load())))
 
 
 .. class:: BinOp(left, op, right)
@@ -589,9 +521,9 @@ Expressions
         >>> print(ast.dump(ast.parse('x + y', mode='eval'), indent=4))
         Expression(
             body=BinOp(
-                left=Name(id='x'),
+                left=Name(id='x', ctx=Load()),
                 op=Add(),
-                right=Name(id='y')))
+                right=Name(id='y', ctx=Load())))
 
 
 .. class:: Add
@@ -627,8 +559,8 @@ Expressions
             body=BoolOp(
                 op=Or(),
                 values=[
-                    Name(id='x'),
-                    Name(id='y')]))
+                    Name(id='x', ctx=Load()),
+                    Name(id='y', ctx=Load())]))
 
 
 .. class:: And
@@ -653,7 +585,7 @@ Expressions
                     LtE(),
                     Lt()],
                 comparators=[
-                    Name(id='a'),
+                    Name(id='a', ctx=Load()),
                     Constant(value=10)]))
 
 
@@ -687,17 +619,18 @@ Expressions
         >>> print(ast.dump(ast.parse('func(a, b=c, *d, **e)', mode='eval'), indent=4))
         Expression(
             body=Call(
-                func=Name(id='func'),
+                func=Name(id='func', ctx=Load()),
                 args=[
-                    Name(id='a'),
+                    Name(id='a', ctx=Load()),
                     Starred(
-                        value=Name(id='d'))],
+                        value=Name(id='d', ctx=Load()),
+                        ctx=Load())],
                 keywords=[
                     keyword(
                         arg='b',
-                        value=Name(id='c')),
+                        value=Name(id='c', ctx=Load())),
                     keyword(
-                        value=Name(id='e'))]))
+                        value=Name(id='e', ctx=Load()))]))
 
 
 .. class:: keyword(arg, value)
@@ -716,9 +649,9 @@ Expressions
         >>> print(ast.dump(ast.parse('a if b else c', mode='eval'), indent=4))
         Expression(
             body=IfExp(
-                test=Name(id='b'),
-                body=Name(id='a'),
-                orelse=Name(id='c')))
+                test=Name(id='b', ctx=Load()),
+                body=Name(id='a', ctx=Load()),
+                orelse=Name(id='c', ctx=Load())))
 
 
 .. class:: Attribute(value, attr, ctx)
@@ -733,8 +666,9 @@ Expressions
         >>> print(ast.dump(ast.parse('snake.colour', mode='eval'), indent=4))
         Expression(
             body=Attribute(
-                value=Name(id='snake'),
-                attr='colour'))
+                value=Name(id='snake', ctx=Load()),
+                attr='colour',
+                ctx=Load()))
 
 
 .. class:: NamedExpr(target, value)
@@ -770,13 +704,15 @@ Subscripting
         >>> print(ast.dump(ast.parse('l[1:2, 3]', mode='eval'), indent=4))
         Expression(
             body=Subscript(
-                value=Name(id='l'),
+                value=Name(id='l', ctx=Load()),
                 slice=Tuple(
                     elts=[
                         Slice(
                             lower=Constant(value=1),
                             upper=Constant(value=2)),
-                        Constant(value=3)])))
+                        Constant(value=3)],
+                    ctx=Load()),
+                ctx=Load()))
 
 
 .. class:: Slice(lower, upper, step)
@@ -790,10 +726,11 @@ Subscripting
         >>> print(ast.dump(ast.parse('l[1:2]', mode='eval'), indent=4))
         Expression(
             body=Subscript(
-                value=Name(id='l'),
+                value=Name(id='l', ctx=Load()),
                 slice=Slice(
                     lower=Constant(value=1),
-                    upper=Constant(value=2))))
+                    upper=Constant(value=2)),
+                ctx=Load()))
 
 
 Comprehensions
@@ -808,10 +745,6 @@ Comprehensions
    comprehensions. ``elt`` (or ``key`` and ``value``) is a single node
    representing the part that will be evaluated for each item.
 
-   For dictionary comprehensions using unpacking, for example
-   ``{**item for item in items}``, the expression to be expanded goes in
-   ``key`` and ``value`` is ``None``.
-
    ``generators`` is a list of :class:`comprehension` nodes.
 
    .. doctest::
@@ -822,11 +755,11 @@ Comprehensions
         ... ))
         Expression(
             body=ListComp(
-                elt=Name(id='x'),
+                elt=Name(id='x', ctx=Load()),
                 generators=[
                     comprehension(
                         target=Name(id='x', ctx=Store()),
-                        iter=Name(id='numbers'),
+                        iter=Name(id='numbers', ctx=Load()),
                         is_async=0)]))
         >>> print(ast.dump(
         ...     ast.parse('{x: x**2 for x in numbers}', mode='eval'),
@@ -834,15 +767,15 @@ Comprehensions
         ... ))
         Expression(
             body=DictComp(
-                key=Name(id='x'),
+                key=Name(id='x', ctx=Load()),
                 value=BinOp(
-                    left=Name(id='x'),
+                    left=Name(id='x', ctx=Load()),
                     op=Pow(),
                     right=Constant(value=2)),
                 generators=[
                     comprehension(
                         target=Name(id='x', ctx=Store()),
-                        iter=Name(id='numbers'),
+                        iter=Name(id='numbers', ctx=Load()),
                         is_async=0)]))
         >>> print(ast.dump(
         ...     ast.parse('{x for x in numbers}', mode='eval'),
@@ -850,11 +783,11 @@ Comprehensions
         ... ))
         Expression(
             body=SetComp(
-                elt=Name(id='x'),
+                elt=Name(id='x', ctx=Load()),
                 generators=[
                     comprehension(
                         target=Name(id='x', ctx=Store()),
-                        iter=Name(id='numbers'),
+                        iter=Name(id='numbers', ctx=Load()),
                         is_async=0)]))
 
 
@@ -875,17 +808,17 @@ Comprehensions
         Expression(
             body=ListComp(
                 elt=Call(
-                    func=Name(id='ord'),
+                    func=Name(id='ord', ctx=Load()),
                     args=[
-                        Name(id='c')]),
+                        Name(id='c', ctx=Load())]),
                 generators=[
                     comprehension(
                         target=Name(id='line', ctx=Store()),
-                        iter=Name(id='file'),
+                        iter=Name(id='file', ctx=Load()),
                         is_async=0),
                     comprehension(
                         target=Name(id='c', ctx=Store()),
-                        iter=Name(id='line'),
+                        iter=Name(id='line', ctx=Load()),
                         is_async=0)]))
 
         >>> print(ast.dump(ast.parse('(n**2 for n in it if n>5 if n<10)', mode='eval'),
@@ -893,22 +826,22 @@ Comprehensions
         Expression(
             body=GeneratorExp(
                 elt=BinOp(
-                    left=Name(id='n'),
+                    left=Name(id='n', ctx=Load()),
                     op=Pow(),
                     right=Constant(value=2)),
                 generators=[
                     comprehension(
                         target=Name(id='n', ctx=Store()),
-                        iter=Name(id='it'),
+                        iter=Name(id='it', ctx=Load()),
                         ifs=[
                             Compare(
-                                left=Name(id='n'),
+                                left=Name(id='n', ctx=Load()),
                                 ops=[
                                     Gt()],
                                 comparators=[
                                     Constant(value=5)]),
                             Compare(
-                                left=Name(id='n'),
+                                left=Name(id='n', ctx=Load()),
                                 ops=[
                                     Lt()],
                                 comparators=[
@@ -919,11 +852,11 @@ Comprehensions
         ...                indent=4)) # Async comprehension
         Expression(
             body=ListComp(
-                elt=Name(id='i'),
+                elt=Name(id='i', ctx=Load()),
                 generators=[
                     comprehension(
                         target=Name(id='i', ctx=Store()),
-                        iter=Name(id='soc'),
+                        iter=Name(id='soc', ctx=Load()),
                         is_async=1)]))
 
 
@@ -965,7 +898,7 @@ Statements
                                 Name(id='a', ctx=Store()),
                                 Name(id='b', ctx=Store())],
                             ctx=Store())],
-                    value=Name(id='c'))])
+                    value=Name(id='c', ctx=Load()))])
 
 
 .. class:: AnnAssign(target, annotation, value, simple)
@@ -988,7 +921,7 @@ Statements
             body=[
                 AnnAssign(
                     target=Name(id='c', ctx=Store()),
-                    annotation=Name(id='int'),
+                    annotation=Name(id='int', ctx=Load()),
                     simple=1)])
 
         >>> print(ast.dump(ast.parse('(a): int = 1'), indent=4)) # Annotation with parenthesis
@@ -996,7 +929,7 @@ Statements
             body=[
                 AnnAssign(
                     target=Name(id='a', ctx=Store()),
-                    annotation=Name(id='int'),
+                    annotation=Name(id='int', ctx=Load()),
                     value=Constant(value=1),
                     simple=0)])
 
@@ -1005,10 +938,10 @@ Statements
             body=[
                 AnnAssign(
                     target=Attribute(
-                        value=Name(id='a'),
+                        value=Name(id='a', ctx=Load()),
                         attr='b',
                         ctx=Store()),
-                    annotation=Name(id='int'),
+                    annotation=Name(id='int', ctx=Load()),
                     simple=0)])
 
         >>> print(ast.dump(ast.parse('a[1]: int'), indent=4)) # Subscript annotation
@@ -1016,10 +949,10 @@ Statements
             body=[
                 AnnAssign(
                     target=Subscript(
-                        value=Name(id='a'),
+                        value=Name(id='a', ctx=Load()),
                         slice=Constant(value=1),
                         ctx=Store()),
-                    annotation=Name(id='int'),
+                    annotation=Name(id='int', ctx=Load()),
                     simple=0)])
 
 
@@ -1056,8 +989,8 @@ Statements
         Module(
             body=[
                 Raise(
-                    exc=Name(id='x'),
-                    cause=Name(id='y'))])
+                    exc=Name(id='x', ctx=Load()),
+                    cause=Name(id='y', ctx=Load()))])
 
 
 .. class:: Assert(test, msg)
@@ -1071,8 +1004,8 @@ Statements
         Module(
             body=[
                 Assert(
-                    test=Name(id='x'),
-                    msg=Name(id='y'))])
+                    test=Name(id='x', ctx=Load()),
+                    msg=Name(id='y', ctx=Load()))])
 
 
 .. class:: Delete(targets)
@@ -1118,7 +1051,7 @@ Statements
             body=[
                 TypeAlias(
                     name=Name(id='Alias', ctx=Store()),
-                    value=Name(id='int'))])
+                    value=Name(id='int', ctx=Load()))])
 
    .. versionadded:: 3.12
 
@@ -1141,8 +1074,7 @@ Imports
                     names=[
                         alias(name='x'),
                         alias(name='y'),
-                        alias(name='z')],
-                    is_lazy=0)])
+                        alias(name='z')])])
 
 
 .. class:: ImportFrom(module, names, level)
@@ -1163,8 +1095,7 @@ Imports
                         alias(name='x'),
                         alias(name='y'),
                         alias(name='z')],
-                    level=0,
-                    is_lazy=0)])
+                    level=0)])
 
 
 .. class:: alias(name, asname)
@@ -1182,8 +1113,7 @@ Imports
                     names=[
                         alias(name='a', asname='b'),
                         alias(name='c')],
-                    level=2,
-                    is_lazy=0)])
+                    level=2)])
 
 Control flow
 ^^^^^^^^^^^^
@@ -1214,13 +1144,13 @@ Control flow
         Module(
             body=[
                 If(
-                    test=Name(id='x'),
+                    test=Name(id='x', ctx=Load()),
                     body=[
                         Expr(
                             value=Constant(value=Ellipsis))],
                     orelse=[
                         If(
-                            test=Name(id='y'),
+                            test=Name(id='y', ctx=Load()),
                             body=[
                                 Expr(
                                     value=Constant(value=Ellipsis))],
@@ -1254,7 +1184,7 @@ Control flow
             body=[
                 For(
                     target=Name(id='x', ctx=Store()),
-                    iter=Name(id='y'),
+                    iter=Name(id='y', ctx=Load()),
                     body=[
                         Expr(
                             value=Constant(value=Ellipsis))],
@@ -1279,7 +1209,7 @@ Control flow
         Module(
             body=[
                 While(
-                    test=Name(id='x'),
+                    test=Name(id='x', ctx=Load()),
                     body=[
                         Expr(
                             value=Constant(value=Ellipsis))],
@@ -1307,11 +1237,11 @@ Control flow
             body=[
                 For(
                     target=Name(id='a', ctx=Store()),
-                    iter=Name(id='b'),
+                    iter=Name(id='b', ctx=Load()),
                     body=[
                         If(
                             test=Compare(
-                                left=Name(id='a'),
+                                left=Name(id='a', ctx=Load()),
                                 ops=[
                                     Gt()],
                                 comparators=[
@@ -1349,12 +1279,12 @@ Control flow
                             value=Constant(value=Ellipsis))],
                     handlers=[
                         ExceptHandler(
-                            type=Name(id='Exception'),
+                            type=Name(id='Exception', ctx=Load()),
                             body=[
                                 Expr(
                                     value=Constant(value=Ellipsis))]),
                         ExceptHandler(
-                            type=Name(id='OtherException'),
+                            type=Name(id='OtherException', ctx=Load()),
                             name='e',
                             body=[
                                 Expr(
@@ -1389,7 +1319,7 @@ Control flow
                             value=Constant(value=Ellipsis))],
                     handlers=[
                         ExceptHandler(
-                            type=Name(id='Exception'),
+                            type=Name(id='Exception', ctx=Load()),
                             body=[
                                 Expr(
                                     value=Constant(value=Ellipsis))])])])
@@ -1417,12 +1347,12 @@ Control flow
                     body=[
                         Expr(
                             value=BinOp(
-                                left=Name(id='a'),
+                                left=Name(id='a', ctx=Load()),
                                 op=Add(),
                                 right=Constant(value=1)))],
                     handlers=[
                         ExceptHandler(
-                            type=Name(id='TypeError'),
+                            type=Name(id='TypeError', ctx=Load()),
                             body=[
                                 Pass()])])])
 
@@ -1455,18 +1385,18 @@ Control flow
                 With(
                     items=[
                         withitem(
-                            context_expr=Name(id='a'),
+                            context_expr=Name(id='a', ctx=Load()),
                             optional_vars=Name(id='b', ctx=Store())),
                         withitem(
-                            context_expr=Name(id='c'),
+                            context_expr=Name(id='c', ctx=Load()),
                             optional_vars=Name(id='d', ctx=Store()))],
                     body=[
                         Expr(
                             value=Call(
-                                func=Name(id='something'),
+                                func=Name(id='something', ctx=Load()),
                                 args=[
-                                    Name(id='b'),
-                                    Name(id='d')]))])])
+                                    Name(id='b', ctx=Load()),
+                                    Name(id='d', ctx=Load())]))])])
 
 
 Pattern matching
@@ -1506,14 +1436,14 @@ Pattern matching
         Module(
             body=[
                 Match(
-                    subject=Name(id='x'),
+                    subject=Name(id='x', ctx=Load()),
                     cases=[
                         match_case(
                             pattern=MatchSequence(
                                 patterns=[
                                     MatchAs(name='x')]),
                             guard=Compare(
-                                left=Name(id='x'),
+                                left=Name(id='x', ctx=Load()),
                                 ops=[
                                     Gt()],
                                 comparators=[
@@ -1523,7 +1453,7 @@ Pattern matching
                                     value=Constant(value=Ellipsis))]),
                         match_case(
                             pattern=MatchClass(
-                                cls=Name(id='tuple')),
+                                cls=Name(id='tuple', ctx=Load())),
                             body=[
                                 Expr(
                                     value=Constant(value=Ellipsis))])])])
@@ -1547,7 +1477,7 @@ Pattern matching
         Module(
             body=[
                 Match(
-                    subject=Name(id='x'),
+                    subject=Name(id='x', ctx=Load()),
                     cases=[
                         match_case(
                             pattern=MatchValue(
@@ -1574,7 +1504,7 @@ Pattern matching
         Module(
             body=[
                 Match(
-                    subject=Name(id='x'),
+                    subject=Name(id='x', ctx=Load()),
                     cases=[
                         match_case(
                             pattern=MatchSingleton(value=None),
@@ -1601,7 +1531,7 @@ Pattern matching
         Module(
             body=[
                 Match(
-                    subject=Name(id='x'),
+                    subject=Name(id='x', ctx=Load()),
                     cases=[
                         match_case(
                             pattern=MatchSequence(
@@ -1634,7 +1564,7 @@ Pattern matching
         Module(
             body=[
                 Match(
-                    subject=Name(id='x'),
+                    subject=Name(id='x', ctx=Load()),
                     cases=[
                         match_case(
                             pattern=MatchSequence(
@@ -1683,7 +1613,7 @@ Pattern matching
         Module(
             body=[
                 Match(
-                    subject=Name(id='x'),
+                    subject=Name(id='x', ctx=Load()),
                     cases=[
                         match_case(
                             pattern=MatchMapping(
@@ -1733,11 +1663,11 @@ Pattern matching
         Module(
             body=[
                 Match(
-                    subject=Name(id='x'),
+                    subject=Name(id='x', ctx=Load()),
                     cases=[
                         match_case(
                             pattern=MatchClass(
-                                cls=Name(id='Point2D'),
+                                cls=Name(id='Point2D', ctx=Load()),
                                 patterns=[
                                     MatchValue(
                                         value=Constant(value=0)),
@@ -1748,7 +1678,7 @@ Pattern matching
                                     value=Constant(value=Ellipsis))]),
                         match_case(
                             pattern=MatchClass(
-                                cls=Name(id='Point3D'),
+                                cls=Name(id='Point3D', ctx=Load()),
                                 kwd_attrs=[
                                     'x',
                                     'y',
@@ -1789,7 +1719,7 @@ Pattern matching
         Module(
             body=[
                 Match(
-                    subject=Name(id='x'),
+                    subject=Name(id='x', ctx=Load()),
                     cases=[
                         match_case(
                             pattern=MatchAs(
@@ -1826,7 +1756,7 @@ Pattern matching
         Module(
             body=[
                 Match(
-                    subject=Name(id='x'),
+                    subject=Name(id='x', ctx=Load()),
                     cases=[
                         match_case(
                             pattern=MatchOr(
@@ -1866,7 +1796,7 @@ Type annotations
           body=[
               AnnAssign(
                   target=Name(id='x', ctx=Store()),
-                  annotation=Name(id='bool'),
+                  annotation=Name(id='bool', ctx=Load()),
                   value=Constant(value=1),
                   simple=1)],
           type_ignores=[
@@ -1904,11 +1834,12 @@ aliases.
                     type_params=[
                         TypeVar(
                             name='T',
-                            bound=Name(id='int'),
-                            default_value=Name(id='bool'))],
+                            bound=Name(id='int', ctx=Load()),
+                            default_value=Name(id='bool', ctx=Load()))],
                     value=Subscript(
-                        value=Name(id='list'),
-                        slice=Name(id='T')))])
+                        value=Name(id='list', ctx=Load()),
+                        slice=Name(id='T', ctx=Load()),
+                        ctx=Load()))])
 
    .. versionadded:: 3.12
 
@@ -1933,14 +1864,17 @@ aliases.
                             name='P',
                             default_value=List(
                                 elts=[
-                                    Name(id='int'),
-                                    Name(id='str')]))],
+                                    Name(id='int', ctx=Load()),
+                                    Name(id='str', ctx=Load())],
+                                ctx=Load()))],
                     value=Subscript(
-                        value=Name(id='Callable'),
+                        value=Name(id='Callable', ctx=Load()),
                         slice=Tuple(
                             elts=[
-                                Name(id='P'),
-                                Name(id='int')])))])
+                                Name(id='P', ctx=Load()),
+                                Name(id='int', ctx=Load())],
+                            ctx=Load()),
+                        ctx=Load()))])
 
    .. versionadded:: 3.12
 
@@ -1961,13 +1895,18 @@ aliases.
                 TypeAlias(
                     name=Name(id='Alias', ctx=Store()),
                     type_params=[
-                        TypeVarTuple(name='Ts', default_value=Tuple())],
+                        TypeVarTuple(
+                            name='Ts',
+                            default_value=Tuple(ctx=Load()))],
                     value=Subscript(
-                        value=Name(id='tuple'),
+                        value=Name(id='tuple', ctx=Load()),
                         slice=Tuple(
                             elts=[
                                 Starred(
-                                    value=Name(id='Ts'))])))])
+                                    value=Name(id='Ts', ctx=Load()),
+                                    ctx=Load())],
+                            ctx=Load()),
+                        ctx=Load()))])
 
    .. versionadded:: 3.12
 
@@ -2072,8 +2011,8 @@ Function and class definitions
                     body=[
                         Pass()],
                     decorator_list=[
-                        Name(id='decorator1'),
-                        Name(id='decorator2')],
+                        Name(id='decorator1', ctx=Load()),
+                        Name(id='decorator2', ctx=Load())],
                     returns=Constant(value='return annotation'))])
 
 
@@ -2103,14 +2042,14 @@ Function and class definitions
             body=[
                 Expr(
                     value=Yield(
-                        value=Name(id='x')))])
+                        value=Name(id='x', ctx=Load())))])
 
         >>> print(ast.dump(ast.parse('yield from x'), indent=4))
         Module(
             body=[
                 Expr(
                     value=YieldFrom(
-                        value=Name(id='x')))])
+                        value=Name(id='x', ctx=Load())))])
 
 
 .. class:: Global(names)
@@ -2165,17 +2104,17 @@ Function and class definitions
                 ClassDef(
                     name='Foo',
                     bases=[
-                        Name(id='base1'),
-                        Name(id='base2')],
+                        Name(id='base1', ctx=Load()),
+                        Name(id='base2', ctx=Load())],
                     keywords=[
                         keyword(
                             arg='metaclass',
-                            value=Name(id='meta'))],
+                            value=Name(id='meta', ctx=Load()))],
                     body=[
                         Pass()],
                     decorator_list=[
-                        Name(id='decorator1'),
-                        Name(id='decorator2')])])
+                        Name(id='decorator1', ctx=Load()),
+                        Name(id='decorator2', ctx=Load())])])
 
    .. versionchanged:: 3.12
         Added ``type_params``.
@@ -2212,7 +2151,7 @@ Async and await
                     Expr(
                         value=Await(
                             value=Call(
-                                func=Name(id='other_func'))))])])
+                                func=Name(id='other_func', ctx=Load()))))])])
 
 
 .. class:: AsyncFor(target, iter, body, orelse, type_comment)
@@ -2224,22 +2163,22 @@ Async and await
 
 .. note::
    When a string is parsed by :func:`ast.parse`, operator nodes (subclasses
-   of :class:`!ast.operator`, :class:`!ast.unaryop`, :class:`!ast.cmpop`,
-   :class:`!ast.boolop` and :class:`!ast.expr_context`) on the returned tree
+   of :class:`ast.operator`, :class:`ast.unaryop`, :class:`ast.cmpop`,
+   :class:`ast.boolop` and :class:`ast.expr_context`) on the returned tree
    will be singletons. Changes to one will be reflected in all other
-   occurrences of the same value (for example, :class:`ast.Add`).
+   occurrences of the same value (e.g. :class:`ast.Add`).
 
 
-:mod:`!ast` helpers
--------------------
+:mod:`ast` Helpers
+------------------
 
-Apart from the node classes, the :mod:`!ast` module defines these utility functions
+Apart from the node classes, the :mod:`ast` module defines these utility functions
 and classes for traversing abstract syntax trees:
 
-.. function:: parse(source, filename='<unknown>', mode='exec', *, type_comments=False, feature_version=None, optimize=-1, module=None)
+.. function:: parse(source, filename='<unknown>', mode='exec', *, type_comments=False, feature_version=None, optimize=-1)
 
    Parse the source into an AST node.  Equivalent to ``compile(source,
-   filename, mode, flags=FLAGS_VALUE, optimize=optimize, module=module)``,
+   filename, mode, flags=FLAGS_VALUE, optimize=optimize)``,
    where ``FLAGS_VALUE`` is ``ast.PyCF_ONLY_AST`` if ``optimize <= 0``
    and ``ast.PyCF_OPTIMIZED_AST`` otherwise.
 
@@ -2255,7 +2194,7 @@ and classes for traversing abstract syntax trees:
 
    In addition, if ``mode`` is ``'func_type'``, the input syntax is
    modified to correspond to :pep:`484` "signature type comments",
-   for example ``(str, int) -> List[str]``.
+   e.g. ``(str, int) -> List[str]``.
 
    Setting ``feature_version`` to a tuple ``(major, minor)`` will result in
    a "best-effort" attempt to parse using that Python version's grammar.
@@ -2291,9 +2230,6 @@ and classes for traversing abstract syntax trees:
    .. versionchanged:: 3.13
       The minimum supported version for ``feature_version`` is now ``(3, 7)``.
       The ``optimize`` argument was added.
-
-   .. versionadded:: 3.15
-      Added the *module* parameter.
 
 
 .. function:: unparse(ast_obj)
@@ -2450,12 +2386,12 @@ and classes for traversing abstract syntax trees:
    during traversal.  For this a special visitor exists
    (:class:`NodeTransformer`) that allows modifications.
 
-   .. deprecated-removed:: 3.8 3.14
+   .. deprecated:: 3.8
 
       Methods :meth:`!visit_Num`, :meth:`!visit_Str`, :meth:`!visit_Bytes`,
-      :meth:`!visit_NameConstant` and :meth:`!visit_Ellipsis` will not be called
-      in Python 3.14+.  Add the :meth:`visit_Constant` method instead to handle
-      all constant nodes.
+      :meth:`!visit_NameConstant` and :meth:`!visit_Ellipsis` are deprecated
+      now and will not be called in future Python versions.  Add the
+      :meth:`visit_Constant` method to handle all constant nodes.
 
 
 .. class:: NodeTransformer()
@@ -2476,7 +2412,7 @@ and classes for traversing abstract syntax trees:
 
           def visit_Name(self, node):
               return Subscript(
-                  value=Name(id='data'),
+                  value=Name(id='data', ctx=Load()),
                   slice=Constant(value=node.id),
                   ctx=node.ctx
               )
@@ -2502,7 +2438,7 @@ and classes for traversing abstract syntax trees:
       node = YourTransformer().visit(node)
 
 
-.. function:: dump(node, annotate_fields=True, include_attributes=False, *, color=False, indent=None, show_empty=False)
+.. function:: dump(node, annotate_fields=True, include_attributes=False, *, indent=None, show_empty=False)
 
    Return a formatted dump of the tree in *node*.  This is mainly useful for
    debugging purposes.  If *annotate_fields* is true (by default),
@@ -2512,10 +2448,6 @@ and classes for traversing abstract syntax trees:
    numbers and column offsets are not dumped by default.  If this is wanted,
    *include_attributes* can be set to true.
 
-   If *color* is ``True``, the returned string is syntax highlighted using
-   ANSI escape sequences.
-   If ``False`` (the default), colored output is always disabled.
-
    If *indent* is a non-negative integer or string, then the tree will be
    pretty-printed with that indent level.  An indent level
    of 0, negative, or ``""`` will only insert newlines.  ``None`` (the default)
@@ -2523,26 +2455,9 @@ and classes for traversing abstract syntax trees:
    indents that many spaces per level.  If *indent* is a string (such as ``"\t"``),
    that string is used to indent each level.
 
-   If *show_empty* is false (the default), optional empty lists and
-   ``Load()`` values will be omitted from the output.
+   If *show_empty* is false (the default), optional empty lists will be
+   omitted from the output.
    Optional ``None`` values are always omitted.
-
-   .. doctest::
-
-      >>> tree = ast.parse('print(None)', '?', 'eval')
-      >>> print(ast.dump(tree, indent=4))
-      Expression(
-          body=Call(
-              func=Name(id='print'),
-              args=[
-                  Constant(value=None)]))
-      >>> print(ast.dump(tree, indent=4, show_empty=True))
-      Expression(
-          body=Call(
-              func=Name(id='print', ctx=Load()),
-              args=[
-                  Constant(value=None)],
-              keywords=[]))
 
    .. versionchanged:: 3.9
       Added the *indent* option.
@@ -2550,30 +2465,37 @@ and classes for traversing abstract syntax trees:
    .. versionchanged:: 3.13
       Added the *show_empty* option.
 
-   .. versionchanged:: 3.15
-      Omit optional ``Load()`` values by default.
+      .. doctest::
 
-   .. versionchanged:: 3.15
-      Added the *color* parameter.
-
-
-.. function:: compare(a, b, /, *, compare_attributes=False)
-
-   Recursively compares two ASTs.
-
-   *compare_attributes* affects whether AST attributes are considered
-   in the comparison. If *compare_attributes* is ``False`` (default), then
-   attributes are ignored. Otherwise they must all be equal. This
-   option is useful to check whether the ASTs are structurally equal but
-   differ in whitespace or similar details. Attributes include line numbers
-   and column offsets.
-
-   .. versionadded:: 3.14
+         >>> print(ast.dump(ast.parse("""\
+         ... async def f():
+         ...     await other_func()
+         ... """), indent=4, show_empty=True))
+         Module(
+             body=[
+                 AsyncFunctionDef(
+                     name='f',
+                     args=arguments(
+                         posonlyargs=[],
+                         args=[],
+                         kwonlyargs=[],
+                         kw_defaults=[],
+                         defaults=[]),
+                     body=[
+                         Expr(
+                             value=Await(
+                                 value=Call(
+                                     func=Name(id='other_func', ctx=Load()),
+                                     args=[],
+                                     keywords=[])))],
+                     decorator_list=[],
+                     type_params=[])],
+             type_ignores=[])
 
 
 .. _ast-compiler-flags:
 
-Compiler flags
+Compiler Flags
 --------------
 
 The following flags may be passed to :func:`compile` in order to change
@@ -2608,16 +2530,12 @@ effects on the compilation of a program:
 
 .. _ast-cli:
 
-Command-line usage
+Command-Line Usage
 ------------------
 
 .. versionadded:: 3.9
 
-.. versionchanged:: 3.15
-   The output is now syntax highlighted by default. This can be
-   :ref:`controlled using environment variables <using-on-controlling-color>`.
-
-The :mod:`!ast` module can be executed as a script from the command line.
+The :mod:`ast` module can be executed as a script from the command line.
 It is as simple as:
 
 .. code-block:: sh
@@ -2650,28 +2568,6 @@ The following options are accepted:
             --indent <indent>
 
    Indentation of nodes in AST (number of spaces).
-
-.. option:: --feature-version <version>
-
-   Python version in the format 3.x (for example, 3.10). Defaults to the
-   current version of the interpreter.
-
-   .. versionadded:: 3.14
-
-.. option:: -O <level>
-            --optimize <level>
-
-   Optimization level for parser. Defaults to no optimization.
-
-   .. versionadded:: 3.14
-
-.. option:: --show-empty
-
-   Show empty lists and fields that are ``None``. Defaults to not showing empty
-   objects.
-
-   .. versionadded:: 3.14
-
 
 If :file:`infile` is specified its contents are parsed to AST and dumped
 to stdout.  Otherwise, the content is read from stdin.

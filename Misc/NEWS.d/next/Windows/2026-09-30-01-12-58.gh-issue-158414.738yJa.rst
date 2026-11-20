@@ -1,1 +1,0 @@
-Fix a hang when writing an incomplete UTF-8 sequence to the Windows console.

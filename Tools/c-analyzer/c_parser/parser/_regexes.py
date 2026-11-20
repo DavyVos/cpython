@@ -72,7 +72,6 @@ _KEYWORD = textwrap.dedent(r'''
             long |
             float |
             double |
-            _Complex |
             void |
 
             struct |
@@ -121,16 +120,6 @@ SIMPLE_TYPE = textwrap.dedent(rf'''
             void
             |
             (?: signed | unsigned )  # implies int
-            |
-            (?:
-                (?: (?: float | double | long\s+double ) \s+ )?
-                _Complex
-            )
-            |
-            (?:
-                _Complex
-                (?: \s+ (?: float | double | long\s+double ) )?
-            )
             |
             (?:
                 (?: (?: signed | unsigned ) \s+ )?
@@ -340,10 +329,7 @@ STRUCT_MEMBER_DECL = textwrap.dedent(rf'''
                     # This is actually a "constant expression".
                     \d+
                     |
-                    [^'",(}}]+
-                    |
-                    # Parens may hold commas (e.g. from offsetof()).
-                    [^'";}}]+ (?= ; )
+                    [^'",}}]+
                  )
              )?
             \s*

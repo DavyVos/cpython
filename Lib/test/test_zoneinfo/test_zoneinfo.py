@@ -6,25 +6,21 @@ import dataclasses
 import importlib.metadata
 import io
 import json
-import ntpath
 import os
 import pathlib
 import pickle
 import re
 import shutil
 import struct
-import sys
 import tempfile
-import types
 import unittest
 from datetime import date, datetime, time, timedelta, timezone
 from functools import cached_property
-from unittest import mock
 
-from test.support import MISSING_C_DOCSTRINGS
-from test.support.os_helper import EnvironmentVarGuard, FakePath
+from test.support import MISSING_C_DOCSTRINGS, requires_gil_enabled
+from test.support.os_helper import FakePath
 from test.test_zoneinfo import _support as test_support
-from test.test_zoneinfo._support import TZPATH_TEST_LOCK, ZoneInfoTestBase
+from test.test_zoneinfo._support import OS_ENV_LOCK, TZPATH_TEST_LOCK, ZoneInfoTestBase
 from test.support.import_helper import import_module, CleanImport
 from test.support.script_helper import assert_python_ok
 
@@ -33,7 +29,7 @@ py_zoneinfo, c_zoneinfo = test_support.get_modules()
 
 try:
     importlib.metadata.metadata("tzdata")
-    HAS_TZDATA_PKG = (importlib.metadata.version("tzdata") == "2025.3")
+    HAS_TZDATA_PKG = True
 except importlib.metadata.PackageNotFoundError:
     HAS_TZDATA_PKG = False
 
@@ -646,26 +642,6 @@ class WeirdZoneTest(ZoneInfoTestBase):
                 dt_utc_actual = dt_local.astimezone(timezone.utc)
                 self.assertEqual(dt_utc_actual, dt_utc)
 
-    def test_one_transition_fold(self):
-        GMT = ZoneOffset("-00", ZERO)
-        N03 = ZoneOffset("-03", -timedelta(hours=3))
-
-        transitions = [
-            ZoneTransition(datetime(1976, 12, 1), GMT, N03),
-        ]
-
-        after = "<-03>3"
-
-        zf = self.construct_zone(transitions, after)
-        zi = self.klass.from_file(zf)
-
-        dt_utc = datetime(1976, 12, 1, 1, tzinfo=timezone.utc)
-        dt_local = dt_utc.astimezone(zi)
-
-        self.assertEqual(dt_local.fold, 1)
-        self.assertEqual(dt_local.utcoffset(), N03.utcoffset)
-        self.assertEqual(dt_local.astimezone(timezone.utc), dt_utc)
-
     def test_one_zone_dst(self):
         DST = ZoneOffset("DST", ONE_H, ONE_H)
         transitions = [
@@ -794,34 +770,6 @@ class WeirdZoneTest(ZoneInfoTestBase):
 
         with self.assertRaises(ValueError):
             self.klass.from_file(f)
-
-    def test_invalid_charcnt(self):
-        # 128 local time types whose abbreviations are the suffixes of a
-        # single long abbreviation spanning the entire block: every index
-        # would get its own copy of most of the block.
-        types = b"".join(struct.pack(">lbb", 3600, 0, i) for i in range(128))
-        chars = b"A" * 65535 + b"\x00"
-
-        # With a negative charcnt the block would be the rest of the file
-        for charcnt in (len(chars), -1):
-            with self.subTest(charcnt=charcnt):
-                header = b"TZif" + b"\x00" * 16
-                header += struct.pack(">6l", 0, 0, 0, 0, 128, charcnt)
-                f = io.BytesIO(header + types + chars)
-
-                with self.assertRaises(ValueError):
-                    self.klass.from_file(f)
-
-    def test_abbreviation_index_above_127(self):
-        chars = b"X" * 129 + b"\x00" + b"ABC\x00"
-        header = b"TZif" + b"\x00" * 16
-        header += struct.pack(">6l", 0, 0, 0, 0, 1, len(chars))
-        types = struct.pack(">lbB", 3600, 0, 130)
-        zi = self.klass.from_file(io.BytesIO(header + types + chars))
-
-        dt = datetime(2026, 1, 1, tzinfo=zi)
-        self.assertEqual(dt.tzname(), "ABC")
-        self.assertEqual(dt.utcoffset(), ONE_H)
 
     def test_transition_lookahead_out_of_bounds(self):
         STD = ZoneOffset("STD", ZERO)
@@ -1546,33 +1494,6 @@ class TZStrTest(ZoneInfoTestBase):
 
         @call
         def _add():
-            # Julian days 58, 59 and 60 always mean February 27, February 28
-            # and March 1, including in leap years.
-            AAA = ZoneOffset("AAA", ZERO)
-            BBB = ZoneOffset("BBB", ONE_H, ONE_H)
-
-            for start, end, start_date, end_date in (
-                (58, 59, (2, 27), (2, 28)),
-                (59, 60, (2, 28), (3, 1)),
-            ):
-                tzstr = f"AAA0BBB,J{start}/12,J{end}/12"
-                cases[tzstr] = []
-                for year in (2019, 2020, 2000, 2100):
-                    start_dt = datetime(year, *start_date, 12)
-                    end_dt = datetime(year, *end_date, 12)
-                    cases[tzstr].extend((
-                        (start_dt - timedelta(seconds=1), AAA, NORMAL),
-                        (start_dt, AAA, GAP),
-                        (start_dt.replace(fold=1), BBB, GAP),
-                        (start_dt + ONE_H, BBB, NORMAL),
-                        (end_dt - ONE_H - timedelta(seconds=1), BBB, NORMAL),
-                        (end_dt - ONE_H, BBB, FOLD),
-                        ((end_dt - ONE_H).replace(fold=1), AAA, FOLD),
-                        (end_dt, AAA, NORMAL),
-                    ))
-
-        @call
-        def _add():
             # Taken from America/Godthab, this rule has a transition on the
             # Saturday before the last Sunday of March and October, at 22:00
             # and 23:00, respectively. This is encoded with negative start
@@ -1723,13 +1644,6 @@ class ZoneInfoCacheTest(TzPathUserMixin, ZoneInfoTestBase):
         except CustomError:
             pass
 
-    def test_clear_cache_non_string_keys(self):
-        la0 = self.klass("America/Los_Angeles")
-        self.klass.clear_cache(only_keys=[None, 1])
-        la1 = self.klass("America/Los_Angeles")
-
-        self.assertIs(la0, la1)
-
     def test_weak_cache_descriptor_use_after_free(self):
         class BombDescriptor:
             def __get__(self, obj, owner):
@@ -1753,70 +1667,6 @@ class ZoneInfoCacheTest(TzPathUserMixin, ZoneInfoTestBase):
 
 class CZoneInfoCacheTest(ZoneInfoCacheTest):
     module = c_zoneinfo
-
-    def test_strong_cache_path_like_key(self):
-        # A non-str key is matched by identity, and comparing it against a
-        # str key must not raise TypeError.
-        class Key:
-            def __fspath__(self):
-                return "UTC"
-
-            def __len__(self):
-                return 3
-
-            def split(self, sep):
-                return ["UTC"]
-
-        key = Key()
-        original = self.klass(key)
-        self.assertIs(self.klass(key), original)
-        self.assertIsNot(self.klass("UTC"), original)
-        self.klass.clear_cache(only_keys=(key,))
-        self.assertIsNot(self.klass(key), original)
-
-    def test_strong_cache_str_subclass(self):
-        class Stringy(str):
-            def __eq__(self, other):
-                raise CustomError
-
-            __hash__ = str.__hash__
-
-        for cached_type, lookup_type in ((str, Stringy), (Stringy, str),
-                                         (Stringy, Stringy)):
-            with self.subTest(cached_type=cached_type, lookup_type=lookup_type):
-                self.klass.clear_cache()
-                original = self.klass(cached_type("America/Los_Angeles"))
-                self.assertIs(
-                    self.klass(lookup_type("America/Los_Angeles")), original
-                )
-
-    def test_strong_cache_reentrant_clear(self):
-        self._test_strong_cache_reentrant_clear("lookup")
-
-    def test_strong_cache_reentrant_clear_only_keys(self):
-        self._test_strong_cache_reentrant_clear("clear")
-
-    def _test_strong_cache_reentrant_clear(self, operation):
-        klass = self.klass
-
-        class Stringy(str):
-            cleared = False
-
-            def __eq__(self, other):
-                if not self.cleared:
-                    self.cleared = True
-                    klass.clear_cache(only_keys=(self,))
-                return super().__eq__(other)
-
-            __hash__ = str.__hash__
-
-        original = klass(Stringy("America/Los_Angeles"))
-        key = Stringy("America/Los_Angeles")
-        if operation == "lookup":
-            self.assertIs(klass(key), original)
-        else:
-            klass.clear_cache(only_keys=(key,))
-            self.assertIsNot(klass("America/Los_Angeles"), original)
 
     def test_inconsistent_weak_cache_get(self):
         class Cache:
@@ -2016,9 +1866,24 @@ class TzPathTest(TzPathUserMixin, ZoneInfoTestBase):
     @staticmethod
     @contextlib.contextmanager
     def python_tzpath_context(value):
-        with EnvironmentVarGuard() as env:
-            env["PYTHONTZPATH"] = value
-            yield
+        path_var = "PYTHONTZPATH"
+        unset_env_sentinel = object()
+        old_env = unset_env_sentinel
+        try:
+            with OS_ENV_LOCK:
+                old_env = os.environ.get(path_var, None)
+                os.environ[path_var] = value
+                yield
+        finally:
+            if old_env is unset_env_sentinel:
+                # In this case, `old_env` was never retrieved from the
+                # environment for whatever reason, so there's no need to
+                # reset the environment TZPATH.
+                pass
+            elif old_env is None:
+                del os.environ[path_var]
+            else:
+                os.environ[path_var] = old_env  # pragma: nocover
 
     def test_env_variable(self):
         """Tests that the environment variable works with reset_tzpath."""
@@ -2118,38 +1983,6 @@ class TzPathTest(TzPathUserMixin, ZoneInfoTestBase):
             with self.subTest(value=bad_value):
                 with self.assertRaises(TypeError):
                     self.module.reset_tzpath(bad_value)
-
-    def test_validate_key_windows_paths(self):
-        # Check the key validation with Windows path rules on every platform.
-        tzpath = self.module._tzpath
-        base = ntpath.normpath(ntpath.join("_", "_"))[:-1]
-        fake_os = types.SimpleNamespace(path=ntpath)
-
-        good_keys = [
-            "UTC",
-            "America/New_York",
-            "America/Argentina/Buenos_Aires",
-            "Etc/GMT+1",
-        ]
-        bad_keys = [
-            "C:\\Windows\\win.ini",
-            "America/C:\\Windows\\win.ini",  # Drive in a component
-            "America/C:/Windows/win.ini",
-            "America/D:secret",  # Drive-relative component
-            "America/Argentina/D:secret",
-            "America/\\Windows\\win.ini",  # Rooted component
-            "America/\\\\server\\share\\file",  # UNC component
-        ]
-
-        with mock.patch.object(tzpath, "os", fake_os):
-            for key in good_keys:
-                with self.subTest(key=key):
-                    tzpath._validate_tzfile_path(key, _base=base)
-
-            for key in bad_keys:
-                with self.subTest(key=key):
-                    with self.assertRaises(ValueError):
-                        tzpath._validate_tzfile_path(key, _base=base)
 
     def test_tzpath_attribute(self):
         tzpath_0 = [f"{DRIVE}/one", f"{DRIVE}/two"]
@@ -2296,21 +2129,6 @@ class TestModule(ZoneInfoTestBase):
                 actual = self.module.available_timezones()
                 self.assertEqual(actual, expected)
 
-    def test_exclude_localtime(self):
-        expected = {
-            "America/New_York",
-            "Europe/London",
-        }
-
-        tree = list(expected) + ["localtime"]
-
-        with tempfile.TemporaryDirectory() as td:
-            for key in tree:
-                self.touch_zone(key, td)
-
-            with self.tzpath_context([td]):
-                actual = self.module.available_timezones()
-                self.assertEqual(actual, expected)
 
 class CTestModule(TestModule):
     module = c_zoneinfo
@@ -2336,8 +2154,6 @@ class MiscTests(unittest.TestCase):
             PYTHONTZPATH=str(ZONEINFO_DATA.tzpath))
 
 
-@unittest.skipIf(sys.modules.get("_zoneinfo") is None,
-                 "_zoneinfo C module not available")
 class ExtensionBuiltTest(unittest.TestCase):
     """Smoke test to ensure that the C and Python extensions are both tested.
 
@@ -2350,9 +2166,10 @@ class ExtensionBuiltTest(unittest.TestCase):
     def test_cache_location(self):
         # The pure Python version stores caches on attributes, but the C
         # extension stores them in C globals (at least for now)
-        self.assertNotHasAttr(c_zoneinfo.ZoneInfo, "_weak_cache")
-        self.assertHasAttr(py_zoneinfo.ZoneInfo, "_weak_cache")
+        self.assertFalse(hasattr(c_zoneinfo.ZoneInfo, "_weak_cache"))
+        self.assertTrue(hasattr(py_zoneinfo.ZoneInfo, "_weak_cache"))
 
+    @requires_gil_enabled("gh-117783: types may be immortalized")
     def test_gc_tracked(self):
         import gc
 
@@ -2554,8 +2371,8 @@ class ZoneDumpData:
             ]
 
         def _America_Santiago():
-            LMT = ZoneOffset("LMT", timedelta(seconds=-16965), ZERO)
-            SMT = ZoneOffset("SMT", timedelta(seconds=-16965), ZERO)
+            LMT = ZoneOffset("LMT", timedelta(seconds=-16966), ZERO)
+            SMT = ZoneOffset("SMT", timedelta(seconds=-16966), ZERO)
             N05 = ZoneOffset("-05", timedelta(seconds=-18000), ZERO)
             N04 = ZoneOffset("-04", timedelta(seconds=-14400), ZERO)
             N03 = ZoneOffset("-03", timedelta(seconds=-10800), ONE_H)
@@ -2590,8 +2407,8 @@ class ZoneDumpData:
 
             return [
                 ZoneTransition(datetime(1895, 2, 1), LMT, AEST),
-                ZoneTransition(datetime(1917, 1, 1, 2), AEST, AEDT),
-                ZoneTransition(datetime(1917, 3, 25, 3), AEDT, AEST),
+                ZoneTransition(datetime(1917, 1, 1, 0, 1), AEST, AEDT),
+                ZoneTransition(datetime(1917, 3, 25, 2), AEDT, AEST),
                 ZoneTransition(datetime(2012, 4, 1, 3), AEDT, AEST),
                 ZoneTransition(datetime(2012, 10, 7, 2), AEST, AEDT),
                 ZoneTransition(datetime(2040, 4, 1, 3), AEDT, AEST),
@@ -2599,7 +2416,7 @@ class ZoneDumpData:
             ]
 
         def _Europe_Dublin():
-            LMT = ZoneOffset("LMT", timedelta(seconds=-1521), ZERO)
+            LMT = ZoneOffset("LMT", timedelta(seconds=-1500), ZERO)
             DMT = ZoneOffset("DMT", timedelta(seconds=-1521), ZERO)
             IST_0 = ZoneOffset("IST", timedelta(seconds=2079), ONE_H)
             GMT_0 = ZoneOffset("GMT", ZERO, ZERO)

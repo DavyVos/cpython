@@ -4,21 +4,24 @@
 .. module:: locale
    :synopsis: Internationalization services.
 
+.. moduleauthor:: Martin von Löwis <martin@v.loewis.de>
+.. sectionauthor:: Martin von Löwis <martin@v.loewis.de>
+
 **Source code:** :source:`Lib/locale.py`
 
 --------------
 
-The :mod:`!locale` module opens access to the POSIX locale database and
+The :mod:`locale` module opens access to the POSIX locale database and
 functionality. The POSIX locale mechanism allows programmers to deal with
 certain cultural issues in an application, without requiring the programmer to
 know all the specifics of each country where the software is executed.
 
 .. index:: pair: module; _locale
 
-The :mod:`!locale` module is implemented on top of the :mod:`!_locale` module,
+The :mod:`locale` module is implemented on top of the :mod:`!_locale` module,
 which in turn uses an ANSI C locale implementation if available.
 
-The :mod:`!locale` module defines the following exception and functions:
+The :mod:`locale` module defines the following exception and functions:
 
 
 .. exception:: Error
@@ -39,7 +42,7 @@ The :mod:`!locale` module defines the following exception and functions:
    If *locale* is a pair, it is converted to a locale name using
    the locale aliasing engine.
    The language code has the same format as a :ref:`locale name <locale_name>`,
-   but without encoding.
+   but without encoding and ``@``-modifier.
    The language code and encoding can be ``None``.
 
    If *locale* is omitted or ``None``, the current setting for *category* is
@@ -65,9 +68,6 @@ The :mod:`!locale` module defines the following exception and functions:
    This sets the locale for all categories to the user's default setting (typically
    specified in the :envvar:`LANG` environment variable).  If the locale is not
    changed thereafter, using multithreading should not cause problems.
-
-   .. versionchanged:: 3.15
-      Support language codes with ``@``-modifiers.
 
 
 .. function:: localeconv()
@@ -333,19 +333,6 @@ The :mod:`!locale` module defines the following exception and functions:
       to represent the values 0 to 99 in a locale-specific way.
       In most locales this is an empty string.
 
-   The function temporarily sets the ``LC_CTYPE`` locale to the locale
-   of the category that determines the requested value (``LC_TIME``,
-   ``LC_NUMERIC``, ``LC_MONETARY`` or ``LC_MESSAGES``) if locales are
-   different and the resulting string is non-ASCII.
-   This temporary change affects other threads.
-
-   .. versionchanged:: 3.14
-      The function now temporarily sets the ``LC_CTYPE`` locale in some cases.
-
-   .. versionchanged:: 3.16
-      On glibc, the ``LC_TIME`` items (except ``ERA``) are now decoded
-      independently of the ``LC_CTYPE`` encoding.
-
 
 .. function:: getdefaultlocale([envvars])
 
@@ -379,14 +366,10 @@ The :mod:`!locale` module defines the following exception and functions:
    values except :const:`LC_ALL`.  It defaults to :const:`LC_CTYPE`.
 
    The language code has the same format as a :ref:`locale name <locale_name>`,
-   but without encoding.
+   but without encoding and ``@``-modifier.
    The language code and encoding may be ``None`` if their values cannot be
    determined.
    The "C" locale is represented as ``(None, None)``.
-
-   .. versionchanged:: 3.15
-      ``@``-modifier are no longer silently removed, but included in
-      the language code.
 
 
 .. function:: getpreferredencoding(do_setlocale=True)
@@ -541,7 +524,7 @@ The :mod:`!locale` module defines the following exception and functions:
 .. data:: LC_COLLATE
 
    Locale category for sorting strings.  The functions :func:`strcoll` and
-   :func:`strxfrm` of the :mod:`!locale` module are affected.
+   :func:`strxfrm` of the :mod:`locale` module are affected.
 
 
 .. data:: LC_TIME
@@ -570,7 +553,7 @@ The :mod:`!locale` module defines the following exception and functions:
 .. data:: LC_NUMERIC
 
    Locale category for formatting numbers.  The functions :func:`format_string`,
-   :func:`atoi`, :func:`atof` and :func:`.str` of the :mod:`!locale` module are
+   :func:`atoi`, :func:`atof` and :func:`.str` of the :mod:`locale` module are
    affected by that category.  All other numeric formatting operations are not
    affected.
 
@@ -694,7 +677,7 @@ the current locale is.  But since the return value can only be used portably to
 restore it, that is not very useful (except perhaps to find out whether or not
 the locale is ``C``).
 
-When Python code uses the :mod:`!locale` module to change the locale, this also
+When Python code uses the :mod:`locale` module to change the locale, this also
 affects the embedding application.  If the embedding application doesn't want
 this to happen, it should remove the :mod:`!_locale` extension module (which does
 all the work) from the table of built-in modules in the :file:`config.c` file,
@@ -715,7 +698,7 @@ Access to message catalogs
 .. function:: bind_textdomain_codeset(domain, codeset)
 
 The locale module exposes the C library's gettext interface on systems that
-provide this interface.  It consists of the functions :func:`~locale.gettext`,
+provide this interface.  It consists of the functions :func:`gettext`,
 :func:`dgettext`, :func:`dcgettext`, :func:`textdomain`, :func:`bindtextdomain`,
 and :func:`bind_textdomain_codeset`.  These are similar to the same functions in
 the :mod:`gettext` module, but use the C library's binary format for message

@@ -1,12 +1,15 @@
 """Tests for streams.py."""
 
 import gc
+import os
 import queue
 import pickle
 import socket
+import sys
 import threading
 import unittest
 from unittest import mock
+import warnings
 try:
     import ssl
 except ImportError:
@@ -14,12 +17,11 @@ except ImportError:
 
 import asyncio
 from test.test_asyncio import utils as test_utils
-from test import support
-from test.support import socket_helper
+from test.support import requires_subprocess, socket_helper
 
 
 def tearDownModule():
-    asyncio.set_event_loop(None)
+    asyncio.set_event_loop_policy(None)
 
 
 class StreamTests(test_utils.TestCase):
@@ -48,7 +50,7 @@ class StreamTests(test_utils.TestCase):
         self.assertEqual(data, b'HTTP/1.0 200 OK\r\n')
         f = reader.read()
         data = self.loop.run_until_complete(f)
-        self.assertEndsWith(data, b'\r\n\r\nTest message')
+        self.assertTrue(data.endswith(b'\r\n\r\nTest message'))
         writer.close()
         self.assertEqual(messages, [])
 
@@ -73,7 +75,7 @@ class StreamTests(test_utils.TestCase):
         writer.write(b'GET / HTTP/1.0\r\n\r\n')
         f = reader.read()
         data = self.loop.run_until_complete(f)
-        self.assertEndsWith(data, b'\r\n\r\nTest message')
+        self.assertTrue(data.endswith(b'\r\n\r\nTest message'))
 
         writer.close()
         self.assertEqual(messages, [])
@@ -592,14 +594,6 @@ class StreamTests(test_utils.TestCase):
         stream.set_exception(exc)
         self.assertIs(stream.exception(), exc)
 
-        # Raised even when the data is already buffered.
-        stream.feed_data(b'line\n')
-        self.assertRaises(
-            ValueError, self.loop.run_until_complete, stream.readline())
-        self.assertRaises(
-            ValueError, self.loop.run_until_complete, stream.readuntil())
-        self.assertEqual(b'line\n', stream._buffer)
-
     def test_exception_waiter(self):
         stream = asyncio.StreamReader(loop=self.loop)
 
@@ -828,6 +822,52 @@ class StreamTests(test_utils.TestCase):
         self.assertEqual(msg1, b"hello world 1!\n")
         self.assertEqual(msg2, b"hello world 2!\n")
 
+    @unittest.skipIf(sys.platform == 'win32', "Don't have pipes")
+    @requires_subprocess()
+    def test_read_all_from_pipe_reader(self):
+        # See asyncio issue 168.  This test is derived from the example
+        # subprocess_attach_read_pipe.py, but we configure the
+        # StreamReader's limit so that twice it is less than the size
+        # of the data writer.  Also we must explicitly attach a child
+        # watcher to the event loop.
+
+        code = """\
+import os, sys
+fd = int(sys.argv[1])
+os.write(fd, b'data')
+os.close(fd)
+"""
+        rfd, wfd = os.pipe()
+        args = [sys.executable, '-c', code, str(wfd)]
+
+        pipe = open(rfd, 'rb', 0)
+        reader = asyncio.StreamReader(loop=self.loop, limit=1)
+        protocol = asyncio.StreamReaderProtocol(reader, loop=self.loop)
+        transport, _ = self.loop.run_until_complete(
+            self.loop.connect_read_pipe(lambda: protocol, pipe))
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            watcher = asyncio.SafeChildWatcher()
+        watcher.attach_loop(self.loop)
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', DeprecationWarning)
+                asyncio.set_child_watcher(watcher)
+            create = asyncio.create_subprocess_exec(
+                *args,
+                pass_fds={wfd},
+            )
+            proc = self.loop.run_until_complete(create)
+            self.loop.run_until_complete(proc.wait())
+        finally:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', DeprecationWarning)
+                asyncio.set_child_watcher(None)
+
+        os.close(wfd)
+        data = self.loop.run_until_complete(reader.read(-1))
+        self.assertEqual(data, b'data')
+
     @unittest.skipIf(ssl is None, 'No ssl module')
     def test_start_tls_buffered_data(self):
         # gh-142352: test start_tls() with buffered data
@@ -869,84 +909,6 @@ class StreamTests(test_utils.TestCase):
         self.loop.set_exception_handler(lambda loop, ctx: messages.append(ctx))
         self.loop.run_until_complete(run_test())
         self.assertEqual(messages, [])
-
-    @unittest.skipIf(ssl is None, 'No ssl module')
-    def test_start_tls_connection_lost_during_handshake(self):
-        # The protocol must get connection_lost() when the connection is
-        # lost while the start_tls() handshake is in progress, so that
-        # wait_closed() completes instead of hanging forever.
-
-        async def server_handler(client_reader, client_writer):
-            line = await client_reader.readline()
-            self.assertEqual(line, b"STARTTLS\n")
-            client_writer.write(b"go ahead\n")
-            await client_writer.drain()
-            with self.assertRaises(ConnectionAbortedError):
-                await client_writer.start_tls(
-                    test_utils.simple_server_sslcontext(),
-                    ssl_handshake_timeout=0.1)
-            client_writer.close()
-            with self.assertRaises(ConnectionAbortedError):
-                await asyncio.wait_for(client_writer.wait_closed(),
-                                       support.SHORT_TIMEOUT)
-            handler_done.set()
-
-        async def client(addr):
-            reader, writer = await asyncio.open_connection(*addr)
-            writer.write(b"STARTTLS\n")
-            await writer.drain()
-            line = await reader.readline()
-            self.assertEqual(line, b"go ahead\n")
-            # Never send a ClientHello: the server's handshake times out.
-            data = await reader.read()
-            self.assertEqual(data, b"")
-            writer.close()
-            await writer.wait_closed()
-
-        async def run_test():
-            server = await asyncio.start_server(
-                server_handler, socket_helper.HOSTv4, 0)
-            server_addr = server.sockets[0].getsockname()
-
-            await client(server_addr)
-            await asyncio.wait_for(handler_done.wait(),
-                                   support.SHORT_TIMEOUT)
-            server.close()
-            await server.wait_closed()
-
-        handler_done = asyncio.Event()
-        messages = []
-        self.loop.set_exception_handler(lambda loop, ctx: messages.append(ctx))
-        self.loop.run_until_complete(run_test())
-        self.assertEqual(messages, [])
-
-    def test_streamwriter_start_tls_updates_reader_transport(self):
-        reader = asyncio.StreamReader(loop=self.loop)
-        protocol = asyncio.StreamReaderProtocol(reader, loop=self.loop)
-        old_transport = mock.Mock()
-        old_transport.get_extra_info.return_value = None
-        old_transport.is_closing.return_value = False
-        protocol.connection_made(old_transport)
-
-        writer = asyncio.StreamWriter(old_transport, protocol, reader, self.loop)
-
-        ssl_context = mock.sentinel.ssl_context
-        new_transport = mock.Mock()
-        new_transport.get_extra_info.return_value = ssl_context
-        self.loop.start_tls = mock.AsyncMock(return_value=new_transport)
-
-        self.loop.run_until_complete(writer.start_tls(ssl_context))
-
-        self.loop.start_tls.assert_awaited_once_with(
-            old_transport, protocol, ssl_context,
-            server_side=False, server_hostname=None,
-            ssl_handshake_timeout=None,
-            ssl_shutdown_timeout=None,
-        )
-        self.assertIs(writer.transport, new_transport)
-        self.assertIs(protocol._transport, new_transport)
-        self.assertIs(reader._transport, new_transport)
-        self.assertTrue(protocol._over_ssl)
 
     def test_streamreader_constructor_without_loop(self):
         with self.assertRaisesRegex(RuntimeError, 'no current event loop'):
@@ -1128,7 +1090,7 @@ class StreamTests(test_utils.TestCase):
             self.assertEqual(data, b'HTTP/1.0 200 OK\r\n')
             f = rd.read()
             data = self.loop.run_until_complete(f)
-            self.assertEndsWith(data, b'\r\n\r\nTest message')
+            self.assertTrue(data.endswith(b'\r\n\r\nTest message'))
             self.assertFalse(wr.is_closing())
             wr.close()
             self.assertTrue(wr.is_closing())
@@ -1154,7 +1116,7 @@ class StreamTests(test_utils.TestCase):
             data = await rd.readline()
             self.assertEqual(data, b'HTTP/1.0 200 OK\r\n')
             data = await rd.read()
-            self.assertEndsWith(data, b'\r\n\r\nTest message')
+            self.assertTrue(data.endswith(b'\r\n\r\nTest message'))
             wr.close()
             await wr.wait_closed()
 
@@ -1174,7 +1136,7 @@ class StreamTests(test_utils.TestCase):
             data = await rd.readline()
             self.assertEqual(data, b'HTTP/1.0 200 OK\r\n')
             data = await rd.read()
-            self.assertEndsWith(data, b'\r\n\r\nTest message')
+            self.assertTrue(data.endswith(b'\r\n\r\nTest message'))
             wr.close()
             with self.assertRaises(ConnectionResetError):
                 wr.write(b'data')
@@ -1215,12 +1177,12 @@ class StreamTests(test_utils.TestCase):
             data = await rd.readline()
             self.assertEqual(data, b'HTTP/1.0 200 OK\r\n')
             data = await rd.read()
-            self.assertEndsWith(data, b'\r\n\r\nTest message')
+            self.assertTrue(data.endswith(b'\r\n\r\nTest message'))
             with self.assertWarns(ResourceWarning) as cm:
                 del wr
                 gc.collect()
                 self.assertEqual(len(cm.warnings), 1)
-                self.assertStartsWith(str(cm.warnings[0].message), "unclosed <StreamWriter")
+                self.assertTrue(str(cm.warnings[0].message).startswith("unclosed <StreamWriter"))
 
         messages = []
         self.loop.set_exception_handler(lambda loop, ctx: messages.append(ctx))
@@ -1238,7 +1200,7 @@ class StreamTests(test_utils.TestCase):
             data = await rd.readline()
             self.assertEqual(data, b'HTTP/1.0 200 OK\r\n')
             data = await rd.read()
-            self.assertEndsWith(data, b'\r\n\r\nTest message')
+            self.assertTrue(data.endswith(b'\r\n\r\nTest message'))
 
             # Make "loop is closed" occur first before "del wr" for this test.
             self.loop.stop()
@@ -1270,7 +1232,7 @@ class StreamTests(test_utils.TestCase):
                 del wr
                 gc.collect()
                 self.assertEqual(len(cm.warnings), 1)
-                self.assertStartsWith(str(cm.warnings[0].message), "unclosed <StreamWriter")
+                self.assertTrue(str(cm.warnings[0].message).startswith("unclosed <StreamWriter"))
 
         async def outer():
             srv = await asyncio.start_server(inner, socket_helper.HOSTv4, 0)
@@ -1326,38 +1288,6 @@ class StreamTests(test_utils.TestCase):
         messages = self._basetest_unhandled_exceptions(handle_echo)
         self.assertEqual(messages, [])
 
-    def test_unhandled_exception_sync_callback(self):
-        # An exception raised by a plain-function client_connected_cb is
-        # reported like the coroutine case and the transport is closed.
-        port = socket_helper.find_unused_port()
-
-        messages = []
-        self.loop.set_exception_handler(lambda loop, ctx: messages.append(ctx))
-
-        async def client():
-            rd, wr = await asyncio.open_connection('localhost', port)
-            async with asyncio.timeout(60):
-                data = await rd.read()
-            self.assertEqual(data, b'')  # the server closed the connection
-            wr.close()
-            await wr.wait_closed()
-
-        async def main():
-            def handle_echo(reader, writer):
-                raise Exception('test')
-
-            server = await asyncio.start_server(
-                handle_echo, 'localhost', port)
-            await server.start_serving()
-            await client()
-            server.close()
-            await server.wait_closed()
-
-        self.loop.run_until_complete(main())
-
-        self.assertEqual(messages[0]['message'],
-                    'Unhandled exception in client_connected_cb')
-
     def test_open_connection_happy_eyeball_refcycles(self):
         port = socket_helper.find_unused_port()
         async def main():
@@ -1372,9 +1302,9 @@ class StreamTests(test_utils.TestCase):
                 # can't use assertRaises because that clears frames
                 exc = excs.exceptions[0]
             self.assertIsNotNone(exc)
-            self.assertListEqual(gc.get_referrers(exc), [main_coro])
-        main_coro = main()
-        asyncio.run(main_coro)
+            self.assertListEqual(gc.get_referrers(exc), [])
+
+        asyncio.run(main())
 
 
 if __name__ == '__main__':

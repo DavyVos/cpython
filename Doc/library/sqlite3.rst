@@ -4,6 +4,8 @@
 .. module:: sqlite3
    :synopsis: A DB-API 2.0 implementation using SQLite 3.x.
 
+.. sectionauthor:: Gerhard Häring <gh@ghaering.de>
+
 **Source code:** :source:`Lib/sqlite3/`
 
 .. Make sure we always doctest the tutorial with an empty database.
@@ -29,9 +31,7 @@ PostgreSQL or Oracle.
 
 The :mod:`!sqlite3` module was written by Gerhard Häring.  It provides an SQL interface
 compliant with the DB-API 2.0 specification described by :pep:`249`, and
-requires the third-party `SQLite <https://sqlite.org/>`_ library.
-
-.. include:: ../includes/optional-module.rst
+requires SQLite 3.15.2 or newer.
 
 This document includes four main sections:
 
@@ -259,10 +259,10 @@ Reference
 Module functions
 ^^^^^^^^^^^^^^^^
 
-.. function:: connect(database, *, timeout=5.0, detect_types=0, \
+.. function:: connect(database, timeout=5.0, detect_types=0, \
                       isolation_level="DEFERRED", check_same_thread=True, \
                       factory=sqlite3.Connection, cached_statements=128, \
-                      uri=False, \
+                      uri=False, *, \
                       autocommit=sqlite3.LEGACY_TRANSACTION_CONTROL)
 
    Open a connection to an SQLite database.
@@ -355,8 +355,11 @@ Module functions
    .. versionchanged:: 3.12
       Added the *autocommit* parameter.
 
-   .. versionchanged:: 3.15
-      All parameters except *database* are now keyword-only.
+   .. versionchanged:: 3.13
+      Positional use of the parameters *timeout*, *detect_types*,
+      *isolation_level*, *check_same_thread*, *factory*, *cached_statements*,
+      and *uri* is deprecated.
+      They will become keyword-only parameters in Python 3.15.
 
 .. function:: complete_statement(statement)
 
@@ -498,49 +501,14 @@ Module constants
 
       The ``named`` DB-API parameter style is also supported.
 
-.. data:: SQLITE_VERSION
-
-   The version string of the SQLite library that was used for building
-   the module.
-   This may be different from the SQLite library actually used at runtime,
-   which is available as :const:`sqlite_version`.
-
-   .. versionadded:: 3.16
-
 .. data:: sqlite_version
 
    Version number of the runtime SQLite library as a :class:`string <str>`.
 
-.. data:: SQLITE_VERSION_INFO
-
-   A named tuple containing the three components of the SQLite library
-   version that was used for building the module:
-   *major*, *minor*, and *patch*.
-   All values are integers.
-   The components can also be accessed by name,
-   so ``sqlite3.SQLITE_VERSION_INFO[0]`` is equivalent to
-   ``sqlite3.SQLITE_VERSION_INFO.major`` and so on.
-   This may be different from the SQLite library actually used at runtime,
-   which is available as :const:`sqlite_version_info`.
-
-   .. versionadded:: 3.16
-
 .. data:: sqlite_version_info
 
-   A named tuple containing the version of the runtime SQLite library,
-   with the same fields as :const:`SQLITE_VERSION_INFO`.
-
-   .. versionchanged:: 3.16
-      It is now a named tuple.
-
-.. data:: SQLITE_KEYWORDS
-
-   A :class:`tuple` containing all SQLite keywords.
-
-   This constant is only available if Python was compiled with SQLite
-   3.24.0 or greater.
-
-   .. versionadded:: 3.15
+   Version number of the runtime SQLite library as a :class:`tuple` of
+   :class:`integers <int>`.
 
 .. data:: threadsafety
 
@@ -579,6 +547,26 @@ Module constants
    .. versionchanged:: 3.11
       Set *threadsafety* dynamically instead of hard-coding it to ``1``.
 
+.. data:: version
+
+   Version number of this module as a :class:`string <str>`.
+   This is not the version of the SQLite library.
+
+   .. deprecated-removed:: 3.12 3.14
+      This constant used to reflect the version number of the ``pysqlite``
+      package, a third-party library which used to upstream changes to
+      :mod:`!sqlite3`. Today, it carries no meaning or practical value.
+
+.. data:: version_info
+
+   Version number of this module as a :class:`tuple` of :class:`integers <int>`.
+   This is not the version of the SQLite library.
+
+   .. deprecated-removed:: 3.12 3.14
+      This constant used to reflect the version number of the ``pysqlite``
+      package, a third-party library which used to upstream changes to
+      :mod:`!sqlite3`. Today, it carries no meaning or practical value.
+
 .. _sqlite3-dbconfig-constants:
 
 .. data:: SQLITE_DBCONFIG_DEFENSIVE
@@ -611,8 +599,6 @@ Module constants
      https://www.sqlite.org/c3ref/c_dbconfig_defensive.html
         SQLite docs: Database Connection Configuration Options
 
-.. deprecated-removed:: 3.12 3.14
-   The :data:`!version` and :data:`!version_info` constants.
 
 .. _sqlite3-connection-objects:
 
@@ -725,7 +711,7 @@ Connection objects
       :meth:`~Cursor.executescript` on it with the given *sql_script*.
       Return the new cursor object.
 
-   .. method:: create_function(name, narg, func, /, *, deterministic=False)
+   .. method:: create_function(name, narg, func, *, deterministic=False)
 
       Create or remove a user-defined SQL function.
 
@@ -751,9 +737,6 @@ Connection objects
       .. versionchanged:: 3.8
          Added the *deterministic* parameter.
 
-      .. versionchanged:: 3.15
-         The first three parameters are now positional-only.
-
       Example:
 
       .. doctest::
@@ -768,8 +751,13 @@ Connection objects
          ('acbd18db4cc2f85cedef654fccc4a4d8',)
          >>> con.close()
 
+      .. versionchanged:: 3.13
 
-   .. method:: create_aggregate(name, n_arg, aggregate_class, /)
+         Passing *name*, *narg*, and *func* as keyword arguments is deprecated.
+         These parameters will become positional-only in Python 3.15.
+
+
+   .. method:: create_aggregate(name, n_arg, aggregate_class)
 
       Create or remove a user-defined SQL aggregate function.
 
@@ -792,9 +780,6 @@ Connection objects
 
           Set to ``None`` to remove an existing SQL aggregate function.
       :type aggregate_class: :term:`class` | None
-
-      .. versionchanged:: 3.15
-         All three parameters are now positional-only.
 
       Example:
 
@@ -824,6 +809,11 @@ Connection objects
          :hide:
 
          3
+
+      .. versionchanged:: 3.13
+
+         Passing *name*, *n_arg*, and *aggregate_class* as keyword arguments is deprecated.
+         These parameters will become positional-only in Python 3.15.
 
 
    .. method:: create_window_function(name, num_params, aggregate_class, /)
@@ -965,7 +955,7 @@ Connection objects
       Aborted queries will raise an :exc:`OperationalError`.
 
 
-   .. method:: set_authorizer(authorizer_callback, /)
+   .. method:: set_authorizer(authorizer_callback)
 
       Register :term:`callable` *authorizer_callback* to be invoked
       for each attempt to access a column of a table in the database.
@@ -990,11 +980,12 @@ Connection objects
       .. versionchanged:: 3.11
          Added support for disabling the authorizer using ``None``.
 
-      .. versionchanged:: 3.15
-         The only parameter is now positional-only.
+      .. versionchanged:: 3.13
+         Passing *authorizer_callback* as a keyword argument is deprecated.
+         The parameter will become positional-only in Python 3.15.
 
 
-   .. method:: set_progress_handler(progress_handler, /, n)
+   .. method:: set_progress_handler(progress_handler, n)
 
       Register :term:`callable` *progress_handler* to be invoked for every *n*
       instructions of the SQLite virtual machine. This is useful if you want to
@@ -1008,11 +999,12 @@ Connection objects
       currently executing query and cause it to raise a :exc:`DatabaseError`
       exception.
 
-      .. versionchanged:: 3.15
-         The first parameter is now positional-only.
+      .. versionchanged:: 3.13
+         Passing *progress_handler* as a keyword argument is deprecated.
+         The parameter will become positional-only in Python 3.15.
 
 
-   .. method:: set_trace_callback(trace_callback, /)
+   .. method:: set_trace_callback(trace_callback)
 
       Register :term:`callable` *trace_callback* to be invoked
       for each SQL statement that is actually executed by the SQLite backend.
@@ -1035,8 +1027,9 @@ Connection objects
 
       .. versionadded:: 3.3
 
-      .. versionchanged:: 3.15
-         The first parameter is now positional-only.
+      .. versionchanged:: 3.13
+         Passing *trace_callback* as a keyword argument is deprecated.
+         The parameter will become positional-only in Python 3.15.
 
 
    .. method:: enable_load_extension(enabled, /)
@@ -1176,7 +1169,7 @@ Connection objects
           the *remaining* number of pages still to be copied,
           and the *total* number of pages.
           Defaults to ``None``.
-      :type progress: :term:`callback` | None
+      :type progress: :term:`callback` | None
 
       :param str name:
           The name of the database to back up.
@@ -1443,7 +1436,7 @@ Connection objects
 
       See :ref:`sqlite3-howto-row-factory` for more details.
 
-      .. versionchanged:: 3.16
+      .. versionchanged:: 3.13.14
          Deleting the ``row_factory`` attribute is no longer allowed.
 
    .. attribute:: text_factory
@@ -1455,7 +1448,7 @@ Connection objects
 
       See :ref:`sqlite3-howto-encoding` for more details.
 
-      .. versionchanged:: 3.16
+      .. versionchanged:: 3.13.14
          Deleting the ``text_factory`` attribute is no longer allowed.
 
    .. attribute:: total_changes
@@ -1523,9 +1516,7 @@ Cursor objects
       :type parameters: :class:`dict` | :term:`sequence`
 
       :raises ProgrammingError:
-         When *sql* contains more than one SQL statement.
-         When :ref:`named placeholders <sqlite3-placeholders>` are used
-         and *parameters* is a sequence instead of a :class:`dict`.
+         If *sql* contains more than one SQL statement.
 
       If :attr:`~Connection.autocommit` is
       :data:`LEGACY_TRANSACTION_CONTROL`,
@@ -1534,11 +1525,13 @@ Cursor objects
       and there is no open transaction,
       a transaction is implicitly opened before executing *sql*.
 
-      .. versionchanged:: 3.14
+      .. deprecated-removed:: 3.12 3.14
 
-         :exc:`ProgrammingError` is emitted if
+         :exc:`DeprecationWarning` is emitted if
          :ref:`named placeholders <sqlite3-placeholders>` are used
          and *parameters* is a sequence instead of a :class:`dict`.
+         Starting with Python 3.14, :exc:`ProgrammingError` will
+         be raised instead.
 
       Use :meth:`executescript` to execute multiple SQL statements.
 
@@ -1560,10 +1553,8 @@ Cursor objects
       :type parameters: :term:`iterable`
 
       :raises ProgrammingError:
-         When *sql* contains more than one SQL statement
-         or is not a DML statement,
-         When :ref:`named placeholders <sqlite3-placeholders>` are used
-         and the items in *parameters* are sequences instead of :class:`dict`\s.
+         If *sql* contains more than one SQL statement,
+         or is not a DML statement.
 
       Example:
 
@@ -1587,12 +1578,14 @@ Cursor objects
 
       .. _RETURNING clauses: https://www.sqlite.org/lang_returning.html
 
-      .. versionchanged:: 3.14
+      .. deprecated-removed:: 3.12 3.14
 
-         :exc:`ProgrammingError` is emitted if
+         :exc:`DeprecationWarning` is emitted if
          :ref:`named placeholders <sqlite3-placeholders>` are used
          and the items in *parameters* are sequences
          instead of :class:`dict`\s.
+         Starting with Python 3.14, :exc:`ProgrammingError` will
+         be raised instead.
 
    .. method:: executescript(sql_script, /)
 
@@ -1643,7 +1636,7 @@ Cursor objects
       If the *size* parameter is used, then it is best for it to retain the same
       value from one :meth:`fetchmany` call to the next.
 
-      .. versionchanged:: 3.15
+      .. versionchanged:: 3.13.8
          Negative *size* values are rejected by raising :exc:`ValueError`.
 
    .. method:: fetchall()
@@ -1673,7 +1666,7 @@ Cursor objects
       Read/write attribute that controls the number of rows returned by :meth:`fetchmany`.
       The default value is 1 which means a single row would be fetched per call.
 
-      .. versionchanged:: 3.15
+      .. versionchanged:: 3.13.8
          Negative values are rejected by raising :exc:`ValueError`.
 
    .. attribute:: connection
@@ -1741,7 +1734,7 @@ Cursor objects
 
       See :ref:`sqlite3-howto-row-factory` for more details.
 
-      .. versionchanged:: 3.16
+      .. versionchanged:: 3.13.14
          Deleting the ``row_factory`` attribute is no longer allowed.
 
 
@@ -1785,10 +1778,6 @@ Blob objects
 .. class:: Blob
 
    .. versionadded:: 3.11
-
-   .. versionchanged:: 3.16
-      :class:`Blob` now supports negative-step slices
-      (e.g. ``blob[9:0:-2]``) for both reading and writing.
 
    A :class:`Blob` instance is a :term:`file-like object`
    that can read and write data in an SQLite :abbr:`BLOB (Binary Large OBject)`.

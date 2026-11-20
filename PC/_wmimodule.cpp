@@ -67,7 +67,7 @@ _query_thread(LPVOID param)
     }
 
     if (SUCCEEDED(hr)) {
-        hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     }
 
     if (FAILED(hr)) {
@@ -240,6 +240,7 @@ _wmi_exec_query_impl(PyObject *module, PyObject *query)
 
 /*[clinic end generated code]*/
 {
+    PyObject *result = NULL;
     HANDLE hThread = NULL;
     int err = 0;
     WCHAR buffer[8192];

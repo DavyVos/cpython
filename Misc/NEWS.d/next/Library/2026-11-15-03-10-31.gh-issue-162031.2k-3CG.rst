@@ -1,3 +1,0 @@
-Fix :meth:`io.BufferedIOBase.readinto` and :meth:`~io.BufferedIOBase.readinto1`
-raising :exc:`TypeError` instead of returning ``None`` when called on a
-non-blocking stream with no data available.

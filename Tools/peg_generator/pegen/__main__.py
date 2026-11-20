@@ -6,7 +6,6 @@ Search the web for PEG Parsers for reference.
 """
 
 import argparse
-import pathlib
 import sys
 import time
 import token
@@ -88,15 +87,10 @@ subparsers = argparser.add_subparsers(help="target language for the generated co
 
 c_parser = subparsers.add_parser("c", help="Generate C code for inclusion into CPython")
 c_parser.set_defaults(func=generate_c_code)
-c_parser.add_argument("grammar_filename", type=pathlib.Path, help="Grammar description")
-c_parser.add_argument("tokens_filename", type=pathlib.Path, help="Tokens description")
+c_parser.add_argument("grammar_filename", help="Grammar description")
+c_parser.add_argument("tokens_filename", help="Tokens description")
 c_parser.add_argument(
-    "-o",
-    "--output",
-    metavar="OUT",
-    type=pathlib.Path,
-    default=pathlib.Path("parse.c"),
-    help="Where to write the generated parser",
+    "-o", "--output", metavar="OUT", default="parse.c", help="Where to write the generated parser"
 )
 c_parser.add_argument(
     "--compile-extension",
@@ -112,18 +106,14 @@ c_parser.add_argument(
     help="Suppress code emission for rule actions",
 )
 
-python_parser = subparsers.add_parser(
-    "python",
-    help="Generate Python code, needs grammar definition with Python actions",
-)
+python_parser = subparsers.add_parser("python", help="Generate Python code")
 python_parser.set_defaults(func=generate_python_code)
-python_parser.add_argument("grammar_filename", type=pathlib.Path, help="Grammar description")
+python_parser.add_argument("grammar_filename", help="Grammar description")
 python_parser.add_argument(
     "-o",
     "--output",
     metavar="OUT",
-    type=pathlib.Path,
-    default=pathlib.Path("parse.py"),
+    default="parse.py",
     help="Where to write the generated parser",
 )
 python_parser.add_argument(
@@ -194,7 +184,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    if sys.version_info < (3, 10):  # noqa: UP036
-        print("ERROR: using pegen requires at least Python 3.10!", file=sys.stderr)
+    if sys.version_info < (3, 8):  # noqa: UP036
+        print("ERROR: using pegen requires at least Python 3.8!", file=sys.stderr)
         sys.exit(1)
     main()

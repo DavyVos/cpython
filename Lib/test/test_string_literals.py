@@ -54,10 +54,6 @@ h = '\U0001d120'
 assert ord(h) == 0x1d120
 i = r'\U0001d120'
 assert list(map(ord, i)) == [92, 85, 48, 48, 48, 49, 100, 49, 50, 48]
-j = 'ä'
-assert list(map(ord, j)) == [228]
-k = '\ä'
-assert list(map(ord, k)) == [92, 228]
 """
 
 
@@ -80,7 +76,7 @@ class TestLiterals(unittest.TestCase):
         # Check that the template doesn't contain any non-printables
         # except for \n.
         for c in TEMPLATE:
-            assert c == '\n' or ' ' <= c <= '~' or c == 'ä', repr(c)
+            assert c == '\n' or ' ' <= c <= '~', repr(c)
 
     def test_eval_str_normal(self):
         self.assertEqual(eval(""" 'x' """), 'x')
@@ -92,21 +88,6 @@ class TestLiterals(unittest.TestCase):
         self.assertEqual(eval(""" '\u1881' """), chr(0x1881))
         self.assertEqual(eval(r""" '\U0001d120' """), chr(0x1d120))
         self.assertEqual(eval(""" '\U0001d120' """), chr(0x1d120))
-        # Lone "\" character at the end
-        self.assertEqual(eval(r"'abc\\'"), 'abc\\')
-
-    def test_eval_str_unicode(self):
-        for s in (
-            'ϼўТλФЙ',
-            'A͏B ﬖ̳AA̝',
-            '\U00100000\U0010ffff\U0010fffd',
-            'ä',
-            '\\ä',
-            "\\П",
-            "áàäéèęöő.\\n",
-        ):
-            with self.subTest(s=s):
-                self.assertEqual(eval(f"{s!r}"), s)
 
     def test_eval_str_incomplete(self):
         self.assertRaises(SyntaxError, eval, r""" '\x' """)
@@ -135,9 +116,7 @@ class TestLiterals(unittest.TestCase):
             warnings.simplefilter('always', category=SyntaxWarning)
             eval("'''\n\\z'''")
         self.assertEqual(len(w), 1)
-        self.assertEqual(str(w[0].message), r'"\z" is an invalid escape sequence. '
-                         r'Such sequences will not work in the future. '
-                         r'Did you mean "\\z"? A raw string is also an option.')
+        self.assertEqual(str(w[0].message), r"invalid escape sequence '\z'")
         self.assertEqual(w[0].filename, '<string>')
         self.assertEqual(w[0].lineno, 2)
 
@@ -147,8 +126,7 @@ class TestLiterals(unittest.TestCase):
                 eval("'''\n\\z'''")
             exc = cm.exception
         self.assertEqual(w, [])
-        self.assertEqual(exc.msg, r'"\z" is an invalid escape sequence. '
-                         r'Did you mean "\\z"? A raw string is also an option.')
+        self.assertEqual(exc.msg, r"invalid escape sequence '\z'")
         self.assertEqual(exc.filename, '<string>')
         self.assertEqual(exc.lineno, 2)
         self.assertEqual(exc.offset, 1)
@@ -175,9 +153,7 @@ class TestLiterals(unittest.TestCase):
             eval("'''\n\\407'''")
         self.assertEqual(len(w), 1)
         self.assertEqual(str(w[0].message),
-                         r'"\407" is an invalid octal escape sequence. '
-                         r'Such sequences will not work in the future. '
-                         r'Did you mean "\\407"? A raw string is also an option.')
+                         r"invalid octal escape sequence '\407'")
         self.assertEqual(w[0].filename, '<string>')
         self.assertEqual(w[0].lineno, 2)
 
@@ -187,34 +163,33 @@ class TestLiterals(unittest.TestCase):
                 eval("'''\n\\407'''")
             exc = cm.exception
         self.assertEqual(w, [])
-        self.assertEqual(exc.msg, r'"\407" is an invalid octal escape sequence. '
-                                 r'Did you mean "\\407"? A raw string is also an option.')
+        self.assertEqual(exc.msg, r"invalid octal escape sequence '\407'")
         self.assertEqual(exc.filename, '<string>')
         self.assertEqual(exc.lineno, 2)
         self.assertEqual(exc.offset, 1)
 
     def test_invalid_escape_locations_with_offset(self):
         with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=SyntaxWarning)
-            eval("\"'''''''''''''''''''''invalid\\ Escape\"")
-        self.assertEqual(len(w), 1)
-        self.assertEqual(str(w[0].message),
-                         r'"\ " is an invalid escape sequence. Such sequences '
-                         r'will not work in the future. Did you mean "\\ "? '
-                         r'A raw string is also an option.')
-        self.assertEqual(w[0].filename, '<string>')
-        self.assertEqual(w[0].lineno, 1)
+            warnings.simplefilter('error', category=SyntaxWarning)
+            with self.assertRaises(SyntaxError) as cm:
+                eval("\"'''''''''''''''''''''invalid\\ Escape\"")
+            exc = cm.exception
+        self.assertEqual(w, [])
+        self.assertEqual(exc.msg, r"invalid escape sequence '\ '")
+        self.assertEqual(exc.filename, '<string>')
+        self.assertEqual(exc.lineno, 1)
+        self.assertEqual(exc.offset, 30)
 
         with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always', category=SyntaxWarning)
-            eval("\"''Incorrect \\ logic?\"")
-        self.assertEqual(len(w), 1)
-        self.assertEqual(str(w[0].message),
-                            r'"\ " is an invalid escape sequence. Such sequences '
-                            r'will not work in the future. Did you mean "\\ "? '
-                            r'A raw string is also an option.')
-        self.assertEqual(w[0].filename, '<string>')
-        self.assertEqual(w[0].lineno, 1)
+            warnings.simplefilter('error', category=SyntaxWarning)
+            with self.assertRaises(SyntaxError) as cm:
+                eval("\"''Incorrect \\ logic?\"")
+            exc = cm.exception
+        self.assertEqual(w, [])
+        self.assertEqual(exc.msg, r"invalid escape sequence '\ '")
+        self.assertEqual(exc.filename, '<string>')
+        self.assertEqual(exc.lineno, 1)
+        self.assertEqual(exc.offset, 14)
 
     def test_eval_str_raw(self):
         self.assertEqual(eval(""" r'x' """), 'x')
@@ -253,9 +228,7 @@ class TestLiterals(unittest.TestCase):
             warnings.simplefilter('always', category=SyntaxWarning)
             eval("b'''\n\\z'''")
         self.assertEqual(len(w), 1)
-        self.assertEqual(str(w[0].message), r'"\z" is an invalid escape sequence. '
-                         r'Such sequences will not work in the future. '
-                         r'Did you mean "\\z"? A raw string is also an option.')
+        self.assertEqual(str(w[0].message), r"invalid escape sequence '\z'")
         self.assertEqual(w[0].filename, '<string>')
         self.assertEqual(w[0].lineno, 2)
 
@@ -265,8 +238,7 @@ class TestLiterals(unittest.TestCase):
                 eval("b'''\n\\z'''")
             exc = cm.exception
         self.assertEqual(w, [])
-        self.assertEqual(exc.msg, r'"\z" is an invalid escape sequence. '
-                         r'Did you mean "\\z"? A raw string is also an option.')
+        self.assertEqual(exc.msg, r"invalid escape sequence '\z'")
         self.assertEqual(exc.filename, '<string>')
         self.assertEqual(exc.lineno, 2)
 
@@ -279,9 +251,8 @@ class TestLiterals(unittest.TestCase):
             warnings.simplefilter('always', category=SyntaxWarning)
             eval("b'''\n\\407'''")
         self.assertEqual(len(w), 1)
-        self.assertEqual(str(w[0].message), r'"\407" is an invalid octal escape sequence. '
-                         r'Such sequences will not work in the future. '
-                         r'Did you mean "\\407"? A raw string is also an option.')
+        self.assertEqual(str(w[0].message),
+                         r"invalid octal escape sequence '\407'")
         self.assertEqual(w[0].filename, '<string>')
         self.assertEqual(w[0].lineno, 2)
 
@@ -291,8 +262,7 @@ class TestLiterals(unittest.TestCase):
                 eval("b'''\n\\407'''")
             exc = cm.exception
         self.assertEqual(w, [])
-        self.assertEqual(exc.msg, r'"\407" is an invalid octal escape sequence. '
-                         r'Did you mean "\\407"? A raw string is also an option.')
+        self.assertEqual(exc.msg, r"invalid octal escape sequence '\407'")
         self.assertEqual(exc.filename, '<string>')
         self.assertEqual(exc.lineno, 2)
 

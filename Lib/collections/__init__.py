@@ -32,8 +32,6 @@ import sys as _sys
 _sys.modules['collections.abc'] = _collections_abc
 abc = _collections_abc
 
-lazy from copy import copy as _copy
-lazy from heapq import nlargest as _nlargest
 from itertools import chain as _chain
 from itertools import repeat as _repeat
 from itertools import starmap as _starmap
@@ -51,8 +49,7 @@ else:
     _collections_abc.MutableSequence.register(deque)
 
 try:
-    # Expose _deque_iterator to support pickling deque iterators
-    from _collections import _deque_iterator  # noqa: F401
+    from _collections import _deque_iterator
 except ImportError:
     pass
 
@@ -328,14 +325,14 @@ class OrderedDict(dict):
         return self
 
     def __or__(self, other):
-        if not isinstance(other, (dict, frozendict)):
+        if not isinstance(other, dict):
             return NotImplemented
         new = self.__class__(self)
         new.update(other)
         return new
 
     def __ror__(self, other):
-        if not isinstance(other, (dict, frozendict)):
+        if not isinstance(other, dict):
             return NotImplemented
         new = self.__class__(other)
         new.update(self)
@@ -637,7 +634,9 @@ class Counter(dict):
         if n is None:
             return sorted(self.items(), key=_itemgetter(1), reverse=True)
 
-        return _nlargest(n, self.items(), key=_itemgetter(1))
+        # Lazy import to speedup Python startup time
+        import heapq
+        return heapq.nlargest(n, self.items(), key=_itemgetter(1))
 
     def elements(self):
         '''Iterator over elements repeating each as many times as its count.
@@ -774,27 +773,23 @@ class Counter(dict):
     # When the multiplicities are all zero or one, multiset operations
     # are guaranteed to be equivalent to the corresponding operations
     # for regular sets.
-    #
     #     Given counter multisets such as:
     #         cp = Counter(a=1, b=0, c=1)
     #         cq = Counter(c=1, d=0, e=1)
-    #
     #     The corresponding regular sets would be:
     #         sp = {'a', 'c'}
     #         sq = {'c', 'e'}
-    #
     #     All of the following relations would hold:
+    #         set(cp + cq) == sp | sq
+    #         set(cp - cq) == sp - sq
+    #         set(cp | cq) == sp | sq
+    #         set(cp & cq) == sp & sq
     #         (cp == cq) == (sp == sq)
     #         (cp != cq) == (sp != sq)
     #         (cp <= cq) == (sp <= sq)
     #         (cp < cq) == (sp < sq)
     #         (cp >= cq) == (sp >= sq)
     #         (cp > cq) == (sp > sq)
-    #         set(cp + cq) == sp | sq
-    #         set(cp - cq) == sp - sq
-    #         set(cp | cq) == sp | sq
-    #         set(cp & cq) == sp & sq
-    #         set(cp ^ cq) == sp ^ sq
 
     def __eq__(self, other):
         'True if all counts agree. Missing counts are treated as zero.'
@@ -907,33 +902,6 @@ class Counter(dict):
                 result[elem] = newcount
         return result
 
-    def __xor__(self, other):
-        '''Symmetric difference. Absolute value of count differences.
-
-        The symmetric difference p ^ q is equivalent to:
-
-            (p - q) | (q - p).
-
-        For each element, symmetric difference gives the same result as:
-
-            max(p[elem], q[elem]) - min(p[elem], q[elem])
-
-        >>> Counter(a=5, b=3, c=2, d=2) ^ Counter(a=1, b=3, c=5, e=1)
-        Counter({'a': 4, 'c': 3, 'd': 2, 'e': 1})
-
-        '''
-        if not isinstance(other, Counter):
-            return NotImplemented
-        result = Counter()
-        for elem, count in self.items():
-            newcount = abs(count - other[elem])
-            if newcount:
-                result[elem] = newcount
-        for elem, count in other.items():
-            if elem not in self and count:
-                result[elem] = abs(count)
-        return result
-
     def __pos__(self):
         'Adds an empty counter, effectively stripping negative and zero counts'
         result = Counter()
@@ -1016,22 +984,6 @@ class Counter(dict):
                 self[elem] = other_count
         return self._keep_positive()
 
-    def __ixor__(self, other):
-        '''Inplace symmetric difference. Absolute value of count differences.
-
-        >>> c = Counter(a=5, b=3, c=2, d=2)
-        >>> c ^= Counter(a=1, b=3, c=5, e=1)
-        >>> c
-        Counter({'a': 4, 'c': 3, 'd': 2, 'e': 1})
-
-        '''
-        for elem, count in self.items():
-            self[elem] = abs(count - other[elem])
-        for elem, count in other.items():
-            if elem not in self:
-                self[elem] = abs(count)
-        return self._keep_positive()
-
 
 ########################################################################
 ###  ChainMap
@@ -1070,7 +1022,7 @@ class ChainMap(_collections_abc.MutableMapping):
         return self.__missing__(key)            # support subclasses that define __missing__
 
     def get(self, key, default=None):
-        return self[key] if key in self else default    # needs to make use of __contains__
+        return self[key] if key in self else default
 
     def __len__(self):
         return len(set().union(*self.maps))     # reuses stored hash values if possible
@@ -1082,10 +1034,7 @@ class ChainMap(_collections_abc.MutableMapping):
         return iter(d)
 
     def __contains__(self, key):
-        for mapping in self.maps:
-            if key in mapping:
-                return True
-        return False
+        return any(key in m for m in self.maps)
 
     def __bool__(self):
         return any(self.maps)
@@ -1163,7 +1112,8 @@ class ChainMap(_collections_abc.MutableMapping):
         if not isinstance(other, _collections_abc.Mapping):
             return NotImplemented
         m = dict(other)
-        m.update(self)
+        for child in reversed(self.maps):
+            m.update(child)
         return self.__class__(m)
 
 
@@ -1218,14 +1168,14 @@ class UserDict(_collections_abc.MutableMapping):
     def __or__(self, other):
         if isinstance(other, UserDict):
             return self.__class__(self.data | other.data)
-        if isinstance(other, (dict, frozendict)):
+        if isinstance(other, dict):
             return self.__class__(self.data | other)
         return NotImplemented
 
     def __ror__(self, other):
         if isinstance(other, UserDict):
             return self.__class__(other.data | self.data)
-        if isinstance(other, (dict, frozendict)):
+        if isinstance(other, dict):
             return self.__class__(other | self.data)
         return NotImplemented
 
@@ -1246,28 +1196,15 @@ class UserDict(_collections_abc.MutableMapping):
     def copy(self):
         if self.__class__ is UserDict:
             return UserDict(self.data.copy())
+        import copy
         data = self.data
         try:
             self.data = {}
-            c = _copy(self)
+            c = copy.copy(self)
         finally:
             self.data = data
         c.update(self)
         return c
-
-
-    # This method has a default implementation in MutableMapping, but dict's
-    # equivalent is last-in, first-out instead of first-in, first-out.
-    def popitem(self):
-        """Remove and return a (key, value) pair as a 2-tuple.
-
-        Removes pairs in the same order as the wrapped mapping's popitem()
-        method. For dict objects (the default), that order is last-in,
-        first-out (LIFO).
-        Raises KeyError if the UserDict is empty.
-        """
-        return self.data.popitem()
-
 
     @classmethod
     def fromkeys(cls, iterable, value=None):
@@ -1535,8 +1472,6 @@ class UserString(_collections_abc.Sequence):
         return self.data.encode(encoding, errors)
 
     def endswith(self, suffix, start=0, end=_sys.maxsize):
-        if isinstance(suffix, UserString):
-            suffix = suffix.data
         return self.data.endswith(suffix, start, end)
 
     def expandtabs(self, tabsize=8):
@@ -1647,8 +1582,6 @@ class UserString(_collections_abc.Sequence):
         return self.data.splitlines(keepends)
 
     def startswith(self, prefix, start=0, end=_sys.maxsize):
-        if isinstance(prefix, UserString):
-            prefix = prefix.data
         return self.data.startswith(prefix, start, end)
 
     def strip(self, chars=None):

@@ -7,6 +7,7 @@ import re
 from test import support
 from test.support import os_helper
 from test.support import warnings_helper
+from test.support.testcase import ExtraAssertions
 import time
 import unittest
 import urllib.request
@@ -221,19 +222,11 @@ class HeaderTests(unittest.TestCase):
         expected = [[("expires", "01 Jan 2040 22:23:32 GMT"), ("version", "0")]]
         self.assertEqual(parse_ns_headers([hdr]), expected)
 
-    @support.subTests('src,expected', [
-            ([[("foo", None), ("bar", "baz")]], "foo; bar=baz"),
-            (([]), ""),
-            (([[]]), ""),
-            (([[("a", "_")]]), "a=_"),
-            (([[("a", ";")]]), 'a=";"'),
-            ([[("n", None), ("foo", "foo;_")], [("bar", "foo_bar")]],
-             'n; foo="foo;_", bar=foo_bar'),
-            ([[("n", "m"), ("foo", None)], [("bar", "foo_bar")]],
-             'n=m; foo, bar=foo_bar'),
-        ])
-    def test_join_header_words(self, src, expected):
-        self.assertEqual(join_header_words(src), expected)
+    def test_join_header_words(self):
+        joined = join_header_words([[("foo", None), ("bar", "baz")]])
+        self.assertEqual(joined, "foo; bar=baz")
+
+        self.assertEqual(join_header_words([[]]), "")
 
     @support.subTests('arg,expect', [
             ("foo", [[("foo", None)]]),
@@ -742,55 +735,6 @@ class CookieTests(unittest.TestCase):
         self.assertEqual(cookie.expires, 1444312383)
 
         # XXX RFC 2965 expiry rules (some apply to V0 too)
-
-    def test_expired_cookie_from_other_domain_is_ignored(self):
-        c = CookieJar()
-        interact_netscape(c, "http://www.victim.test/",
-                          'session=secret; Domain=.victim.test; Path=/')
-
-        for domain in ('.victim.test', 'victim.test'):
-            for expires in (
-                'Max-Age=0',
-                'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
-            ):
-                hdr = f'session=x; Domain={domain}; Path=/; {expires}'
-                with self.subTest(hdr=hdr):
-                    interact_netscape(c, "http://www.attacker.test/", hdr)
-                    self.assertEqual(len(c), 1)
-                    self.assertIn(
-                        'session=secret',
-                        interact_netscape(c, "http://www.victim.test/"))
-
-        interact_netscape(c, "http://www.victim.test/",
-                          'session=x; Domain=.victim.test; Path=/; Max-Age=0')
-        self.assertEqual(len(c), 0)
-
-    def test_expired_cookie_from_other_path_is_ignored(self):
-        pol = DefaultCookiePolicy(strict_ns_set_path=True)
-        c = CookieJar(pol)
-        interact_netscape(c, "http://www.acme.com/a/",
-                          'token=secret; Path=/a')
-        self.assertEqual(len(c), 1)
-        interact_netscape(c, "http://www.acme.com/b/",
-                          'token=x; Path=/a; Max-Age=0')
-        self.assertEqual(len(c), 1)
-        interact_netscape(c, "http://www.acme.com/a/",
-                          'token=x; Path=/a; Max-Age=0')
-        self.assertEqual(len(c), 0)
-
-    def test_expired_cookie_for_blocked_domain_is_ignored(self):
-        c = CookieJar()
-        interact_netscape(c, "http://www.victim.test/",
-                          'session=secret; Domain=.victim.test; Path=/')
-        self.assertEqual(len(c), 1)
-        c.set_policy(DefaultCookiePolicy(blocked_domains=[".victim.test"]))
-        interact_netscape(c, "http://www.victim.test/",
-                          'session=x; Domain=.victim.test; Path=/; Max-Age=0')
-        self.assertEqual(len(c), 1)
-        c.set_policy(DefaultCookiePolicy())
-        interact_netscape(c, "http://www.victim.test/",
-                          'session=x; Domain=.victim.test; Path=/; Max-Age=0')
-        self.assertEqual(len(c), 0)
 
     def test_default_path(self):
         # RFC 2965
@@ -1536,7 +1480,7 @@ class CookieTests(unittest.TestCase):
         self.assertIsNone(cookie.expires)
 
 
-class LWPCookieTests(unittest.TestCase):
+class LWPCookieTests(unittest.TestCase, ExtraAssertions):
     # Tests taken from libwww-perl, with a few modifications and additions.
 
     def test_netscape_example_1(self):
@@ -2124,35 +2068,6 @@ class LWPCookieTests(unittest.TestCase):
         self.assertEqual(counter["session_after"], 0)
             # we didn't have session cookies in the first place
         self.assertNotEqual(counter["session_before"], 0)
-
-    def test_save_session_cookies(self):
-        # Session cookies are saved with 0 in the expiration time field,
-        # as curl and Wget do (gh-61366).
-        filename = os_helper.TESTFN
-        self.addCleanup(os_helper.unlink, filename)
-        expires = int(time.time() + 3600)
-        c = MozillaCookieJar()
-        c.set_cookie(Cookie(0, "perm", "bar", None, False,
-                            "www.foo.com", True, False, "/", False, False,
-                            expires, False, None, None, {}))
-        c.set_cookie(Cookie(0, "session", "bar", None, False,
-                            "www.foo.com", True, False, "/", False, False,
-                            None, True, None, None, {}))
-        c.save(filename, ignore_discard=True)
-
-        saved = {}
-        with open(filename) as f:
-            for line in f:
-                if line.strip() and not line.startswith("#"):
-                    fields = line.split("\t")
-                    saved[fields[5]] = fields[4]
-        self.assertEqual(saved, {"perm": str(expires), "session": "0"})
-
-        # The saved file can be read back.
-        c = MozillaCookieJar()
-        c.revert(filename, ignore_discard=True)
-        self.assertEqual(sorted(cookie.name for cookie in c),
-                         ["perm", "session"])
 
     def test_load_session_cookies(self):
         # curl and Wget write 0 in the expires field for session cookies,

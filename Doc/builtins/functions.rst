@@ -1,7 +1,7 @@
 .. XXX document all delegations to __special__ methods
 .. _built-in-funcs:
 
-Built-in functions
+Built-in Functions
 ==================
 
 The Python interpreter has a number of functions and types built into it that
@@ -19,25 +19,24 @@ are always available.  They are listed here in alphabetical order.
 | |  :func:`ascii`        | |  :func:`filter`     | |  :func:`map`        | |  **S**                |
 | |                       | |  :func:`float`      | |  :func:`max`        | |  |func-set|_          |
 | |  **B**                | |  :func:`format`     | |  |func-memoryview|_ | |  :func:`setattr`      |
-| |  :func:`bin`          | |  |func-frozendict|_ | |  :func:`min`        | |  :func:`sentinel`     |
-| |  :func:`bool`         | |  |func-frozenset|_  | |                     | |  :func:`slice`        |
-| |  :func:`breakpoint`   | |                     | |  **N**              | |  :func:`sorted`       |
-| |  |func-bytearray|_    | |  **G**              | |  :func:`next`       | |  :func:`staticmethod` |
-| |  |func-bytes|_        | |  :func:`getattr`    | |                     | |  |func-str|_          |
-| |                       | |  :func:`globals`    | |  **O**              | |  :func:`sum`          |
-| |  **C**                | |                     | |  :func:`object`     | |  :func:`super`        |
-| |  :func:`callable`     | |  **H**              | |  :func:`oct`        | |                       |
-| |  :func:`chr`          | |  :func:`hasattr`    | |  :func:`open`       | |  **T**                |
-| |  :func:`classmethod`  | |  :func:`hash`       | |  :func:`ord`        | |  |func-tuple|_        |
-| |  :func:`compile`      | |  :func:`help`       | |                     | |  :func:`type`         |
-| |  :func:`complex`      | |  :func:`hex`        | |  **P**              | |                       |
-| |                       | |                     | |  :func:`pow`        | |  **V**                |
-| |  **D**                | |  **I**              | |  :func:`print`      | |  :func:`vars`         |
-| |  :func:`delattr`      | |  :func:`id`         | |  :func:`property`   | |                       |
-| |  |func-dict|_         | |  :func:`input`      | |                     | |  **Z**                |
-| |  :func:`dir`          | |  :func:`int`        | |                     | |  :func:`zip`          |
-| |  :func:`divmod`       | |  :func:`isinstance` | |                     | |                       |
-| |                       | |  :func:`issubclass` | |                     | |  **_**                |
+| |  :func:`bin`          | |  |func-frozenset|_  | |  :func:`min`        | |  :func:`slice`        |
+| |  :func:`bool`         | |                     | |                     | |  :func:`sorted`       |
+| |  :func:`breakpoint`   | |  **G**              | |  **N**              | |  :func:`staticmethod` |
+| |  |func-bytearray|_    | |  :func:`getattr`    | |  :func:`next`       | |  |func-str|_          |
+| |  |func-bytes|_        | |  :func:`globals`    | |                     | |  :func:`sum`          |
+| |                       | |                     | |  **O**              | |  :func:`super`        |
+| |  **C**                | |  **H**              | |  :func:`object`     | |                       |
+| |  :func:`callable`     | |  :func:`hasattr`    | |  :func:`oct`        | |  **T**                |
+| |  :func:`chr`          | |  :func:`hash`       | |  :func:`open`       | |  |func-tuple|_        |
+| |  :func:`classmethod`  | |  :func:`help`       | |  :func:`ord`        | |  :func:`type`         |
+| |  :func:`compile`      | |  :func:`hex`        | |                     | |                       |
+| |  :func:`complex`      | |                     | |  **P**              | |  **V**                |
+| |                       | |  **I**              | |  :func:`pow`        | |  :func:`vars`         |
+| |  **D**                | |  :func:`id`         | |  :func:`print`      | |                       |
+| |  :func:`delattr`      | |  :func:`input`      | |  :func:`property`   | |  **Z**                |
+| |  |func-dict|_         | |  :func:`int`        | |                     | |  :func:`zip`          |
+| |  :func:`dir`          | |  :func:`isinstance` | |                     | |                       |
+| |  :func:`divmod`       | |  :func:`issubclass` | |                     | |  **_**                |
 | |                       | |  :func:`iter`       | |                     | |  :func:`__import__`   |
 +-------------------------+-----------------------+-----------------------+-------------------------+
 
@@ -45,7 +44,6 @@ are always available.  They are listed here in alphabetical order.
    used, with replacement texts to make the output in the table consistent
 
 .. |func-dict| replace:: ``dict()``
-.. |func-frozendict| replace:: ``frozendict()``
 .. |func-frozenset| replace:: ``frozenset()``
 .. |func-memoryview| replace:: ``memoryview()``
 .. |func-set| replace:: ``set()``
@@ -65,53 +63,13 @@ are always available.  They are listed here in alphabetical order.
 
 
 .. function:: aiter(async_iterable, /)
-              aiter(callable, /, stop_value, *, stop_exception=StopAsyncIteration)
-              aiter(callable, /, *, stop_exception)
 
-   Return an :term:`asynchronous iterator` object.
-   The first argument is interpreted very differently
-   depending on the presence of the other arguments.
-   Without other arguments,
-   the single argument must be an :term:`asynchronous iterable`,
-   and the result is equivalent to calling ``x.__aiter__()``.
+   Return an :term:`asynchronous iterator` for an :term:`asynchronous iterable`.
+   Equivalent to calling ``x.__aiter__()``.
 
-   If *stop_value* or *stop_exception* is given,
-   then the first argument must be a callable object.
-   The asynchronous iterator created in this case
-   calls *callable* with no arguments and awaits the result
-   for each call to its :meth:`~object.__anext__` method;
-   if the awaited value is equal to *stop_value*,
-   or if the call raises an exception matching *stop_exception*,
-   :exc:`StopAsyncIteration` will be raised,
-   otherwise the value will be returned.
-   The callable is only called when the result of :meth:`~object.__anext__`
-   is awaited.
-
-   *stop_exception* is an exception class or a tuple of exception classes.
-   If *stop_value* is not specified,
-   the iteration stops only when the callable raises an exception.
-   If the callable raises :exc:`StopAsyncIteration`
-   which does not match *stop_exception*,
-   it is replaced with a :exc:`RuntimeError`,
-   as for asynchronous generators (see :pep:`525`).
-
-   For example, reading fixed-size chunks from an asynchronous stream
-   until the end of file is reached::
-
-      from functools import partial
-      async for chunk in aiter(partial(reader.read, 1024), b''):
-          process_chunk(chunk)
-
-   Or consuming an :class:`asyncio.Queue` until it is shut down::
-
-      from asyncio import QueueShutDown
-      async for item in aiter(queue.get, stop_exception=QueueShutDown):
-          process_item(item)
+   Note: Unlike :func:`iter`, :func:`aiter` has no 2-argument variant.
 
    .. versionadded:: 3.10
-
-   .. versionchanged:: 3.16
-      Added the *stop_value* and *stop_exception* parameters.
 
 .. function:: all(iterable, /)
 
@@ -129,7 +87,7 @@ are always available.  They are listed here in alphabetical order.
                        anext(async_iterator, default, /)
 
    When awaited, return the next item from the given :term:`asynchronous
-   iterator`, or *default* if given and the iterator is :term:`exhausted`.
+   iterator`, or *default* if given and the iterator is exhausted.
 
    This is the async variant of the :func:`next` builtin, and behaves
    similarly.
@@ -336,9 +294,7 @@ are always available.  They are listed here in alphabetical order.
       :func:`property`.
 
 
-.. function:: compile(source, filename, mode, flags=0, \
-                      dont_inherit=False, optimize=-1, \
-                      *, module=None)
+.. function:: compile(source, filename, mode, flags=0, dont_inherit=False, optimize=-1)
 
    Compile the *source* into a code or AST object.  Code objects can be executed
    by :func:`exec` or :func:`eval`.  *source* can either be a normal string, a
@@ -354,10 +310,6 @@ are always available.  They are listed here in alphabetical order.
    consists of a single expression, or ``'single'`` if it consists of a single
    interactive statement (in the latter case, expression statements that
    evaluate to something other than ``None`` will be printed).
-   It can also be ``'func_type'`` if *source* consists of a
-   function type signature, for example ``(int) -> str``; see
-   :func:`ast.parse` for more information. This mode requires passing
-   :data:`ast.PyCF_ONLY_AST` in *flags*.
 
    The optional arguments *flags* and *dont_inherit* control which
    :ref:`compiler options <ast-compiler-flags>` should be activated
@@ -383,10 +335,6 @@ are always available.  They are listed here in alphabetical order.
    given by :option:`-O` options.  Explicit levels are ``0`` (no optimization;
    ``__debug__`` is true), ``1`` (asserts are removed, ``__debug__`` is false)
    or ``2`` (docstrings are removed too).
-
-   The optional argument *module* specifies the module name.
-   It is needed to unambiguous :ref:`filter <warning-filter>` syntax warnings
-   by module name.
 
    This function raises :exc:`SyntaxError` if the compiled source is invalid,
    including a *source* containing a null character or that cannot be decoded;
@@ -431,15 +379,9 @@ are always available.  They are listed here in alphabetical order.
       ``ast.PyCF_ALLOW_TOP_LEVEL_AWAIT`` can now be passed in flags to enable
       support for top-level ``await``, ``async for``, and ``async with``.
 
-   .. versionchanged:: 3.8
-      Added support for ``mode='func_type'``.
-
    .. versionchanged:: 3.12
       :exc:`SyntaxError` is raised instead of :exc:`ValueError` when null bytes
       are encountered in *source*.
-
-   .. versionchanged:: 3.15
-      Added the *module* parameter.
 
 
 .. class:: complex(number=0, /)
@@ -508,8 +450,6 @@ are always available.  They are listed here in alphabetical order.
    If one of arguments is a real number, only its real component is used in
    the above expressions.
 
-   See also :meth:`complex.from_number` which only accepts a single numeric argument.
-
    If all arguments are omitted, returns ``0j``.
 
    The complex type is described in :ref:`typesnumeric`.
@@ -520,10 +460,6 @@ are always available.  They are listed here in alphabetical order.
    .. versionchanged:: 3.8
       Falls back to :meth:`~object.__index__` if :meth:`~object.__complex__` and
       :meth:`~object.__float__` are not defined.
-
-   .. deprecated:: 3.14
-      Passing a complex number as the *real* or *imag* argument is now
-      deprecated; it should only be passed as a single positional argument.
 
 
 .. function:: delattr(object, name, /)
@@ -544,8 +480,8 @@ are always available.  They are listed here in alphabetical order.
    Create a new dictionary.  The :class:`dict` object is the dictionary class.
    See also :ref:`typesmapping` for documentation about this class.
 
-   For other containers see the built-in :class:`frozendict`, :class:`list`,
-   :class:`set`, and :class:`tuple` classes, as well as the :mod:`collections` module.
+   For other containers see the built-in :class:`list`, :class:`set`, and
+   :class:`tuple` classes, as well as the :mod:`collections` module.
 
 
 .. function:: dir()
@@ -587,7 +523,7 @@ are always available.  They are listed here in alphabetical order.
       >>> dir()   # show the names in the module namespace  # doctest: +SKIP
       ['__builtins__', '__name__', 'struct']
       >>> dir(struct)   # show the names in the struct module # doctest: +SKIP
-      ['Struct', '__all__', '__builtins__', '__doc__', '__file__',
+      ['Struct', '__all__', '__builtins__', '__cached__', '__doc__', '__file__',
        '__initializing__', '__loader__', '__name__', '__package__',
        '_clearcache', 'calcsize', 'error', 'pack', 'pack_into',
        'unpack', 'unpack_from']
@@ -653,7 +589,7 @@ are always available.  They are listed here in alphabetical order.
 
    :param globals:
       The global namespace (default: ``None``).
-   :type globals: :class:`dict` | :class:`frozendict` | ``None``
+   :type globals: :class:`dict` | ``None``
 
    :param locals:
       The local namespace (default: ``None``).
@@ -724,10 +660,6 @@ are always available.  They are listed here in alphabetical order.
       The semantics of the default *locals* namespace have been adjusted as
       described for the :func:`locals` builtin.
 
-   .. versionchanged:: 3.15
-
-      *globals* can now be a :class:`frozendict`.
-
 .. index:: pair: built-in function; exec
 
 .. function:: exec(source, /, globals=None, locals=None, *, closure=None)
@@ -740,7 +672,7 @@ are always available.  They are listed here in alphabetical order.
    This function supports dynamic execution of Python code. *source* must be
    either a string or a code object.  If it is a string, the string is parsed as
    a suite of Python statements which is then executed (unless a syntax error
-   occurs). If it is a code object, it is simply executed.  In all cases,
+   occurs). [#]_ If it is a code object, it is simply executed.  In all cases,
    the code that's executed is expected to be valid as file input (see the
    section :ref:`file-input` in the Reference Manual). Be aware that the
    :keyword:`nonlocal`, :keyword:`yield`,  and :keyword:`return`
@@ -772,7 +704,7 @@ are always available.  They are listed here in alphabetical order.
    still access all builtins.
 
    The *closure* argument specifies a closure--a tuple of cellvars.
-   It's only valid when *source* is a code object containing
+   It's only valid when the *object* is a code object containing
    :term:`free (closure) variables <closure variable>`.
    The length of the tuple must exactly match the length of the code object's
    :attr:`~codeobject.co_freevars` attribute.
@@ -805,10 +737,6 @@ are always available.  They are listed here in alphabetical order.
 
       The semantics of the default *locals* namespace have been adjusted as
       described for the :func:`locals` builtin.
-
-   .. versionchanged:: 3.15
-
-      *globals* can now be a :class:`frozendict`.
 
 
 .. function:: filter(function, iterable, /)
@@ -885,8 +813,6 @@ are always available.  They are listed here in alphabetical order.
    ``x.__float__()``.  If :meth:`~object.__float__` is not defined then it falls back
    to :meth:`~object.__index__`.
 
-   See also :meth:`float.from_number` which only accepts a numeric argument.
-
    If no argument is given, ``0.0`` is returned.
 
    The float type is described in :ref:`typesnumeric`.
@@ -925,21 +851,6 @@ are always available.  They are listed here in alphabetical order.
    .. versionchanged:: 3.4
       ``object().__format__(format_spec)`` raises :exc:`TypeError`
       if *format_spec* is not an empty string.
-
-
-.. _func-frozendict:
-.. class:: frozendict(**kwargs)
-           frozendict(mapping, /, **kwargs)
-           frozendict(iterable, /, **kwargs)
-   :noindex:
-
-   Create a new frozen dictionary.  The :class:`frozendict` object is a built-in class.
-   See also :ref:`typesmapping` for documentation about this class.
-
-   For other containers see the built-in :class:`dict`, :class:`list`, :class:`set`,
-   and :class:`tuple` classes, as well as the :mod:`collections` module.
-
-   .. versionadded:: 3.15
 
 
 .. _func-frozenset:
@@ -1118,8 +1029,9 @@ are always available.  They are listed here in alphabetical order.
       115
 
    If the argument defines :meth:`~object.__int__`,
-   ``int(x)`` returns ``x.__int__()``.  If the argument defines
-   :meth:`~object.__index__`, it returns ``x.__index__()``.
+   ``int(x)`` returns ``x.__int__()``.  If the argument defines :meth:`~object.__index__`,
+   it returns ``x.__index__()``.  If the argument defines :meth:`~object.__trunc__`,
+   it returns ``x.__trunc__()``.
    For floating-point numbers, this truncates towards zero.
 
    If the argument is not a number or if *base* is given, then it must be a string,
@@ -1158,6 +1070,9 @@ are always available.  They are listed here in alphabetical order.
       Falls back to :meth:`~object.__index__` if :meth:`~object.__int__` is not defined.
 
    .. versionchanged:: 3.11
+      The delegation to :meth:`~object.__trunc__` is deprecated.
+
+   .. versionchanged:: 3.11
       :class:`int` string inputs and string representations can be limited to
       help avoid denial of service attacks. A :exc:`ValueError` is raised when
       the limit is exceeded while converting a string to an :class:`int` or
@@ -1165,8 +1080,6 @@ are always available.  They are listed here in alphabetical order.
       See the :ref:`integer string conversion length limitation
       <int_max_str_digits>` documentation.
 
-   .. versionchanged:: 3.14
-      :func:`int` no longer delegates to the :meth:`~object.__trunc__` method.
 
 .. function:: isinstance(object, classinfo, /)
 
@@ -1181,22 +1094,17 @@ are always available.  They are listed here in alphabetical order.
    a :exc:`TypeError` exception is raised. :exc:`TypeError` may not be
    raised for an invalid type if an earlier check succeeds.
 
-   If *object* has a ``__class__`` attribute that differs from
-   :func:`type(object) <type>` (for example a proxy, or a :mod:`unittest.mock`
-   object created with a *spec*), ``True`` is also returned when that class
-   is a subclass of *classinfo*.
-
    .. versionchanged:: 3.10
       *classinfo* can be a :ref:`types-union`.
 
 
-.. function:: issubclass(cls, classinfo, /)
+.. function:: issubclass(class, classinfo, /)
 
-   Return ``True`` if *cls* is a subclass (direct, indirect, or :term:`virtual
+   Return ``True`` if *class* is a subclass (direct, indirect, or :term:`virtual
    <abstract base class>`) of *classinfo*.  A
    class is considered a subclass of itself. *classinfo* may be a tuple of class
    objects (or recursively, other such tuples)
-   or a :ref:`types-union`, in which case return ``True`` if *cls* is a
+   or a :ref:`types-union`, in which case return ``True`` if *class* is a
    subclass of any entry in *classinfo*.  In any other case, a :exc:`TypeError`
    exception is raised.
 
@@ -1205,33 +1113,21 @@ are always available.  They are listed here in alphabetical order.
 
 
 .. function:: iter(iterable, /)
-              iter(callable, /, stop_value, *, stop_exception=StopIteration)
-              iter(callable, /, *, stop_exception)
+              iter(callable, sentinel, /)
 
    Return an :term:`iterator` object.  The first argument is interpreted very
-   differently depending on the presence of the other arguments. Without other
-   arguments, the single argument must be a collection object which supports the
+   differently depending on the presence of the second argument. Without a
+   second argument, the single argument must be a collection object which supports the
    :term:`iterable` protocol (the :meth:`~object.__iter__` method),
    or it must support
    the sequence protocol (the :meth:`~object.__getitem__` method with integer arguments
    starting at ``0``).  If it does not support either of those protocols,
-   :exc:`TypeError` is raised.
-
-   If *stop_value* or *stop_exception* is given,
+   :exc:`TypeError` is raised. If the second argument, *sentinel*, is given,
    then the first argument must be a callable object.  The iterator created in this case
    will call *callable* with no arguments for each call to its
    :meth:`~iterator.__next__` method; if the value returned is equal to
-   *stop_value*, or if the call raises an exception matching *stop_exception*,
-   :exc:`StopIteration` will be raised, otherwise the value will
+   *sentinel*, :exc:`StopIteration` will be raised, otherwise the value will
    be returned.
-
-   *stop_exception* is an exception class or a tuple of exception classes.
-   If *stop_value* is not specified,
-   the iteration stops only when the callable raises an exception.
-   If the callable raises :exc:`StopIteration`
-   which does not match *stop_exception*,
-   it is replaced with a :exc:`RuntimeError`,
-   as for generators (see :pep:`479`).
 
    See also :ref:`typeiter`.
 
@@ -1243,19 +1139,6 @@ are always available.  They are listed here in alphabetical order.
       with open('mydata.db', 'rb') as f:
           for block in iter(partial(f.read, 64), b''):
               process_block(block)
-
-   *stop_exception* is useful for callables
-   which report :term:`exhaustion <exhausted>` by raising an exception
-   instead of returning a special value.
-   For example, draining a queue::
-
-      import queue
-      for item in iter(input_queue.get_nowait, stop_exception=queue.Empty):
-          process_item(item)
-
-   .. versionchanged:: 3.16
-      Added the *stop_exception* parameter
-      and allowed passing *stop_value* by keyword.
 
 
 .. function:: len(object, /)
@@ -1331,19 +1214,14 @@ are always available.  They are listed here in alphabetical order.
       unchanged from previous versions.
 
 
-.. function:: map(function, iterable, /, *iterables, strict=False)
+.. function:: map(function, iterable, *iterables)
 
    Return an iterator that applies *function* to every item of *iterable*,
    yielding the results.  If additional *iterables* arguments are passed,
    *function* must take that many arguments and is applied to the items from all
    iterables in parallel.  With multiple iterables, the iterator stops when the
-   shortest iterable is :term:`exhausted`.  If *strict* is ``True`` and one of the
-   iterables is exhausted before the others, a :exc:`ValueError` is raised. For
-   cases where the function inputs are already arranged into argument tuples,
-   see :func:`itertools.starmap`.
-
-   .. versionchanged:: 3.14
-      Added the *strict* parameter.
+   shortest iterable is exhausted.  For cases where the function inputs are
+   already arranged into argument tuples, see :func:`itertools.starmap`\.
 
 
 .. function:: max(iterable, /, *, key=None)
@@ -1419,7 +1297,7 @@ are always available.  They are listed here in alphabetical order.
 
    Retrieve the next item from the :term:`iterator` by calling its
    :meth:`~iterator.__next__` method.  If *default* is given, it is returned
-   if the iterator is :term:`exhausted`, otherwise :exc:`StopIteration` is raised.
+   if the iterator is exhausted, otherwise :exc:`StopIteration` is raised.
 
 
 .. class:: object()
@@ -1481,8 +1359,7 @@ are always available.  They are listed here in alphabetical order.
    already exists), ``'x'`` for exclusive creation, and ``'a'`` for appending
    (which on *some* Unix systems, means that *all* writes append to the end of
    the file regardless of the current seek position).  In text mode, if
-   *encoding* is not specified, UTF-8 is used by default; if
-   :ref:`Python UTF-8 Mode <utf8-mode>` is disabled,
+   *encoding* is not specified the encoding used is platform-dependent:
    :func:`locale.getencoding` is called to get the current locale encoding.
    (For reading and writing raw bytes use binary mode and leave
    *encoding* unspecified.)  The available modes are:
@@ -1513,7 +1390,7 @@ are always available.  They are listed here in alphabetical order.
    argument) return contents as :class:`bytes` objects without any decoding.  In
    text mode (the default, or when ``'t'`` is included in the *mode* argument),
    the contents of the file are returned as :class:`str`, the bytes having been
-   first decoded using the default encoding or using the specified
+   first decoded using a platform-dependent encoding or using the specified
    *encoding* if given.
 
    .. note::
@@ -1532,29 +1409,55 @@ are always available.  They are listed here in alphabetical order.
    :func:`io.TextIOWrapper.reconfigure`. When no *buffering* argument is
    given, the default buffering policy works as follows:
 
-   * Binary files are buffered in fixed-size chunks; the size of the buffer
-     is ``max(min(blocksize, 8 MiB), DEFAULT_BUFFER_SIZE)``
-     when the device block size is available.
-     On most systems, the buffer will typically be 128 kilobytes long.
+   * Binary files are buffered in fixed-size chunks; the size of the buffer is
+     chosen using a heuristic trying to determine the underlying device's "block
+     size" and falling back on :const:`io.DEFAULT_BUFFER_SIZE`.  On many systems,
+     the buffer will typically be 4096 or 8192 bytes long.
 
    * "Interactive" text files (files for which :meth:`~io.IOBase.isatty`
      returns ``True``) use line buffering.  Other text files use the policy
      described above for binary files.
 
    *encoding* is the name of the encoding used to decode or encode the file.
-   This should only be used in text mode.  The default encoding is UTF-8;
-   if :ref:`Python UTF-8 Mode <utf8-mode>` is disabled, the default is
-   platform-dependent (whatever :func:`locale.getencoding` returns).
-   Any :term:`text encoding` supported by Python can be used, and
-   ``encoding="locale"`` specifies the current locale encoding explicitly.
+   This should only be used in text mode.  The default encoding is platform
+   dependent (whatever :func:`locale.getencoding` returns), but any
+   :term:`text encoding` supported by Python can be used.
    See the :mod:`codecs` module for the list of supported encodings.
 
    *errors* is an optional string that specifies how encoding and decoding
    errors are to be handled—this cannot be used in binary mode.
-   A variety of standard error handlers are available,
-   though any error handling name that has been registered with
+   A variety of standard error handlers are available
+   (listed under :ref:`error-handlers`), though any
+   error handling name that has been registered with
    :func:`codecs.register_error` is also valid.  The standard names
-   can be found in :ref:`error-handlers`.
+   include:
+
+   * ``'strict'`` to raise a :exc:`ValueError` exception if there is
+     an encoding error.  The default value of ``None`` has the same
+     effect.
+
+   * ``'ignore'`` ignores errors.  Note that ignoring encoding errors
+     can lead to data loss.
+
+   * ``'replace'`` causes a replacement marker (such as ``'?'``) to be inserted
+     where there is malformed data.
+
+   * ``'surrogateescape'`` will represent any incorrect bytes as low
+     surrogate code units ranging from U+DC80 to U+DCFF.
+     These surrogate code units will then be turned back into
+     the same bytes when the ``surrogateescape`` error handler is used
+     when writing data.  This is useful for processing files in an
+     unknown encoding.
+
+   * ``'xmlcharrefreplace'`` is only supported when writing to a file.
+     Characters not supported by the encoding are replaced with the
+     appropriate XML character reference :samp:`&#{nnn};`.
+
+   * ``'backslashreplace'`` replaces malformed data by Python's backslashed
+     escape sequences.
+
+   * ``'namereplace'`` (also only supported when writing)
+     replaces unsupported characters with ``\N{...}`` escape sequences.
 
    .. index::
       single: universal newlines; open() built-in function
@@ -1662,10 +1565,6 @@ are always available.  They are listed here in alphabetical order.
 
    .. versionchanged:: 3.11
       The ``'U'`` mode has been removed.
-
-   .. versionchanged:: 3.15
-      UTF-8 is now the default encoding, instead of the
-      platform-dependent locale encoding (:pep:`686`).
 
 .. function:: ord(character, /)
 
@@ -1858,6 +1757,8 @@ are always available.  They are listed here in alphabetical order.
    including the name and address of the object.  A class can control what this
    function returns for its instances
    by defining a :meth:`~object.__repr__` method.
+   If :func:`sys.displayhook` is not accessible, this function will raise
+   :exc:`RuntimeError`.
 
    This class has a custom representation that can be evaluated::
 
@@ -1867,7 +1768,7 @@ are always available.  They are listed here in alphabetical order.
             self.age = age
 
          def __repr__(self):
-            return f"Person({self.name!r}, {self.age!r})"
+            return f"Person('{self.name}', {self.age})"
 
 
 .. function:: reversed(object, /)
@@ -1940,69 +1841,6 @@ are always available.  They are listed here in alphabetical order.
       :func:`setattr`.
 
 
-.. class:: sentinel(name, /, *, repr=None)
-
-   Return a new unique sentinel object.  *name* must be a :class:`str`, and is
-   used by default as the returned object's representation::
-
-      >>> MISSING = sentinel("MISSING")
-      >>> MISSING
-      MISSING
-
-   The optional *repr* argument can be used to specify a different representation::
-
-      >>> MISSING = sentinel("MISSING", repr="<MISSING>")
-      >>> MISSING
-      <MISSING>
-
-   Sentinel objects are true and compare equal only to themselves.  They are
-   intended to be compared with the :keyword:`is` operator.
-
-   ``sentinel`` does not support subclassing.
-
-   Shallow and deep copies of a sentinel object return the object itself.
-
-   Sentinels are conventionally assigned to a variable with a matching name.
-   Sentinels defined in this way can be used in :term:`type hints <type hint>`::
-
-      MISSING = sentinel("MISSING")
-
-      def next_value(default: int | MISSING = MISSING):
-          ...
-
-   Sentinel objects support the :ref:`| <bitwise>` operator for use in type expressions.
-
-   :mod:`Pickling <pickle>` is supported for sentinel objects that are
-   placed in the global scope of a module under a name matching the sentinel's
-   name, and for sentinels placed in class scopes with a name matching the
-   :term:`qualified name` of the sentinel. Other sentinels, such as those
-   defined in a function scope, are not picklable. The identity of the sentinel is preserved
-   after pickling::
-
-      import pickle
-
-      PICKLABLE = sentinel("PICKLABLE")
-
-      assert pickle.loads(pickle.dumps(PICKLABLE)) is PICKLABLE
-
-      class Cls:
-          PICKLABLE = sentinel("Cls.PICKLABLE")
-
-      assert pickle.loads(pickle.dumps(Cls.PICKLABLE)) is Cls.PICKLABLE
-
-   Sentinel objects have the following attributes:
-
-   .. attribute:: __name__
-
-      The sentinel's name.
-
-   .. attribute:: __module__
-
-      The name of the module where the sentinel was created. This attribute is writable.
-
-   .. versionadded:: 3.15
-
-
 .. class:: slice(stop, /)
            slice(start, stop, step=None, /)
 
@@ -2010,19 +1848,19 @@ are always available.  They are listed here in alphabetical order.
    ``range(start, stop, step)``.  The *start* and *step* arguments default to
    ``None``.
 
-   Slice objects are also generated when :ref:`slicing syntax <slicings>`
-   is used.  For example: ``a[start:stop:step]`` or ``a[start:stop, i]``.
-
-   See :func:`itertools.islice` for an alternate version that returns an
-   :term:`iterator`.
+   Slice objects have read-only data attributes :attr:`!start`,
+   :attr:`!stop`, and :attr:`!step` which merely return the argument
+   values (or their default).  They have no other explicit functionality;
+   however, they are used by NumPy and other third-party packages.
 
    .. attribute:: slice.start
-                  slice.stop
-                  slice.step
+   .. attribute:: slice.stop
+   .. attribute:: slice.step
 
-      These read-only attributes are set to the argument values
-      (or their default).  They have no other explicit functionality;
-      however, they are used by NumPy and other third-party packages.
+   Slice objects are also generated when extended indexing syntax is used.  For
+   example: ``a[start:stop:step]`` or ``a[start:stop, i]``.  See
+   :func:`itertools.islice` for an alternate version that returns an
+   :term:`iterator`.
 
    .. versionchanged:: 3.12
       Slice objects are now :term:`hashable` (provided :attr:`~slice.start`,
@@ -2139,10 +1977,6 @@ are always available.  They are listed here in alphabetical order.
    .. versionchanged:: 3.12 Summation of floats switched to an algorithm
       that gives higher accuracy and better commutativity on most builds.
 
-   .. versionchanged:: 3.14
-      Added specialization for summation of complexes,
-      using same algorithm as for summation of floats.
-
 
 .. class:: super()
            super(type, object_or_type=None, /)
@@ -2171,10 +2005,10 @@ are always available.  They are listed here in alphabetical order.
 
    When called directly within an ordinary method of a class, both arguments may
    be omitted ("zero-argument :func:`!super`"). In this case, *type* will be the
-   enclosing class, and *object_or_type* will be the first argument of the
-   immediately enclosing function (typically ``self``). Zero-argument
+   enclosing class, and *obj* will be the first argument of the immediately
+   enclosing function (typically ``self``). (This means that zero-argument
    :func:`!super` will not work as expected within nested functions, including
-   generator expressions, which implicitly create nested functions.
+   generator expressions, which implicitly create nested functions.)
 
    There are two typical use cases for *super*.  In a class hierarchy with
    single inheritance, *super* can be used to refer to parent classes without
@@ -2220,10 +2054,6 @@ are always available.  They are listed here in alphabetical order.
    For practical suggestions on how to design cooperative classes using
    :func:`super`, see `guide to using super()
    <https://rhettinger.wordpress.com/2011/05/26/super-considered-super/>`_.
-
-   .. versionchanged:: 3.14
-     :class:`super` objects are now :mod:`pickleable <pickle>` and
-      :mod:`copyable <copy>`.
 
 
 .. _func-tuple:
@@ -2282,10 +2112,6 @@ are always available.  They are listed here in alphabetical order.
       Subclasses of :class:`!type` which don't override ``type.__new__`` may no
       longer use the one-argument form to get the type of an object.
 
-   .. versionchanged:: 3.15
-
-      *dict* can now be a :class:`frozendict`.
-
 .. function:: vars()
               vars(object, /)
 
@@ -2339,7 +2165,7 @@ are always available.  They are listed here in alphabetical order.
    the code that prepared these iterables.  Python offers three different
    approaches to dealing with this issue:
 
-   * By default, :func:`zip` stops when the shortest iterable is :term:`exhausted`.
+   * By default, :func:`zip` stops when the shortest iterable is exhausted.
      It will ignore the remaining items in the longer iterables, cutting off
      the result to the length of the shortest iterable::
 
@@ -2354,7 +2180,7 @@ are always available.  They are listed here in alphabetical order.
         [('a', 1), ('b', 2), ('c', 3)]
 
      Unlike the default behavior, it raises a :exc:`ValueError` if one iterable
-     is :term:`exhausted` before the others:
+     is exhausted before the others:
 
         >>> for item in zip(range(3), ['fee', 'fi', 'fo', 'fum'], strict=True):  # doctest: +SKIP
         ...     print(item)
@@ -2433,9 +2259,10 @@ are always available.  They are listed here in alphabetical order.
    determine the package context of the :keyword:`import` statement.
 
    *level* specifies whether to use absolute or relative imports. ``0`` (the
-   default) means only perform absolute imports.  For relative imports,
-   ``1`` refers to the current package, ``2`` to its parent package, and so on
-   (see :pep:`328` for details).
+   default) means only perform absolute imports.  Positive values for
+   *level* indicate the number of parent directories to search relative to the
+   directory of the module calling :func:`__import__` (see :pep:`328` for the
+   details).
 
    When the *name* variable is of the form ``package.module``, normally, the
    top-level package (the name up till the first dot) is returned, *not* the
@@ -2475,3 +2302,9 @@ are always available.  They are listed here in alphabetical order.
    .. versionchanged:: 3.9
       When the command line options :option:`-E` or :option:`-I` are being used,
       the environment variable :envvar:`PYTHONCASEOK` is now ignored.
+
+.. rubric:: Footnotes
+
+.. [#] Note that the parser only accepts the Unix-style end of line convention.
+   If you are reading the code from a file, make sure to use newline conversion
+   mode to convert Windows or Mac-style newlines.

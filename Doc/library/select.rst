@@ -18,7 +18,7 @@ it was last read.
 .. note::
 
    The :mod:`selectors` module allows high-level and efficient I/O
-   multiplexing, built upon the :mod:`!select` module primitives. Users are
+   multiplexing, built upon the :mod:`select` module primitives. Users are
    encouraged to use the :mod:`selectors` module instead, unless they want
    precise control over the OS-level primitives used.
 
@@ -64,7 +64,7 @@ The module defines the following:
 
    *sizehint* informs epoll about the expected number of events to be
    registered.  It must be positive, or ``-1`` to use the default. It is only
-   used on older systems where :manpage:`epoll_create1(2)` is not available;
+   used on older systems where :c:func:`!epoll_create1` is not available;
    otherwise it has no effect (though its value is still checked).
 
    *flags* is deprecated and completely ignored.  However, when supplied, its
@@ -90,11 +90,6 @@ The module defines the following:
    .. deprecated:: 3.4
       The *flags* parameter.  ``select.EPOLL_CLOEXEC`` is used by default now.
       Use :func:`os.set_inheritable` to make the file descriptor inheritable.
-
-   .. versionchanged:: 3.15
-
-      When CPython is built, this function may be disabled using
-      :option:`--disable-epoll`.
 
    .. availability:: Linux >= 2.5.44.
 
@@ -144,8 +139,8 @@ The module defines the following:
 
    Empty iterables are allowed, but acceptance of three empty iterables is
    platform-dependent. (It is known to work on Unix but not on Windows.)  The
-   optional *timeout* argument specifies a time-out in seconds; it may be
-   a non-integer to specify fractions of seconds.
+   optional *timeout* argument specifies a time-out as a floating-point number
+   in seconds.
    When the *timeout* argument is omitted or ``None``, the function blocks until
    at least one file descriptor is ready.  A time-out value of zero specifies a
    poll and never blocks.
@@ -179,9 +174,6 @@ The module defines the following:
       a signal, except if the signal handler raises an exception (see
       :pep:`475` for the rationale), instead of raising
       :exc:`InterruptedError`.
-
-   .. versionchanged:: 3.15
-      Accepts any real number as *timeout*, not only integer or float.
 
 
 .. data:: PIPE_BUF
@@ -289,9 +281,6 @@ object.
       :pep:`475` for the rationale), instead of raising
       :exc:`InterruptedError`.
 
-   .. versionchanged:: 3.15
-      Accepts any real number as *timeout*, not only integer or float.
-
 
 .. _epoll-objects:
 
@@ -339,15 +328,9 @@ Edge and level trigger polling (epoll) objects
    +-------------------------+------------------------------------------------+
    | :const:`EPOLLMSG`       | Ignored.                                       |
    +-------------------------+------------------------------------------------+
-   | :const:`EPOLLWAKEUP`    | Prevents sleep during event waiting.           |
-   +-------------------------+------------------------------------------------+
 
    .. versionadded:: 3.6
       :const:`EPOLLEXCLUSIVE` was added.  It's only supported by Linux Kernel 4.5
-      or later.
-
-   .. versionadded:: 3.14
-      :const:`EPOLLWAKEUP` was added. It's only supported by Linux Kernel 3.5
       or later.
 
 .. method:: epoll.close()
@@ -390,18 +373,13 @@ Edge and level trigger polling (epoll) objects
 
 .. method:: epoll.poll(timeout=None, maxevents=-1)
 
-   Wait for events.
-   If *timeout* is given, it specifies the length of time in seconds
-   (may be non-integer) which the system will wait for events before returning.
+   Wait for events. timeout in seconds (float)
 
    .. versionchanged:: 3.5
       The function is now retried with a recomputed timeout when interrupted by
       a signal, except if the signal handler raises an exception (see
       :pep:`475` for the rationale), instead of raising
       :exc:`InterruptedError`.
-
-   .. versionchanged:: 3.15
-      Accepts any real number as *timeout*, not only integer or float.
 
 
 .. _poll-objects:
@@ -491,11 +469,6 @@ linearly scanned again. :c:func:`!select` is *O*\ (*highest file descriptor*), w
       :pep:`475` for the rationale), instead of raising
       :exc:`InterruptedError`.
 
-   .. versionchanged:: 3.15
-      Accepts any real number as *timeout*, not only integer or float.
-      If ``ppoll()`` function is available, *timeout* has a resolution
-      of ``1`` ns (``1e-6`` ms) instead of ``1`` ms.
-
 
 .. _kqueue-objects:
 
@@ -528,7 +501,7 @@ Kqueue objects
 
    - changelist must be an iterable of kevent objects or ``None``
    - max_events must be 0 or a positive integer
-   - timeout in seconds (non-integers are possible); the default is ``None``,
+   - timeout in seconds (floats possible); the default is ``None``,
      to wait forever
 
    .. versionchanged:: 3.5
@@ -536,9 +509,6 @@ Kqueue objects
       a signal, except if the signal handler raises an exception (see
       :pep:`475` for the rationale), instead of raising
       :exc:`InterruptedError`.
-
-   .. versionchanged:: 3.15
-      Accepts any real number as *timeout*, not only integer or float.
 
 
 .. _kevent-objects:
@@ -571,7 +541,7 @@ https://man.freebsd.org/cgi/man.cgi?query=kqueue&sektion=2
    | :const:`KQ_FILTER_AIO`    | AIO requests.                               |
    +---------------------------+---------------------------------------------+
    | :const:`KQ_FILTER_VNODE`  | Returns when one or more of the requested   |
-   |                           | events watched in *fflags* occurs.          |
+   |                           | events watched in *fflag* occurs.           |
    +---------------------------+---------------------------------------------+
    | :const:`KQ_FILTER_PROC`   | Watch for events on a process ID.           |
    +---------------------------+---------------------------------------------+

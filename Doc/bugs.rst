@@ -12,9 +12,6 @@ It can be sometimes faster to fix bugs yourself and contribute patches to
 Python as it streamlines the process and involves fewer people. Learn how to
 :ref:`contribute <contributing-to-python>`.
 
-
-.. _reporting-documentation-bugs:
-
 Documentation bugs
 ==================
 
@@ -46,8 +43,8 @@ tracker <https://github.com/python/python-docs-theme>`_.
    `Helping with Documentation <https://devguide.python.org/docquality/#helping-with-documentation>`_
       Comprehensive guide for individuals that are interested in contributing to Python documentation.
 
-   `Documentation Translations <https://devguide.python.org/documentation/translations/translating/#translation-coordinators>`_
-      A list of GitHub pages for documentation translation and their coordination teams.
+   `Documentation Translations <https://devguide.python.org/documentation/translating/>`_
+      A list of GitHub pages for documentation translation and their primary contacts.
 
 
 .. _using-the-tracker:

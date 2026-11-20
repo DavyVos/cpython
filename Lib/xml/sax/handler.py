@@ -9,6 +9,8 @@ of the interfaces.
 $Id$
 """
 
+version = '2.0beta'
+
 #============================================================================
 #
 # HANDLER INTERFACES
@@ -369,7 +371,7 @@ class LexicalHandler:
 
         name is the name of the document element type, public_id the
         public identifier of the DTD (or None if none were supplied)
-        and system_id the system identifier of the external subset (or
+        and system_id the system identfier of the external subset (or
         None if none were supplied)."""
 
     def endDTD(self):
@@ -383,12 +385,3 @@ class LexicalHandler:
 
     def endCDATA(self):
         """Reports the end of a CDATA marked section."""
-
-
-def __getattr__(name):
-    if name == "version":
-        from warnings import _deprecated
-
-        _deprecated("version", remove=(3, 20))
-        return "2.0beta"  # Do not change
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

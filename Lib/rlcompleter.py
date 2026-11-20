@@ -34,14 +34,11 @@ import builtins
 import inspect
 import keyword
 import re
+import types
 import __main__
 import warnings
-import types
 
 __all__ = ["Completer"]
-
-# Sentinel object to distinguish "missing" from "present but None"
-_MISSING = sentinel("MISSING")
 
 class Completer:
     def __init__(self, namespace = None):
@@ -192,19 +189,9 @@ class Completer:
                         # arbitrary code or raise exceptions.
                         matches.append(match)
                         continue
-
-                    if (isinstance(thisobject, types.ModuleType)
-                        and
-                        isinstance(thisobject.__dict__.get(word),
-                                   types.LazyImportType)
-                       ):
-                        value = thisobject.__dict__.get(word)
-                    else:
-                        value = getattr(thisobject, word, _MISSING)
-
-                    if value is not _MISSING:
+                    if (value := getattr(thisobject, word, None)) is not None:
                         matches.append(self._callable_postfix(value, match))
-                    elif word in getattr(type(thisobject), '__slots__', ()):
+                    else:
                         matches.append(match)
             if matches or not noprefix:
                 break

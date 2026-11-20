@@ -48,10 +48,10 @@ an event loop:
    running event loop.
 
    If there is no running event loop set, the function will return
-   the loop set by :func:`set_event_loop`, or raise a :exc:`RuntimeError`
-   if no loop has been set.
+   the result of the ``get_event_loop_policy().get_event_loop()`` call.
 
-   Because this function has rather complex behavior, using the
+   Because this function has rather complex behavior (especially
+   when custom event loop policies are in use), using the
    :func:`get_running_loop` function is preferred to :func:`get_event_loop`
    in coroutines and callbacks.
 
@@ -59,8 +59,9 @@ an event loop:
    instead of using these lower level functions to manually create and close an
    event loop.
 
-   .. versionchanged:: 3.14
-      Raises a :exc:`RuntimeError` if there is no current event loop.
+   .. deprecated:: 3.12
+      Deprecation warning is emitted if there is no current event loop.
+      In some future Python release this will become an error.
 
 .. function:: set_event_loop(loop)
 
@@ -69,6 +70,10 @@ an event loop:
 .. function:: new_event_loop()
 
    Create and return a new event loop object.
+
+Note that the behaviour of :func:`get_event_loop`, :func:`set_event_loop`,
+and :func:`new_event_loop` functions can be altered by
+:ref:`setting a custom event loop policy <asyncio-policies>`.
 
 
 .. rubric:: Contents
@@ -363,7 +368,7 @@ Creating futures and tasks
 
    .. versionadded:: 3.5.2
 
-.. method:: loop.create_task(coro, *, name=None, context=None, eager_start=None, **kwargs)
+.. method:: loop.create_task(coro, *, name=None, context=None, **kwargs)
 
    Schedule the execution of :ref:`coroutine <coroutine>` *coro*.
    Return a :class:`Task` object.
@@ -374,7 +379,8 @@ Creating futures and tasks
 
    The full function signature is largely the same as that of the
    :class:`Task` constructor (or factory) - all of the keyword arguments to
-   this function are passed through to that interface.
+   this function are passed through to that interface, except *name*,
+   or *context* if it is ``None``.
 
    If the *name* argument is provided and not ``None``, it is set as
    the name of the task using :meth:`Task.set_name`.
@@ -382,11 +388,6 @@ Creating futures and tasks
    An optional keyword-only *context* argument allows specifying a
    custom :class:`contextvars.Context` for the *coro* to run in.
    The current context copy is created when no *context* is provided.
-
-   An optional keyword-only *eager_start* argument allows specifying
-   if the task should execute eagerly during the call to create_task,
-   or be scheduled later. If *eager_start* is not passed the mode set
-   by :meth:`loop.set_task_factory` will be used.
 
    .. versionchanged:: 3.8
       Added the *name* parameter.
@@ -400,9 +401,6 @@ Creating futures and tasks
    .. versionchanged:: 3.13.4
       Rolled back the change that passes on *name* and *context* (if it is None),
       while still passing on other arbitrary keyword arguments (to avoid breaking backwards compatibility with 3.13.3).
-
-   .. versionchanged:: 3.14
-      All *kwargs* are now passed on. The *eager_start* parameter works with eager task factories.
 
 .. method:: loop.set_task_factory(factory)
 
@@ -421,9 +419,6 @@ Creating futures and tasks
    .. versionchanged:: 3.13.4
       *name* is no longer passed to task factories. *context* is no longer passed
       to task factories if it is ``None``.
-
-      .. versionchanged:: 3.14
-         *name* and *context* are now unconditionally passed on to task factories again.
 
 .. method:: loop.get_task_factory()
 
@@ -581,7 +576,7 @@ Opening network connections
    .. versionchanged:: 3.12
       *all_errors* was added.
 
-   .. versionchanged:: 3.16
+   .. versionchanged:: 3.13.16
       Raises a ``ValueError`` if ``ssl.check_hostname`` is ``True``
       and ``server_hostname`` is not supplied.
 
@@ -842,7 +837,7 @@ Creating network servers
                  *, sock=None, backlog=100, ssl=None, \
                  ssl_handshake_timeout=None, \
                  ssl_shutdown_timeout=None, \
-                 start_serving=True, cleanup_socket=True, mode=None)
+                 start_serving=True, cleanup_socket=True)
    :async:
 
    Similar to :meth:`loop.create_server` but works with the
@@ -856,13 +851,6 @@ Creating network servers
    If *cleanup_socket* is true then the Unix socket will automatically
    be removed from the filesystem when the server is closed, unless the
    socket has been replaced after the server has been created.
-
-   If *mode* is not ``None``, the permissions of the socket file created
-   for *path* are changed to *mode* (as accepted by :func:`os.chmod`)
-   right after binding, before the server starts accepting connections,
-   so a connection can never be accepted while the default,
-   umask-derived permissions are still in effect.  *mode* cannot be
-   combined with *sock* and is not supported for abstract Unix sockets.
 
    See the documentation of the :meth:`loop.create_server` method
    for information about arguments to this method.
@@ -881,10 +869,6 @@ Creating network servers
    .. versionchanged:: 3.13
 
       Added the *cleanup_socket* parameter.
-
-   .. versionchanged:: 3.16
-
-      Added the *mode* parameter.
 
 
 .. method:: loop.connect_accepted_socket(protocol_factory, \
@@ -1437,12 +1421,6 @@ Executing code in thread or process pools
                   pool, cpu_bound)
               print('custom process pool', result)
 
-          # 4. Run in a custom interpreter pool:
-          with concurrent.futures.InterpreterPoolExecutor() as pool:
-              result = await loop.run_in_executor(
-                  pool, cpu_bound)
-              print('custom interpreter pool', result)
-
       if __name__ == '__main__':
           asyncio.run(main())
 
@@ -1467,8 +1445,7 @@ Executing code in thread or process pools
 
    Set *executor* as the default executor used by :meth:`run_in_executor`.
    *executor* must be an instance of
-   :class:`~concurrent.futures.ThreadPoolExecutor`, which includes
-   :class:`~concurrent.futures.InterpreterPoolExecutor`.
+   :class:`~concurrent.futures.ThreadPoolExecutor`.
 
    .. versionchanged:: 3.11
       *executor* must be an instance of
@@ -1537,7 +1514,7 @@ Allows customizing how exceptions are handled in the event loop.
    * 'source_traceback' (optional): Traceback of the source;
    * 'handle_traceback' (optional): Traceback of the handle;
    * 'asyncgen' (optional): Asynchronous generator that caused
-     the exception.
+                            the exception.
 
    .. note::
 
@@ -1929,11 +1906,12 @@ By default asyncio is configured to use :class:`EventLoop`.
       import asyncio
       import selectors
 
-      async def main():
-         ...
+      class MyPolicy(asyncio.DefaultEventLoopPolicy):
+         def new_event_loop(self):
+            selector = selectors.SelectSelector()
+            return asyncio.SelectorEventLoop(selector)
 
-      loop_factory = lambda: asyncio.SelectorEventLoop(selectors.SelectSelector())
-      asyncio.run(main(), loop_factory=loop_factory)
+      asyncio.set_event_loop_policy(MyPolicy())
 
 
    .. availability:: Unix, Windows.
@@ -1966,17 +1944,6 @@ By default asyncio is configured to use :class:`EventLoop`.
    The :ref:`asyncio-event-loop-methods` section lists all
    methods that an alternative implementation of ``AbstractEventLoop``
    should have defined.
-
-.. class:: BaseEventLoop
-
-   A base class that partially implements :class:`AbstractEventLoop`
-   to simplify writing custom event loops.
-
-   It provides default implementations of many :class:`AbstractEventLoop`
-   methods, so subclasses have fewer methods to implement themselves.
-   In return, a subclass is expected to implement a number of internal,
-   protected methods.
-   See :ref:`writing_custom_event_loop` for more information.
 
 
 Examples
@@ -2029,7 +1996,7 @@ Display the current date with call_later()
 
 An example of a callback displaying the current date every second. The
 callback uses the :meth:`loop.call_later` method to reschedule itself
-after 1 second, and eventually stops the event loop::
+after 5 seconds, and then stops the event loop::
 
     import asyncio
     import datetime as dt

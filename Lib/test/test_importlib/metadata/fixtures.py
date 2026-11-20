@@ -1,12 +1,13 @@
-import contextlib
-import copy
-import functools
-import json
-import pathlib
-import shutil
+import os
 import sys
+import copy
+import json
+import shutil
+import pathlib
+import tempfile
 import textwrap
-from importlib import resources
+import functools
+import contextlib
 
 from test.support import import_helper
 from test.support import os_helper
@@ -16,13 +17,39 @@ from . import _path
 from ._path import FilesSpec
 
 
+try:
+    from importlib import resources  # type: ignore
+
+    getattr(resources, 'files')
+    getattr(resources, 'as_file')
+except (ImportError, AttributeError):
+    import importlib_resources as resources  # type: ignore
+
+
 @contextlib.contextmanager
-def tmp_path():
-    """
-    Like os_helper.temp_dir, but yields a pathlib.Path.
-    """
-    with os_helper.temp_dir() as path:
-        yield pathlib.Path(path)
+def tempdir():
+    tmpdir = tempfile.mkdtemp()
+    try:
+        yield pathlib.Path(tmpdir)
+    finally:
+        shutil.rmtree(tmpdir)
+
+
+@contextlib.contextmanager
+def save_cwd():
+    orig = os.getcwd()
+    try:
+        yield
+    finally:
+        os.chdir(orig)
+
+
+@contextlib.contextmanager
+def tempdir_as_cwd():
+    with tempdir() as tmp:
+        with save_cwd():
+            os.chdir(str(tmp))
+            yield tmp
 
 
 @contextlib.contextmanager
@@ -43,7 +70,7 @@ class Fixtures:
 class SiteDir(Fixtures):
     def setUp(self):
         super().setUp()
-        self.site_dir = self.fixtures.enter_context(tmp_path())
+        self.site_dir = self.fixtures.enter_context(tempdir())
 
 
 class OnSysPath(Fixtures):
@@ -71,7 +98,7 @@ class SiteBuilder(SiteDir):
 
 
 class DistInfoPkg(OnSysPath, SiteBuilder):
-    files: FilesSpec = frozendict({
+    files: FilesSpec = {
         "distinfo_pkg-1.0.0.dist-info": {
             "METADATA": """
                 Name: distinfo-pkg
@@ -95,7 +122,7 @@ class DistInfoPkg(OnSysPath, SiteBuilder):
             def main():
                 print("hello world")
             """,
-    })
+    }
 
     def make_uppercase(self):
         """
@@ -114,7 +141,7 @@ class DistInfoPkgEditable(DistInfoPkg):
     """
 
     some_hash = '524127ce937f7cb65665130c695abd18ca386f60bb29687efb976faa1596fdcc'
-    files: FilesSpec = frozendict({
+    files: FilesSpec = {
         'distinfo_pkg-1.0.0.dist-info': {
             'direct_url.json': json.dumps({
                 "archive_info": {
@@ -124,22 +151,22 @@ class DistInfoPkgEditable(DistInfoPkg):
                 "url": "file:///path/to/distinfo_pkg-1.0.0.editable-py3-none-any.whl",
             })
         },
-    })
+    }
 
 
 class DistInfoPkgWithDot(OnSysPath, SiteBuilder):
-    files: FilesSpec = frozendict({
+    files: FilesSpec = {
         "pkg_dot-1.0.0.dist-info": {
             "METADATA": """
                 Name: pkg.dot
                 Version: 1.0.0
                 """,
         },
-    })
+    }
 
 
 class DistInfoPkgWithDotLegacy(OnSysPath, SiteBuilder):
-    files: FilesSpec = frozendict({
+    files: FilesSpec = {
         "pkg.dot-1.0.0.dist-info": {
             "METADATA": """
                 Name: pkg.dot
@@ -152,7 +179,7 @@ class DistInfoPkgWithDotLegacy(OnSysPath, SiteBuilder):
                 Version: 1.0.0
                 """,
         },
-    })
+    }
 
 
 class DistInfoPkgOffPath(SiteBuilder):
@@ -160,7 +187,7 @@ class DistInfoPkgOffPath(SiteBuilder):
 
 
 class EggInfoPkg(OnSysPath, SiteBuilder):
-    files: FilesSpec = frozendict({
+    files: FilesSpec = {
         "egginfo_pkg.egg-info": {
             "PKG-INFO": """
                 Name: egginfo-pkg
@@ -192,11 +219,11 @@ class EggInfoPkg(OnSysPath, SiteBuilder):
             def main():
                 print("hello world")
             """,
-    })
+    }
 
 
 class EggInfoPkgPipInstalledNoToplevel(OnSysPath, SiteBuilder):
-    files: FilesSpec = frozendict({
+    files: FilesSpec = {
         "egg_with_module_pkg.egg-info": {
             "PKG-INFO": "Name: egg_with_module-pkg",
             # SOURCES.txt is made from the source archive, and contains files
@@ -223,11 +250,11 @@ class EggInfoPkgPipInstalledNoToplevel(OnSysPath, SiteBuilder):
             def main():
                 print("hello world")
             """,
-    })
+    }
 
 
 class EggInfoPkgPipInstalledExternalDataFiles(OnSysPath, SiteBuilder):
-    files: FilesSpec = frozendict({
+    files: FilesSpec = {
         "egg_with_module_pkg.egg-info": {
             "PKG-INFO": "Name: egg_with_module-pkg",
             # SOURCES.txt is made from the source archive, and contains files
@@ -257,11 +284,11 @@ class EggInfoPkgPipInstalledExternalDataFiles(OnSysPath, SiteBuilder):
             def main():
                 print("hello world")
             """,
-    })
+    }
 
 
 class EggInfoPkgPipInstalledNoModules(OnSysPath, SiteBuilder):
-    files: FilesSpec = frozendict({
+    files: FilesSpec = {
         "egg_with_no_modules_pkg.egg-info": {
             "PKG-INFO": "Name: egg_with_no_modules-pkg",
             # SOURCES.txt is made from the source archive, and contains files
@@ -283,11 +310,11 @@ class EggInfoPkgPipInstalledNoModules(OnSysPath, SiteBuilder):
             # top_level.txt correctly reflects that no modules are installed
             "top_level.txt": b"\n",
         },
-    })
+    }
 
 
 class EggInfoPkgSourcesFallback(OnSysPath, SiteBuilder):
-    files: FilesSpec = frozendict({
+    files: FilesSpec = {
         "sources_fallback_pkg.egg-info": {
             "PKG-INFO": "Name: sources_fallback-pkg",
             # SOURCES.txt is made from the source archive, and contains files
@@ -305,11 +332,11 @@ class EggInfoPkgSourcesFallback(OnSysPath, SiteBuilder):
             def main():
                 print("hello world")
             """,
-    })
+    }
 
 
 class EggInfoFile(OnSysPath, SiteBuilder):
-    files: FilesSpec = frozendict({
+    files: FilesSpec = {
         "egginfo_file.egg-info": """
             Metadata-Version: 1.0
             Name: egginfo_file
@@ -322,7 +349,7 @@ class EggInfoFile(OnSysPath, SiteBuilder):
             Description: UNKNOWN
             Platform: UNKNOWN
             """,
-    })
+    }
 
 
 # dedent all text strings before writing

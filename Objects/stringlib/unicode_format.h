@@ -4,7 +4,6 @@
 
 #include "pycore_complexobject.h" // _PyComplex_FormatAdvancedWriter()
 #include "pycore_floatobject.h"   // _PyFloat_FormatAdvancedWriter()
-#include "pycore_tuple.h"         // _PyTuple_FromPairSteal
 
 /************************************************************************/
 /***********   Global data structures and forward declarations  *********/
@@ -74,7 +73,7 @@ Py_LOCAL_INLINE(PyObject *)
 SubString_new_object_or_empty(SubString *str)
 {
     if (str->str == NULL) {
-        return Py_GetConstant(Py_CONSTANT_EMPTY_STR);
+        return PyUnicode_New(0, 0);
     }
     return SubString_new_object(str);
 }
@@ -532,7 +531,7 @@ render_field(PyObject *fieldobj, SubString *format_spec, _PyUnicodeWriter *write
                                                      format_spec->start,
                                                      format_spec->end);
         else
-            format_spec_object = Py_GetConstant(Py_CONSTANT_EMPTY_STR);
+            format_spec_object = PyUnicode_New(0, 0);
         if (format_spec_object == NULL)
             goto done;
 
@@ -978,9 +977,8 @@ typedef struct {
 } formatteriterobject;
 
 static void
-formatteriter_dealloc(PyObject *op)
+formatteriter_dealloc(formatteriterobject *it)
 {
-    formatteriterobject *it = (formatteriterobject*)op;
     Py_XDECREF(it->str);
     PyObject_Free(it);
 }
@@ -994,9 +992,8 @@ formatteriter_dealloc(PyObject *op)
    conversion is either None, or the string after the '!'
 */
 static PyObject *
-formatteriter_next(PyObject *op)
+formatteriter_next(formatteriterobject *it)
 {
-    formatteriterobject *it = (formatteriterobject*)op;
     SubString literal;
     SubString field_name;
     SubString format_spec;
@@ -1069,7 +1066,7 @@ static PyTypeObject PyFormatterIter_Type = {
     sizeof(formatteriterobject),        /* tp_basicsize */
     0,                                  /* tp_itemsize */
     /* methods */
-    formatteriter_dealloc,              /* tp_dealloc */
+    (destructor)formatteriter_dealloc,  /* tp_dealloc */
     0,                                  /* tp_vectorcall_offset */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
@@ -1091,7 +1088,7 @@ static PyTypeObject PyFormatterIter_Type = {
     0,                                  /* tp_richcompare */
     0,                                  /* tp_weaklistoffset */
     PyObject_SelfIter,                  /* tp_iter */
-    formatteriter_next,                 /* tp_iternext */
+    (iternextfunc)formatteriter_next,   /* tp_iternext */
     formatteriter_methods,              /* tp_methods */
     0,
 };
@@ -1101,7 +1098,7 @@ static PyTypeObject PyFormatterIter_Type = {
    describing the parsed elements.  It's a wrapper around
    stringlib/string_format.h's MarkupIterator */
 static PyObject *
-formatter_parser(PyObject *Py_UNUSED(module), PyObject *self)
+formatter_parser(PyObject *ignored, PyObject *self)
 {
     formatteriterobject *it;
 
@@ -1139,9 +1136,8 @@ typedef struct {
 } fieldnameiterobject;
 
 static void
-fieldnameiter_dealloc(PyObject *op)
+fieldnameiter_dealloc(fieldnameiterobject *it)
 {
-    fieldnameiterobject *it = (fieldnameiterobject*)op;
     Py_XDECREF(it->str);
     PyObject_Free(it);
 }
@@ -1153,9 +1149,8 @@ fieldnameiter_dealloc(PyObject *op)
    value is an integer or string
 */
 static PyObject *
-fieldnameiter_next(PyObject *op)
+fieldnameiter_next(fieldnameiterobject *it)
 {
-    fieldnameiterobject *it = (fieldnameiterobject*)op;
     int result;
     int is_attr;
     Py_ssize_t idx;
@@ -1173,7 +1168,7 @@ fieldnameiter_next(PyObject *op)
 
         is_attr_obj = PyBool_FromLong(is_attr);
         if (is_attr_obj == NULL)
-            goto error;
+            goto done;
 
         /* either an integer or a string */
         if (idx != -1)
@@ -1181,12 +1176,12 @@ fieldnameiter_next(PyObject *op)
         else
             obj = SubString_new_object(&name);
         if (obj == NULL)
-            goto error;
+            goto done;
 
         /* return a tuple of values */
-        return _PyTuple_FromPairSteal(is_attr_obj, obj);
+        result = PyTuple_Pack(2, is_attr_obj, obj);
 
-    error:
+    done:
         Py_XDECREF(is_attr_obj);
         Py_XDECREF(obj);
         return result;
@@ -1203,7 +1198,7 @@ static PyTypeObject PyFieldNameIter_Type = {
     sizeof(fieldnameiterobject),        /* tp_basicsize */
     0,                                  /* tp_itemsize */
     /* methods */
-    fieldnameiter_dealloc,              /* tp_dealloc */
+    (destructor)fieldnameiter_dealloc,  /* tp_dealloc */
     0,                                  /* tp_vectorcall_offset */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
@@ -1225,7 +1220,7 @@ static PyTypeObject PyFieldNameIter_Type = {
     0,                                  /* tp_richcompare */
     0,                                  /* tp_weaklistoffset */
     PyObject_SelfIter,                  /* tp_iter */
-    fieldnameiter_next,                 /* tp_iternext */
+    (iternextfunc)fieldnameiter_next,   /* tp_iternext */
     fieldnameiter_methods,              /* tp_methods */
     0};
 
@@ -1237,7 +1232,7 @@ static PyTypeObject PyFieldNameIter_Type = {
    field_name_split.  The iterator it returns is a
    FieldNameIterator */
 static PyObject *
-formatter_field_name_split(PyObject *Py_UNUSED(module), PyObject *self)
+formatter_field_name_split(PyObject *ignored, PyObject *self)
 {
     SubString first;
     Py_ssize_t first_idx;
@@ -1263,7 +1258,7 @@ formatter_field_name_split(PyObject *Py_UNUSED(module), PyObject *self)
        first_obj in that case. */
     if (!field_name_split((PyObject*)self, 0, PyUnicode_GET_LENGTH(self),
                           &first, &first_idx, &it->it_field, NULL))
-        goto error;
+        goto done;
 
     /* first becomes an integer, if possible; else a string */
     if (first_idx != -1)
@@ -1272,12 +1267,12 @@ formatter_field_name_split(PyObject *Py_UNUSED(module), PyObject *self)
         /* convert "first" into a string object */
         first_obj = SubString_new_object(&first);
     if (first_obj == NULL)
-        goto error;
+        goto done;
 
     /* return a tuple of values */
-    return _PyTuple_FromPairSteal(first_obj, (PyObject *)it);
+    result = PyTuple_Pack(2, first_obj, it);
 
-error:
+done:
     Py_XDECREF(it);
     Py_XDECREF(first_obj);
     return result;

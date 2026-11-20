@@ -1,5 +1,3 @@
-.. _library-cmdline:
-
 ++++++++++++++++++++++++++++++++++++
 Modules command-line interface (CLI)
 ++++++++++++++++++++++++++++++++++++
@@ -12,7 +10,8 @@ The following modules have a command-line interface.
 * :ref:`calendar <calendar-cli>`
 * :mod:`code`
 * :ref:`compileall <compileall-cli>`
-* ``cProfile``: see :ref:`profiling.tracing <profiling-tracing-cli>`
+* :mod:`cProfile`: see :ref:`profile <profile-cli>`
+* :ref:`difflib <difflib-interface>`
 * :ref:`dis <dis-cli>`
 * :ref:`doctest <doctest-cli>`
 * :mod:`!encodings.rot_13`
@@ -24,16 +23,15 @@ The following modules have a command-line interface.
 * :ref:`http.server <http-server-cli>`
 * :ref:`idlelib <idlelib-cli>`
 * :ref:`inspect <inspect-module-cli>`
-* :ref:`json <json-commandline>`
-* :ref:`mimetypes <mimetypes-cli>`
+* :ref:`json.tool <json-commandline>`
+* :mod:`mimetypes`
 * :ref:`pdb <pdb-cli>`
-* :ref:`pickle <pickle-cli>`
+* :mod:`pickle`
 * :ref:`pickletools <pickletools-cli>`
 * :ref:`platform <platform-cli>`
 * :mod:`poplib`
-* :ref:`profiling.sampling <profiling-sampling>`
-* :ref:`profiling.tracing <profiling-tracing-cli>`
-* :ref:`pstats <pstats-cli>`
+* :ref:`profile <profile-cli>`
+* :mod:`pstats`
 * :ref:`py_compile <py_compile-cli>`
 * :mod:`pyclbr`
 * :mod:`pydoc`

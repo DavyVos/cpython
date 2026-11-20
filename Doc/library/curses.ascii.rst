@@ -4,11 +4,14 @@
 .. module:: curses.ascii
    :synopsis: Constants and set-membership functions for ASCII characters.
 
+.. moduleauthor:: Eric S. Raymond <esr@thyrsus.com>
+.. sectionauthor:: Eric S. Raymond <esr@thyrsus.com>
+
 **Source code:** :source:`Lib/curses/ascii.py`
 
 --------------
 
-The :mod:`!curses.ascii` module supplies name constants for ASCII characters and
+The :mod:`curses.ascii` module supplies name constants for ASCII characters and
 functions to test membership in various ASCII character classes.  The constants
 supplied are names for control characters as follows:
 
@@ -176,18 +179,15 @@ C library:
 
    Checks for a non-ASCII character (ordinal values 0x80 and above).
 
-These functions accept an integer, a single-character string, or a
-:class:`curses.complexchar`.
-A string is converted using the built-in function :func:`ord`, and a
-complexchar by the code of its single character; a complexchar that holds
-combining characters is not a single character and matches no class.
+These functions accept either integers or single-character strings; when the argument is a
+string, it is first converted using the built-in function :func:`ord`.
 
 Note that all these functions check ordinal bit values derived from the
 character of the string you pass in; they do not actually know anything about
 the host machine's character encoding.
 
-The following three functions take either a single-character string or an
-integer byte value; they return a value of the same type.
+The following two functions take either a single-character string or integer
+byte value; they return a value of the same type.
 
 
 .. function:: ascii(c)
@@ -197,13 +197,8 @@ integer byte value; they return a value of the same type.
 
 .. function:: ctrl(c)
 
-   Return the control character corresponding to the given ASCII character (the
-   character bit value is bitwise-anded with 0x1f).  A non-ASCII character has no
-   control character and is returned unchanged.
-
-   .. versionchanged:: 3.16
-      A non-ASCII argument is now returned unchanged instead of masked to a
-      control character.
+   Return the control character corresponding to the given character (the character
+   bit value is bitwise-anded with 0x1f).
 
 
 .. function:: alt(c)
@@ -211,8 +206,7 @@ integer byte value; they return a value of the same type.
    Return the 8-bit character corresponding to the given ASCII character (the
    character bit value is bitwise-ored with 0x80).
 
-The following function takes a single-character string, an integer value, or a
-:class:`curses.complexchar`;
+The following function takes either a single-character string or integer value;
 it returns a string.
 
 

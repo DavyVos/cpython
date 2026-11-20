@@ -35,7 +35,7 @@ Resource Locators. It supports the following URL schemes: ``file``, ``ftp``,
    macOS, it *may* be removed if CPython has been built with the
    :option:`--with-app-store-compliance` option.
 
-The :mod:`!urllib.parse` module defines functions that fall into two broad
+The :mod:`urllib.parse` module defines functions that fall into two broad
 categories: URL parsing and URL quoting. These are covered in detail in
 the following sections.
 
@@ -50,16 +50,14 @@ URL Parsing
 The URL parsing functions focus on splitting a URL string into its components,
 or on combining URL components into a URL string.
 
-.. function:: urlsplit(urlstring, scheme=None, allow_fragments=True, *, missing_as_none=False)
+.. function:: urlsplit(urlstring, scheme=None, allow_fragments=True)
 
    Parse a URL into five components, returning a 5-item :term:`named tuple`
    :class:`SplitResult` or :class:`SplitResultBytes`.
    This corresponds to the general structure of a URL:
    ``scheme://netloc/path?query#fragment``.
-   Each tuple item is a string, possibly empty, or ``None`` if
-   *missing_as_none* is true.
-   Not defined component are represented an empty string (by default) or
-   ``None`` if *missing_as_none* is true.
+   Each tuple item is a string, possibly empty.
+
    The delimiters as shown above are not part of the result, except for a
    leading slash in the *path* component, which is retained if present.
 
@@ -94,12 +92,6 @@ or on combining URL components into a URL string.
       80
       >>> o._replace(fragment="").geturl()
       'http://docs.python.org:80/3/library/urllib.parse.html?highlight=params'
-      >>> urlsplit("http://docs.python.org?")
-      SplitResult(scheme='http', netloc='docs.python.org', path='',
-                  query='', fragment='')
-      >>> urlsplit("http://docs.python.org?", missing_as_none=True)
-      SplitResult(scheme='http', netloc='docs.python.org', path='',
-                  query='', fragment=None)
 
    Following the syntax specifications in :rfc:`1808`, :func:`!urlsplit` recognizes
    a netloc only if it is properly introduced by '//'.  Otherwise the
@@ -119,48 +111,42 @@ or on combining URL components into a URL string.
       >>> urlsplit('help/Python.html')
       SplitResult(scheme='', netloc='', path='help/Python.html',
                   query='', fragment='')
-      >>> urlsplit('help/Python.html', missing_as_none=True)
-      SplitResult(scheme=None, netloc=None, path='help/Python.html',
-                  query=None, fragment=None)
 
    The *scheme* argument gives the default addressing scheme, to be
    used only if the URL does not specify one.  It should be the same type
-   (text or bytes) as *urlstring* or ``None``, except that the ``''`` is
+   (text or bytes) as *urlstring*, except that the default value ``''`` is
    always allowed, and is automatically converted to ``b''`` if appropriate.
 
    If the *allow_fragments* argument is false, fragment identifiers are not
-   recognized.  Instead, they are parsed as part of the path
-   or query component, and :attr:`fragment` is set to ``None`` or the empty
-   string (depending on the value of *missing_as_none*) in the return value.
+   recognized.  Instead, they are parsed as part of the path, parameters
+   or query component, and :attr:`fragment` is set to the empty string in
+   the return value.
 
    The return value is a :term:`named tuple`, which means that its items can
    be accessed by index or as named attributes, which are:
 
-   +------------------+-------+-------------------------+-------------------------------+
-   | Attribute        | Index | Value                   | Value if not present          |
-   +==================+=======+=========================+===============================+
-   | :attr:`scheme`   | 0     | URL scheme specifier    | *scheme* parameter or         |
-   |                  |       |                         | empty string [1]_             |
-   +------------------+-------+-------------------------+-------------------------------+
-   | :attr:`netloc`   | 1     | Network location part   | ``None`` or empty string [1]_ |
-   +------------------+-------+-------------------------+-------------------------------+
-   | :attr:`path`     | 2     | Hierarchical path       | empty string                  |
-   +------------------+-------+-------------------------+-------------------------------+
-   | :attr:`query`    | 3     | Query component         | ``None`` or empty string [1]_ |
-   +------------------+-------+-------------------------+-------------------------------+
-   | :attr:`fragment` | 4     | Fragment identifier     | ``None`` or empty string [1]_ |
-   +------------------+-------+-------------------------+-------------------------------+
-   | :attr:`username` |       | User name               | ``None``                      |
-   +------------------+-------+-------------------------+-------------------------------+
-   | :attr:`password` |       | Password                | ``None``                      |
-   +------------------+-------+-------------------------+-------------------------------+
-   | :attr:`hostname` |       | Host name (lower case)  | ``None``                      |
-   +------------------+-------+-------------------------+-------------------------------+
-   | :attr:`port`     |       | Port number as integer, | ``None``                      |
-   |                  |       | if present              |                               |
-   +------------------+-------+-------------------------+-------------------------------+
-
-   .. [1] Depending on the value of the *missing_as_none* argument.
+   +------------------+-------+-------------------------+------------------------+
+   | Attribute        | Index | Value                   | Value if not present   |
+   +==================+=======+=========================+========================+
+   | :attr:`scheme`   | 0     | URL scheme specifier    | *scheme* parameter     |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`netloc`   | 1     | Network location part   | empty string           |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`path`     | 2     | Hierarchical path       | empty string           |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`query`    | 3     | Query component         | empty string           |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`fragment` | 4     | Fragment identifier     | empty string           |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`username` |       | User name               | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`password` |       | Password                | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`hostname` |       | Host name (lower case)  | :const:`None`          |
+   +------------------+-------+-------------------------+------------------------+
+   | :attr:`port`     |       | Port number as integer, | :const:`None`          |
+   |                  |       | if present              |                        |
+   +------------------+-------+-------------------------+------------------------+
 
    Reading the :attr:`port` attribute will raise a :exc:`ValueError` if
    an invalid port is specified in the URL.  See section
@@ -210,7 +196,7 @@ or on combining URL components into a URL string.
 
    .. versionchanged:: 3.6
       Out-of-range port numbers now raise :exc:`ValueError`, instead of
-      returning ``None``.
+      returning :const:`None`.
 
    .. versionchanged:: 3.8
       Characters that affect netloc parsing under NFKC normalization will
@@ -221,19 +207,6 @@ or on combining URL components into a URL string.
 
    .. versionchanged:: 3.12
       Leading WHATWG C0 control and space characters are stripped from the URL.
-
-   .. versionchanged:: 3.15
-      Added the *missing_as_none* parameter.
-
-   .. versionchanged:: 3.16
-      Passing an object that is not a string, bytes, or ``None`` as
-      *urlstring* or *scheme* now raises :exc:`TypeError` instead of
-      :exc:`AttributeError`.
-
-   .. deprecated:: 3.16
-      Accepting objects with false values (like ``0`` and ``[]``) except empty
-      strings, byte-like objects and ``None`` as *urlstring* or *scheme* is
-      now deprecated.  They will raise :exc:`TypeError` in Python 3.18.
 
 .. _WHATWG spec: https://url.spec.whatwg.org/#concept-basic-url-parser
 
@@ -283,10 +256,6 @@ or on combining URL components into a URL string.
       query parameter separator. This has been changed to allow only a single
       separator key, with ``&`` as the default separator.
 
-   .. deprecated:: 3.14
-      Accepting objects with false values (like ``0`` and ``[]``) except empty
-      strings and byte-like objects and ``None`` is now deprecated.
-
 
 .. function:: parse_qsl(qs, keep_blank_values=False, strict_parsing=False, encoding='utf-8', errors='replace', max_num_fields=None, separator='&')
 
@@ -332,36 +301,15 @@ or on combining URL components into a URL string.
 
 
 .. function:: urlunsplit(parts)
-              urlunsplit(parts, *, keep_empty)
 
-   Construct a URL from a tuple as returned by :func:`urlsplit`. The *parts*
-   argument can be any five-item iterable.
-
-   This may result in a slightly different, but equivalent URL, if the
-   URL that was parsed originally had unnecessary delimiters (for example,
-   a ``?`` with an empty query; the RFC states that these are equivalent).
-
-   If *keep_empty* is true, empty strings are kept in the result (for example,
-   a ``?`` for an empty query), only ``None`` components are omitted.
-   This allows rebuilding a URL that was parsed with option
-   ``missing_as_none=True``.
-   By default, *keep_empty* is true if *parts* is the result of the
-   :func:`urlsplit` call with ``missing_as_none=True``.
-
-   .. versionchanged:: 3.15
-      Added the *keep_empty* parameter.
-
-   .. versionchanged:: 3.16
-      Passing an object that is not a string, bytes, or ``None`` in *parts*
-      now raises :exc:`TypeError` instead of :exc:`AttributeError`.
-
-   .. deprecated:: 3.16
-      Accepting objects with false values (like ``0`` and ``[]``) except empty
-      strings, byte-like objects and ``None`` in *parts* is now deprecated.
-      They will raise :exc:`TypeError` in Python 3.18.
+   Construct a URL from a tuple as returned by ``urlsplit()``. The *parts*
+   argument can be any five-item iterable. This may result in a slightly
+   different, but equivalent URL, if the URL that was parsed originally had
+   unnecessary delimiters (for example, a ``?`` with an empty query; the RFC
+   states that these are equivalent).
 
 
-.. function:: urlparse(urlstring, scheme=None, allow_fragments=True, *, missing_as_none=False)
+.. function:: urlparse(urlstring, scheme=None, allow_fragments=True)
 
    This is similar to :func:`urlsplit`, but additionally splits the *path*
    component on *path* and *params*.
@@ -377,45 +325,13 @@ or on combining URL components into a URL string.
    :func:`urlsplit` should generally be used instead of :func:`urlparse`.
    A separate function is needed to separate the path segments and parameters.
 
-   .. versionchanged:: 3.16
-      Passing an object that is not a string, bytes, or ``None`` as
-      *urlstring* or *scheme* now raises :exc:`TypeError` instead of
-      :exc:`AttributeError`.
-
-   .. deprecated:: 3.16
-      Accepting objects with false values (like ``0`` and ``[]``) except empty
-      strings, byte-like objects and ``None`` as *urlstring* or *scheme* is
-      now deprecated.  They will raise :exc:`TypeError` in Python 3.18.
-
 .. function:: urlunparse(parts)
-              urlunparse(parts, *, keep_empty)
 
    Combine the elements of a tuple as returned by :func:`urlparse` into a
    complete URL as a string. The *parts* argument can be any six-item
-   iterable.
-
-   This may result in a slightly different, but equivalent URL, if the
-   URL that was parsed originally had unnecessary delimiters (for example,
-   a ``?`` with an empty query; the RFC states that these are equivalent).
-
-   If *keep_empty* is true, empty strings are kept in the result (for example,
-   a ``?`` for an empty query), only ``None`` components are omitted.
-   This allows rebuilding a URL that was parsed with option
-   ``missing_as_none=True``.
-   By default, *keep_empty* is true if *parts* is the result of the
-   :func:`urlparse` call with ``missing_as_none=True``.
-
-   .. versionchanged:: 3.15
-      Added the *keep_empty* parameter.
-
-   .. versionchanged:: 3.16
-      Passing an object that is not a string, bytes, or ``None`` in *parts*
-      now raises :exc:`TypeError` instead of :exc:`AttributeError`.
-
-   .. deprecated:: 3.16
-      Accepting objects with false values (like ``0`` and ``[]``) except empty
-      strings, byte-like objects and ``None`` in *parts* is now deprecated.
-      They will raise :exc:`TypeError` in Python 3.18.
+   iterable. This may result in a slightly different, but equivalent URL, if the
+   URL that was parsed originally had unnecessary delimiters (for example, a ?
+   with an empty query; the RFC states that these are equivalent).
 
 
 .. function:: urljoin(base, url, allow_fragments=True)
@@ -460,53 +376,30 @@ or on combining URL components into a URL string.
 
       Behavior updated to match the semantics defined in :rfc:`3986`.
 
-   .. versionchanged:: 3.16
-      Passing an object that is not a string, bytes, or ``None`` as *base* or
-      *url* now raises :exc:`TypeError` instead of :exc:`AttributeError`.
 
-   .. deprecated:: 3.16
-      Accepting objects with false values (like ``0`` and ``[]``) except empty
-      strings, byte-like objects and ``None`` as *base* or *url* is now
-      deprecated.  They will raise :exc:`TypeError` in Python 3.18.
-
-
-.. function:: urldefrag(url, *, missing_as_none=False)
+.. function:: urldefrag(url)
 
    If *url* contains a fragment identifier, return a modified version of *url*
    with no fragment identifier, and the fragment identifier as a separate
    string.  If there is no fragment identifier in *url*, return *url* unmodified
-   and an empty string (by default) or ``None`` if *missing_as_none* is true.
+   and an empty string.
 
    The return value is a :term:`named tuple`, its items can be accessed by index
    or as named attributes:
 
-   +------------------+-------+-------------------------+-------------------------------+
-   | Attribute        | Index | Value                   | Value if not present          |
-   +==================+=======+=========================+===============================+
-   | :attr:`url`      | 0     | URL with no fragment    | empty string                  |
-   +------------------+-------+-------------------------+-------------------------------+
-   | :attr:`fragment` | 1     | Fragment identifier     | ``None`` or empty string [3]_ |
-   +------------------+-------+-------------------------+-------------------------------+
-
-   .. [3] Depending on the value of the *missing_as_none* argument.
+   +------------------+-------+-------------------------+----------------------+
+   | Attribute        | Index | Value                   | Value if not present |
+   +==================+=======+=========================+======================+
+   | :attr:`url`      | 0     | URL with no fragment    | empty string         |
+   +------------------+-------+-------------------------+----------------------+
+   | :attr:`fragment` | 1     | Fragment identifier     | empty string         |
+   +------------------+-------+-------------------------+----------------------+
 
    See section :ref:`urlparse-result-object` for more information on the result
    object.
 
    .. versionchanged:: 3.2
       Result is a structured object rather than a simple 2-tuple.
-
-   .. versionchanged:: 3.15
-      Added the *missing_as_none* parameter.
-
-   .. versionchanged:: 3.16
-      Passing an object that is not a string, bytes, or ``None`` as *url* now
-      raises :exc:`TypeError` instead of :exc:`AttributeError`.
-
-   .. deprecated:: 3.16
-      Accepting objects with false values (like ``0`` and ``[]``) except empty
-      strings, byte-like objects and ``None`` as *url* is now deprecated.
-      They will raise :exc:`TypeError` in Python 3.18.
 
 .. function:: unwrap(url)
 
@@ -527,9 +420,8 @@ URLs elsewhere.  Their purpose is for practical functionality rather than
 purity.
 
 Instead of raising an exception on unusual input, they may instead return some
-component parts as empty strings or ``None`` (depending on the value of the
-*missing_as_none* argument).
-Or components may contain more than perhaps they should.
+component parts as empty strings. Or components may contain more than perhaps
+they should.
 
 We recommend that users of these APIs where the values may be used anywhere
 with security implications code defensively. Do some verification within your
@@ -605,8 +497,7 @@ previous section, as well as an additional method:
    Return the re-combined version of the original URL as a string. This may
    differ from the original URL in that the scheme may be normalized to lower
    case and empty components may be dropped. Specifically, empty parameters,
-   queries, and fragment identifiers will be removed unless the URL was parsed
-   with ``missing_as_none=True``.
+   queries, and fragment identifiers will be removed.
 
    For :func:`urldefrag` results, only empty fragment identifiers will be removed.
    For :func:`urlsplit` and :func:`urlparse` results, all noted changes will be
@@ -623,9 +514,6 @@ previous section, as well as an additional method:
       >>> r2 = urlsplit(r1.geturl())
       >>> r2.geturl()
       'http://www.Python.org/doc/'
-      >>> r3 = urlsplit(url, missing_as_none=True)
-      >>> r3.geturl()
-      'http://www.Python.org/doc/#'
 
 
 The following classes provide the implementations of the structured parse
@@ -825,10 +713,6 @@ task isn't already covered by the URL parsing functions above.
 
    .. versionchanged:: 3.5
       Added the *quote_via* parameter.
-
-   .. deprecated:: 3.14
-      Accepting objects with false values (like ``0`` and ``[]``) except empty
-      strings and byte-like objects and ``None`` is now deprecated.
 
 
 .. seealso::

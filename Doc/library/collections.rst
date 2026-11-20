@@ -4,6 +4,9 @@
 .. module:: collections
     :synopsis: Container datatypes
 
+.. moduleauthor:: Raymond Hettinger <python@rcn.com>
+.. sectionauthor:: Raymond Hettinger <python@rcn.com>
+
 **Source code:** :source:`Lib/collections/__init__.py`
 
 .. testsetup:: *
@@ -268,15 +271,6 @@ For example::
         >>> c['sausage'] = 0                        # counter entry with a zero count
         >>> del c['sausage']                        # del actually removes the entry
 
-    Counters maintain insertion order internally but display from most common to
-    least common when possible:
-
-        >>> c = Counter(a=1, b=2, c=3)
-        >>> c                                       # display most common to least
-        Counter({'c': 3, 'b': 2, 'a': 1})
-        >>> list(c.items())                         # original insertion order
-        [('a', 1), ('b', 2), ('c', 3)]
-
     .. versionadded:: 3.1
 
     .. versionchanged:: 3.7 As a :class:`dict` subclass, :class:`Counter`
@@ -335,7 +329,7 @@ For example::
         .. versionadded:: 3.10
 
     The usual dictionary methods are available for :class:`Counter` objects
-    except for these two which work differently for counters:
+    except for two which work differently for counters.
 
     .. method:: fromkeys(iterable)
 
@@ -379,11 +373,9 @@ Several mathematical operations are provided for combining :class:`Counter`
 objects to produce multisets (counters that have counts greater than zero).
 Addition and subtraction combine counters by adding or subtracting the counts
 of corresponding elements.  Intersection and union return the minimum and
-maximum of corresponding counts.  Symmetric difference returns the difference
-between the maximum and minimum of the corresponding counts. Equality and
-inclusion compare corresponding counts.  Each operation can accept inputs
-with signed counts, but the output will exclude results with counts of zero
-or below.
+maximum of corresponding counts.  Equality and inclusion compare
+corresponding counts.  Each operation can accept inputs with signed
+counts, but the output will exclude results with counts of zero or less.
 
 .. doctest::
 
@@ -397,8 +389,6 @@ or below.
     Counter({'a': 1, 'b': 1})
     >>> c | d                       # union:  max(c[x], d[x])
     Counter({'a': 3, 'b': 2})
-    >>> c ^ d                       # max(c[x], d[x]) - min(c[x], d[x])
-    Counter({'a': 2, 'b': 1})
     >>> c == d                      # equality:  c[x] == d[x]
     False
     >>> c <= d                      # inclusion:  c[x] <= d[x]
@@ -415,9 +405,6 @@ or subtracting from an empty counter.
 
 .. versionadded:: 3.3
     Added support for unary plus, unary minus, and in-place multiset operations.
-
-.. versionadded:: 3.15
-    Added support for the symmetric difference multiset operation, ``c ^ d``.
 
 .. note::
 
@@ -699,7 +686,7 @@ added elements by appending to the right and popping to the left::
 A `round-robin scheduler
 <https://en.wikipedia.org/wiki/Round-robin_scheduling>`_ can be implemented with
 input iterators stored in a :class:`deque`.  Values are yielded from the active
-iterator in position zero.  If that iterator is :term:`exhausted`, it can be removed
+iterator in position zero.  If that iterator is exhausted, it can be removed
 with :meth:`~deque.popleft`; otherwise, it can be cycled back to the end with
 the :meth:`~deque.rotate` method::
 
@@ -1230,7 +1217,7 @@ If a new entry overwrites an existing entry, the
 original insertion position is changed and moved to the end::
 
     class LastUpdatedOrderedDict(OrderedDict):
-        'Store items in the order that the keys were last updated.'
+        'Store items in the order the keys were last added'
 
         def __setitem__(self, key, value):
             super().__setitem__(key, value)
@@ -1360,14 +1347,7 @@ attribute.
         A real dictionary used to store the contents of the :class:`UserDict`
         class.
 
-    :class:`!UserDict` instances also override the following method:
 
-    .. method:: popitem
-
-        Remove and return a ``(key, value)`` pair from the wrapped dictionary. Pairs are
-        returned in the same order as ``data.popitem()``. (For the default
-        :meth:`dict.popitem`, this order is :abbr:`LIFO (last-in, first-out)`.) If the
-        dictionary is empty, raises a :exc:`KeyError`.
 
 :class:`UserList` objects
 -------------------------

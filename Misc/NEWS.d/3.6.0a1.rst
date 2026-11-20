@@ -1401,7 +1401,7 @@ array is extended.
 .. section: Library
 
 doctest.DocFileTest and doctest.testfile() now support packages (module
-split into multiple directories) for the package parameter.
+splitted into multiple directories) for the package parameter.
 
 ..
 

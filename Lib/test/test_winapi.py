@@ -1,9 +1,11 @@
 # Test the Windows-only _winapi module
 
-import errno
 import os
 import pathlib
+import random
 import re
+import threading
+import time
 import unittest
 from test.support import import_helper, os_helper
 
@@ -152,7 +154,7 @@ class WinAPITests(unittest.TestCase):
         # Pipe instance is available, so this passes
         _winapi.WaitNamedPipe(pipe_name, 0)
 
-        with open(pipe_name, 'w+b', buffering=0) as pipe2:
+        with open(pipe_name, 'w+b') as pipe2:
             # No instances available, so this times out
             # (WinError 121 does not get mapped to TimeoutError)
             with self.assertRaises(OSError):
@@ -165,38 +167,3 @@ class WinAPITests(unittest.TestCase):
             pipe2.write(b'testdata')
             pipe2.flush()
             self.assertEqual((b'testdata', 8), _winapi.PeekNamedPipe(pipe, 8)[:2])
-
-    def test_event_source_registration(self):
-        source_name = "PythonTestEventSource"
-
-        handle = _winapi.RegisterEventSource(None, source_name)
-        self.addCleanup(_winapi.DeregisterEventSource, handle)
-        self.assertNotEqual(handle, _winapi.INVALID_HANDLE_VALUE)
-
-        with self.assertRaises(OSError) as cm:
-            _winapi.RegisterEventSource(None, "")
-        self.assertEqual(cm.exception.errno, errno.EINVAL)
-
-        with self.assertRaises(OSError) as cm:
-            _winapi.DeregisterEventSource(_winapi.INVALID_HANDLE_VALUE)
-        self.assertEqual(cm.exception.errno, errno.EBADF)
-
-    def test_report_event(self):
-        source_name = "PythonTestEventSource"
-
-        handle = _winapi.RegisterEventSource(None, source_name)
-        self.assertNotEqual(handle, _winapi.INVALID_HANDLE_VALUE)
-        self.addCleanup(_winapi.DeregisterEventSource, handle)
-
-        _winapi.ReportEvent(handle, _winapi.EVENTLOG_SUCCESS, 1, 1002,
-                            "Test message 1")
-
-        with self.assertRaises(TypeError):
-            _winapi.ReportEvent(handle, _winapi.EVENTLOG_SUCCESS, 1, 1002, 42)
-
-        with self.assertRaises(TypeError):
-            _winapi.ReportEvent(handle, _winapi.EVENTLOG_SUCCESS, 1, 1002, None)
-
-        with self.assertRaises(ValueError):
-            _winapi.ReportEvent(handle, _winapi.EVENTLOG_SUCCESS, 1, 1002,
-                                "Test message \0 with embedded null character")

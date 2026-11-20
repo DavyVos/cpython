@@ -28,7 +28,7 @@ def recursive_repr(fillvalue='...'):
         wrapper.__doc__ = getattr(user_function, '__doc__')
         wrapper.__name__ = getattr(user_function, '__name__')
         wrapper.__qualname__ = getattr(user_function, '__qualname__')
-        wrapper.__annotate__ = getattr(user_function, '__annotate__', None)
+        wrapper.__annotations__ = getattr(user_function, '__annotations__', {})
         wrapper.__type_params__ = getattr(user_function, '__type_params__', ())
         wrapper.__wrapped__ = user_function
         return wrapper
@@ -66,10 +66,6 @@ class Repr:
         self.maxother = maxother
         self.fillvalue = fillvalue
         self.indent = indent
-
-    def __repr__(self):
-        args = ', '.join(f'{key}={value!r}' for key, value in self.__dict__.items())
-        return f'{type(self).__name__}({args})'
 
     def repr(self, x):
         return self.repr1(x, self.maxlevel)

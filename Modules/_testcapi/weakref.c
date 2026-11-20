@@ -21,21 +21,9 @@ pyweakref_getref(PyObject *module, PyObject *ref)
     }
 }
 
-static PyObject *
-pyweakref_isdead(PyObject *module, PyObject *obj)
-{
-    NULLABLE(obj);
-    int rc = PyWeakref_IsDead(obj);
-    if (rc == -1 && PyErr_Occurred()) {
-        return NULL;
-    }
-    return PyLong_FromLong(rc);
-}
-
 
 static PyMethodDef test_methods[] = {
     {"pyweakref_getref", pyweakref_getref, METH_O},
-    {"pyweakref_isdead", pyweakref_isdead, METH_O},
     {NULL},
 };
 

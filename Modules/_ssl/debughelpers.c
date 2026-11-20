@@ -26,8 +26,6 @@ _PySSL_msg_callback(int write_p, int version, int content_type,
         return;
     }
 
-    PyObject *exc = PyErr_GetRaisedException();
-
     PyObject *ssl_socket;  /* ssl.SSLSocket or ssl.SSLObject */
     if (ssl_obj->owner)
         PyWeakref_GetRef(ssl_obj->owner, &ssl_socket);
@@ -75,21 +73,19 @@ _PySSL_msg_callback(int write_p, int version, int content_type,
         version, content_type, msg_type,
         buf, len
     );
-    Py_XDECREF(res);
-    Py_XDECREF(ssl_socket);
-
-    if (exc != NULL) {
-        _PyErr_ChainExceptions1(exc);
+    if (res == NULL) {
+        ssl_obj->exc = PyErr_GetRaisedException();
+    } else {
+        Py_DECREF(res);
     }
+    Py_XDECREF(ssl_socket);
 
     PyGILState_Release(threadstate);
 }
 
 
 static PyObject *
-_PySSLContext_get_msg_callback(PyObject *op, void *Py_UNUSED(closure))
-{
-    PySSLContext *self = PySSLContext_CAST(op);
+_PySSLContext_get_msg_callback(PySSLContext *self, void *c) {
     if (self->msg_cb != NULL) {
         return Py_NewRef(self->msg_cb);
     } else {
@@ -98,14 +94,11 @@ _PySSLContext_get_msg_callback(PyObject *op, void *Py_UNUSED(closure))
 }
 
 static int
-_PySSLContext_set_msg_callback(PyObject *op, PyObject *arg,
-                               void *Py_UNUSED(closure))
-{
-    PySSLContext *self = PySSLContext_CAST(op);
+_PySSLContext_set_msg_callback(PySSLContext *self, PyObject *arg, void *c) {
     if (arg == NULL) {
         PyErr_Format(PyExc_AttributeError,
                      "attribute '_msg_callback' of '%.100s' objects "
-                     "cannot be deleted", Py_TYPE(op)->tp_name);
+                     "cannot be deleted", Py_TYPE(self)->tp_name);
         return -1;
     }
     if (arg != Py_None && !PyCallable_Check(arg)) {
@@ -132,19 +125,16 @@ _PySSL_keylog_callback(const SSL *ssl, const char *line)
 {
     PyGILState_STATE threadstate;
     PySSLSocket *ssl_obj = NULL;  /* ssl._SSLSocket, borrowed ref */
-    PyObject *exc;
     int res, e;
 
     threadstate = PyGILState_Ensure();
-
-    exc = PyErr_GetRaisedException();
 
     ssl_obj = (PySSLSocket *)SSL_get_app_data(ssl);
     assert(Py_IS_TYPE(ssl_obj, get_state_sock(ssl_obj)->PySSLSocket_Type));
     PyThread_type_lock lock = get_state_sock(ssl_obj)->keylog_lock;
     assert(lock != NULL);
     if (ssl_obj->ctx->keylog_bio == NULL) {
-        goto done;
+        return;
     }
     /*
      * The lock is neither released on exit nor on fork(). The lock is
@@ -166,19 +156,13 @@ _PySSL_keylog_callback(const SSL *ssl, const char *line)
         errno = e;
         PyErr_SetFromErrnoWithFilenameObject(PyExc_OSError,
                                              ssl_obj->ctx->keylog_filename);
-    }
-
-done:
-    if (exc != NULL) {
-        _PyErr_ChainExceptions1(exc);
+        ssl_obj->exc = PyErr_GetRaisedException();
     }
     PyGILState_Release(threadstate);
 }
 
 static PyObject *
-_PySSLContext_get_keylog_filename(PyObject *op, void *Py_UNUSED(closure))
-{
-    PySSLContext *self = PySSLContext_CAST(op);
+_PySSLContext_get_keylog_filename(PySSLContext *self, void *c) {
     if (self->keylog_filename != NULL) {
         return Py_NewRef(self->keylog_filename);
     } else {
@@ -187,26 +171,20 @@ _PySSLContext_get_keylog_filename(PyObject *op, void *Py_UNUSED(closure))
 }
 
 static int
-_PySSLContext_set_keylog_filename(PyObject *op, PyObject *arg,
-                                  void *Py_UNUSED(closure))
-{
+_PySSLContext_set_keylog_filename(PySSLContext *self, PyObject *arg, void *c) {
+    FILE *fp;
+
     if (arg == NULL) {
         PyErr_Format(PyExc_AttributeError,
                      "attribute 'keylog_filename' of '%.100s' objects "
-                     "cannot be deleted", Py_TYPE(op)->tp_name);
+                     "cannot be deleted", Py_TYPE(self)->tp_name);
         return -1;
     }
-#if defined(MS_WINDOWS_APP) && !defined(MS_WINDOWS_DESKTOP)
-    PyErr_SetString(PyExc_NotImplementedError,
-                    "set_keylog_filename: unavailable on UWP build");
-    return -1;
-#elif defined(MS_WINDOWS) && defined(Py_DEBUG)
+#if defined(MS_WINDOWS) && defined(_DEBUG)
     PyErr_SetString(PyExc_NotImplementedError,
                     "set_keylog_filename: unavailable on Windows debug build");
     return -1;
-#else
-    PySSLContext* self = PySSLContext_CAST(op);
-    FILE* fp;
+#endif
 
     /* Reset variables and callback first */
     SSL_CTX_set_keylog_callback(self->ctx, NULL);
@@ -225,14 +203,13 @@ _PySSLContext_set_keylog_filename(PyObject *op, PyObject *arg,
         return 0;
     }
 
-    /* Py_fopen() also checks that arg is of proper type. */
-    fp = Py_fopen(arg, "a" PY_STDIOTEXTMODE);
+    /* _Py_fopen_obj() also checks that arg is of proper type. */
+    fp = _Py_fopen_obj(arg, "a" PY_STDIOTEXTMODE);
     if (fp == NULL)
         return -1;
 
     self->keylog_bio = BIO_new_fp(fp, BIO_CLOSE | BIO_FP_TEXT);
     if (self->keylog_bio == NULL) {
-        fclose(fp);
         PyErr_SetString(get_state_ctx(self)->PySSLErrorObject,
                         "Can't malloc memory for keylog file");
         return -1;
@@ -249,5 +226,4 @@ _PySSLContext_set_keylog_filename(PyObject *op, PyObject *arg,
     PySSL_END_ALLOW_THREADS(self)
     SSL_CTX_set_keylog_callback(self->ctx, _PySSL_keylog_callback);
     return 0;
-#endif
 }

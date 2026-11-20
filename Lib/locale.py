@@ -13,9 +13,14 @@ also includes default encodings for all supported locale names.
 import sys
 import encodings
 import encodings.aliases
+import re
 import _collections_abc
 from builtins import str as _builtin_str
 import functools
+
+# Try importing the _locale module.
+#
+# If this fails, fall back on a basic 'C' locale emulation.
 
 # Yuck:  LC_MESSAGES is non-standard:  can't tell whether it exists before
 # trying the import.  So __all__ is also fiddled at the end of the file.
@@ -23,8 +28,7 @@ __all__ = ["getlocale", "getdefaultlocale", "getpreferredencoding", "Error",
            "setlocale", "localeconv", "strcoll", "strxfrm",
            "str", "atof", "atoi", "format_string", "currency",
            "normalize", "LC_CTYPE", "LC_COLLATE", "LC_TIME", "LC_MONETARY",
-           "LC_NUMERIC", "LC_ALL", "CHAR_MAX", "getencoding", "delocalize",
-           "localize"]
+           "LC_NUMERIC", "LC_ALL", "CHAR_MAX", "getencoding"]
 
 def _strcoll(a,b):
     """ strcoll(string,string) -> int.
@@ -38,9 +42,6 @@ def _strxfrm(s):
     """
     return s
 
-# Try importing the _locale module.
-#
-# If this fails, fall back on a basic 'C' locale emulation.
 try:
 
     from _locale import *
@@ -90,29 +91,6 @@ except ImportError:
         if value not in (None, '', 'C'):
             raise Error('_locale emulation only supports "C" locale')
         return 'C'
-
-else:
-    _conditional_constants_names = ["ABDAY_1", "ABDAY_2", "ABDAY_3",
-                                    "ABDAY_4", "ABDAY_5", "ABDAY_6",
-                                    "ABDAY_7", "ABMON_1", "ABMON_10",
-                                    "ABMON_11", "ABMON_12", "ABMON_2",
-                                    "ABMON_3", "ABMON_4", "ABMON_5",
-                                    "ABMON_6", "ABMON_7", "ABMON_8",
-                                    "ABMON_9", "ALT_DIGITS", "CODESET",
-                                    "CRNCYSTR", "DAY_1", "DAY_2", "DAY_3",
-                                    "DAY_4", "DAY_5", "DAY_6",
-                                    "DAY_7", "D_FMT", "D_T_FMT",
-                                    "ERA", "ERA_D_FMT", "ERA_D_T_FMT",
-                                    "ERA_T_FMT", "MON_1", "MON_10",
-                                    "MON_11", "MON_12", "MON_2", "MON_3",
-                                    "MON_4", "MON_5", "MON_6", "MON_7",
-                                    "MON_8", "MON_9", "NOEXPR",
-                                    "RADIXCHAR", "THOUSEP", "T_FMT",
-                                    "T_FMT_AMPM", "YESEXPR", "AM_STR",
-                                    "PM_STR"]
-    # The constants defined in _locale are platform-dependent,
-    # so we only include those that are available on the current platform.
-    __all__.extend(vars().keys() & _conditional_constants_names)
 
 # These may or may not exist in _locale, so be sure to set them.
 if 'strxfrm' not in globals():
@@ -199,7 +177,8 @@ def _strip_padding(s, amount):
         amount -= 1
     return s[lpos:rpos+1]
 
-_percent_re = None
+_percent_re = re.compile(r'%(?:\((?P<key>.*?)\))?'
+                         r'(?P<modifiers>[-#0-9 +*.hlL]*?)[eEfFgGdiouxXcrs%]')
 
 def _format(percent, value, grouping=False, monetary=False, *additional):
     if additional:
@@ -237,14 +216,7 @@ def format_string(f, val, grouping=False, monetary=False):
 
     Grouping is applied if the third parameter is true.
     Conversion uses monetary thousands separator and grouping strings if
-    fourth parameter monetary is true."""
-    global _percent_re
-    if _percent_re is None:
-        import re
-
-        _percent_re = re.compile(r'%(?:\((?P<key>.*?)\))?(?P<modifiers'
-                                 r'>[-#0-9 +*.hlL]*?)[eEfFgGdiouxXcrs%]')
-
+    forth parameter monetary is true."""
     percents = list(_percent_re.finditer(f))
     new_f = _percent_re.sub('%s', f)
 
@@ -398,14 +370,12 @@ def _replace_encoding(code, encoding):
 def _append_modifier(code, modifier):
     if modifier == 'euro':
         if '.' not in code:
-            # Linux appears to require keeping the "@euro" modifier in place,
-            # even when using the ".ISO8859-15" encoding.
-            return code + '.ISO8859-15@euro'
+            return code + '.ISO8859-15'
         _, _, encoding = code.partition('.')
-        if encoding == 'UTF-8':
+        if encoding in ('ISO8859-15', 'UTF-8'):
             return code
         if encoding == 'ISO8859-1':
-            code = _replace_encoding(code, 'ISO8859-15')
+            return _replace_encoding(code, 'ISO8859-15')
     return code + '@' + modifier
 
 def normalize(localename):
@@ -510,18 +480,13 @@ def _parse_localename(localename):
         # Deal with locale modifiers
         code, modifier = code.split('@', 1)
         if modifier == 'euro' and '.' not in code:
-            # Assume ISO8859-15 for @euro locales. Do note that some systems
-            # may use other encodings for these locales, so this may not always
-            # be correct.
-            return code + '@euro', 'ISO8859-15'
-    else:
-        modifier = ''
+            # Assume Latin-9 for @euro locales. This is bogus,
+            # since some systems may use other encodings for these
+            # locales. Also, we ignore other modifiers.
+            return code, 'iso-8859-15'
 
     if '.' in code:
-        code, encoding = code.split('.')[:2]
-        if modifier:
-            code += '@' + modifier
-        return code, encoding
+        return tuple(code.split('.')[:2])
     elif code == 'C':
         return None, None
     elif code == 'UTF-8':
@@ -546,14 +511,7 @@ def _build_localename(localetuple):
         if encoding is None:
             return language
         else:
-            if '@' in language:
-                language, modifier = language.split('@', 1)
-            else:
-                modifier = ''
-            localename = language + '.' + encoding
-            if modifier:
-                localename += '@' + modifier
-            return localename
+            return language + '.' + encoding
     except (TypeError, ValueError):
         raise TypeError('Locale must be None, a string, or an iterable of '
                         'two strings -- language code, encoding.') from None
@@ -593,6 +551,10 @@ def _getdefaultlocale(envvars=('LC_ALL', 'LC_CTYPE', 'LANG', 'LANGUAGE')):
     except (ImportError, AttributeError):
         pass
     else:
+        # make sure the code/encoding values are valid
+        if sys.platform == "win32" and code and code[:2] == "0x":
+            # map windows language identifier to language name
+            code = windows_locale.get(int(code, 0))
         # ...add other platform-specific processing here, if
         # necessary...
         return code, encoding
@@ -678,8 +640,7 @@ else:
         if sys.flags.warn_default_encoding:
             import warnings
             warnings.warn(
-                "UTF-8 Mode affects locale.getpreferredencoding(). "
-                "Consider locale.getencoding() instead.",
+                "UTF-8 Mode affects locale.getpreferredencoding(). Consider locale.getencoding() instead.",
                 EncodingWarning, 2)
         if sys.flags.utf8_mode:
             return 'utf-8'
@@ -915,12 +876,6 @@ del k, v
 # SS 2025-06-10:
 # Remove 'c.utf8' -> 'en_US.UTF-8' because 'en_US.UTF-8' does not exist
 # on all platforms.
-#
-# SS 2025-07-30:
-# Remove conflicts with GNU libc.
-#
-#    removed 'el_gr@euro'
-#    removed 'uz_uz@cyrillic'
 
 locale_alias = {
     'a3':                                   'az_AZ.KOI8-C',
@@ -1054,6 +1009,7 @@ locale_alias = {
     'el':                                   'el_GR.ISO8859-7',
     'el_cy':                                'el_CY.ISO8859-7',
     'el_gr':                                'el_GR.ISO8859-7',
+    'el_gr@euro':                           'el_GR.ISO8859-15',
     'en':                                   'en_US.ISO8859-1',
     'en_ag':                                'en_AG.UTF-8',
     'en_au':                                'en_AU.ISO8859-1',
@@ -1488,6 +1444,7 @@ locale_alias = {
     'ur_pk':                                'ur_PK.CP1256',
     'uz':                                   'uz_UZ.UTF-8',
     'uz_uz':                                'uz_UZ.UTF-8',
+    'uz_uz@cyrillic':                       'uz_UZ.UTF-8',
     've':                                   've_ZA.UTF-8',
     've_za':                                've_ZA.UTF-8',
     'vi':                                   'vi_VN.TCVN',

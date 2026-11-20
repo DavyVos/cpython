@@ -1,6 +1,7 @@
 :mod:`!unittest.mock` --- getting started
 =========================================
 
+.. moduleauthor:: Michael Foord <michael@python.org>
 .. currentmodule:: unittest.mock
 
 .. versionadded:: 3.3
@@ -481,7 +482,7 @@ You can stack up multiple patch decorators using this pattern::
 When you nest patch decorators the mocks are passed in to the decorated
 function in the same order they applied (the normal *Python* order that
 decorators are applied). This means from the bottom up, so in the example
-above the mock for ``package.module.ClassName2`` is passed in first.
+above the mock for ``test_module.ClassName2`` is passed in first.
 
 There is also :func:`patch.dict` for setting values in a dictionary just
 during a scope and restoring the dictionary to its original state when the test
@@ -642,7 +643,7 @@ Mocking a generator method
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A Python generator is a function or method that uses the :keyword:`yield` statement
-to return a series of values when iterated over.
+to return a series of values when iterated over [#]_.
 
 A generator method / function is called to return the generator object. It is
 the generator object that is then iterated over. The protocol method for
@@ -670,6 +671,12 @@ To configure the values returned from the iteration (implicit in the call to
     >>> mock_foo.iter.return_value = iter([1, 2, 3])
     >>> list(mock_foo.iter())
     [1, 2, 3]
+
+.. [#] There are also generator expressions and more `advanced uses
+    <http://www.dabeaz.com/coroutines/index.html>`_ of generators, but we aren't
+    concerned about them here. A very good introduction to generators and how
+    powerful they are is: `Generator Tricks for Systems Programmers
+    <http://www.dabeaz.com/generators/>`_.
 
 
 Applying the same patch to every test method
@@ -856,9 +863,9 @@ Here's one solution that uses the :attr:`~Mock.side_effect`
 functionality. If you provide a ``side_effect`` function for a mock then
 ``side_effect`` will be called with the same args as the mock. This gives us an
 opportunity to copy the arguments and store them for later assertions. In this
-example we're using *another* mock to store the arguments so that we can use the
+example I'm using *another* mock to store the arguments so that I can use the
 mock methods for doing the assertion. Again a helper function sets this up for
-us. ::
+me. ::
 
     >>> from copy import deepcopy
     >>> from unittest.mock import Mock, patch, DEFAULT

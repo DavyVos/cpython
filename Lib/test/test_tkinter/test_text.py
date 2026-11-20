@@ -26,18 +26,6 @@ class TextTest(AbstractTkTest, unittest.TestCase):
             text.debug(olddebug)
             self.assertEqual(text.debug(), olddebug)
 
-    def test_sync(self):
-        text = self.text
-        # sync() returns None and brings line metrics up to date.
-        self.assertIsNone(text.sync())
-        self.assertIs(text.pendingsync(), False)
-
-        # sync(command) schedules a one-shot callback.
-        events = []
-        text.sync(command=lambda: events.append('synced'))
-        text.update()
-        self.assertEqual(events, ['synced'])
-
     def test_index(self):
         text = self.text
         text.insert('1.0', 'Lorem ipsum\ndolor sit amet')
@@ -293,13 +281,13 @@ class TextTest(AbstractTkTest, unittest.TestCase):
 
     def test_edit_modified(self):
         text = self.text
-        self.assertIs(text.edit_modified(), False)
+        self.assertEqual(text.edit_modified(), 0)
         text.insert('1.0', 'spam')
-        self.assertIs(text.edit_modified(), True)
+        self.assertEqual(text.edit_modified(), 1)
         text.edit_modified(False)
-        self.assertIs(text.edit_modified(), False)
+        self.assertEqual(text.edit_modified(), 0)
         text.edit_modified(True)
-        self.assertIs(text.edit_modified(), True)
+        self.assertEqual(text.edit_modified(), 1)
 
     def test_edit_undo_redo(self):
         text = self.text
@@ -317,29 +305,6 @@ class TextTest(AbstractTkTest, unittest.TestCase):
         # An empty undo stack raises.
         text.edit_reset()
         self.assertRaises(TclError, text.edit_undo)
-
-    def test_edit_canundo_canredo(self):
-        text = self.text
-        text.configure(undo=True)
-
-        self.assertIs(text.edit_canundo(), False)
-        self.assertIs(text.edit_canredo(), False)
-
-        text.insert('1.0', 'spam')
-        self.assertIs(text.edit_canundo(), True)
-        self.assertIs(text.edit_canredo(), False)
-
-        text.edit_undo()
-        self.assertIs(text.edit_canundo(), False)
-        self.assertIs(text.edit_canredo(), True)
-
-        text.edit_redo()
-        self.assertIs(text.edit_canundo(), True)
-        self.assertIs(text.edit_canredo(), False)
-
-        text.edit_reset()
-        self.assertIs(text.edit_canundo(), False)
-        self.assertIs(text.edit_canredo(), False)
 
     def test_dump(self):
         text = self.text
@@ -389,9 +354,6 @@ class TextTest(AbstractTkTest, unittest.TestCase):
         # An embedded image occupies a single index position.
         self.assertEqual(text.index('end - 1 char'), '1.3')
 
-        # The image name can be used as an index; it is matched as a whole.
-        self.assertEqual(text.index(name), '1.1')
-
         # Either a name or an image is required, and the index must be valid.
         self.assertRaises(TclError, text.image_create, '1.0')
         self.assertRaises(TclError, text.image_create, 'invalid',
@@ -407,11 +369,6 @@ class TextTest(AbstractTkTest, unittest.TestCase):
         self.assertEqual(self.root.splitlist(text.window_names()),
                          (str(button),))
         self.assertEqual(text.window_cget('1.1', 'window'), str(button))
-
-        # The window can be addressed by its name where an index is expected;
-        # the name is matched as a whole rather than parsed (gh-143070).
-        self.assertEqual(text.index(str(button)), '1.1')
-        self.assertEqual(text.window_cget(str(button), 'window'), str(button))
 
         text.window_configure('1.1', padx=5)
         self.assertEqual(text.window_cget('1.1', 'padx'), 5)
@@ -516,12 +473,10 @@ class TextTest(AbstractTkTest, unittest.TestCase):
         self.assertEqual(str(text.image_cget(name, 'image')), str(image))
         for value in ('top', 'center', 'bottom', 'baseline'):
             text.image_configure(name, align=value)
-            self.assertEqual(text.image_cget(name, 'align'), value)
+            self.assertEqual(str(text.image_cget(name, 'align')), value)
         text.image_configure(name, padx=3, pady=4)
-        self.assertEqual(text.image_cget(name, 'padx'),
-                         3 if self.wantobjects else '3')
-        self.assertEqual(text.image_cget(name, 'pady'),
-                         4 if self.wantobjects else '4')
+        self.assertEqual(text.tk.getint(text.image_cget(name, 'padx')), 3)
+        self.assertEqual(text.tk.getint(text.image_cget(name, 'pady')), 4)
 
         # Querying returns the full option set.
         cnf = text.image_configure(name)
@@ -538,12 +493,10 @@ class TextTest(AbstractTkTest, unittest.TestCase):
         self.assertEqual(text.window_cget('1.1', 'window'), str(button))
         for value in ('top', 'center', 'bottom', 'baseline'):
             text.window_configure('1.1', align=value)
-            self.assertEqual(text.window_cget('1.1', 'align'), value)
+            self.assertEqual(str(text.window_cget('1.1', 'align')), value)
         text.window_configure('1.1', padx=3, pady=4)
-        self.assertEqual(text.window_cget('1.1', 'padx'),
-                         3 if self.wantobjects else '3')
-        self.assertEqual(text.window_cget('1.1', 'pady'),
-                         4 if self.wantobjects else '4')
+        self.assertEqual(text.tk.getint(text.window_cget('1.1', 'padx')), 3)
+        self.assertEqual(text.tk.getint(text.window_cget('1.1', 'pady')), 4)
         text.window_configure('1.1', stretch=True)
         self.assertIs(text.tk.getboolean(text.window_cget('1.1', 'stretch')),
                       True)
@@ -627,8 +580,6 @@ class TextTest(AbstractTkTest, unittest.TestCase):
         self.assertRaises(TclError, text.search, '', 0)
         self.assertRaises(TclError, text.search, '', '')
         self.assertRaises(TclError, text.search, '', 'invalid')
-        self.assertRaises(TclError, text.search, '', '1.0', 0)
-        self.assertRaises(TclError, text.search, '', '1.0', '')
         self.assertRaises(TclError, text.search, '', '1.0', 'invalid')
 
         text.insert('1.0',
@@ -661,78 +612,9 @@ class TextTest(AbstractTkTest, unittest.TestCase):
         self.assertEqual(text.search('TEST', '1.0'), '')
         self.assertEqual(text.search('TEST', '1.0', nocase=True), '1.10')
 
-        self.assertEqual(text.search('.*line', '1.0', regexp=True), '2.0')
-        self.assertEqual(text.search('.*line', '1.0', regexp=True, nolinestop=True), '1.0')
-
-        self.assertEqual(text.search('test', '1.0', '1.13'), '1.10')
-        self.assertEqual(text.search('test', '1.0', '1.13', strictlimits=True), '')
-        self.assertEqual(text.search('test', '1.0', '1.14', strictlimits=True), '1.10')
-
         var = tkinter.Variable(self.root)
         self.assertEqual(text.search('test', '1.0', count=var), '1.10')
         self.assertEqual(var.get(), 4 if self.wantobjects else '4')
-
-        # TODO: Add test for elide=True
-
-    def test_search_all(self):
-        text = self.text
-
-        # pattern and index are obligatory arguments.
-        self.assertRaises(TclError, text.search_all, None, '1.0')
-        self.assertRaises(TclError, text.search_all, 'a', None)
-        self.assertRaises(TclError, text.search_all, None, None)
-
-        # Keyword-only arguments
-        self.assertRaises(TypeError, text.search_all, 'a', '1.0', 'end', None)
-
-        # Invalid text index.
-        self.assertRaises(TclError, text.search_all, '', 0)
-        self.assertRaises(TclError, text.search_all, '', '')
-        self.assertRaises(TclError, text.search_all, '', 'invalid')
-        self.assertRaises(TclError, text.search_all, '', '1.0', 0)
-        self.assertRaises(TclError, text.search_all, '', '1.0', '')
-        self.assertRaises(TclError, text.search_all, '', '1.0', 'invalid')
-
-        def eq(res, expected):
-            self.assertIsInstance(res, tuple)
-            self.assertEqual([str(i) for i in res], expected)
-
-        text.insert('1.0', 'ababa\naba\n64-bit')
-
-        eq(text.search_all('aba', '1.0'), ['1.0', '2.0'])
-        eq(text.search_all('aba', '1.0', 'end'), ['1.0', '2.0'])
-        eq(text.search_all('aba', '1.1', 'end'), ['1.2', '2.0'])
-        eq(text.search_all('aba', '1.1'), ['1.2', '2.0', '1.0'])
-
-        res = text.search_all('', '1.0')  # empty pattern
-        eq(res[:5], ['1.0', '1.1', '1.2', '1.3', '1.4'])
-        eq(res[-5:], ['3.2', '3.3', '3.4', '3.5', '3.6'])
-        eq(text.search_all('nonexistent', '1.0'), [])
-        eq(text.search_all('-bit', '1.0'), ['3.2'])  # starts with a hyphen
-
-        eq(text.search_all('aba', '1.0', 'end', forwards=True), ['1.0', '2.0'])
-        eq(text.search_all('aba', 'end', '1.0', backwards=True), ['2.0', '1.2'])
-
-        eq(text.search_all('aba', '1.0', overlap=True), ['1.0', '1.2', '2.0'])
-        eq(text.search_all('aba', 'end', '1.0', overlap=True, backwards=True), ['2.0', '1.2', '1.0'])
-
-        eq(text.search_all('aba', '1.0', exact=True), ['1.0', '2.0'])
-        eq(text.search_all('a.a', '1.0', exact=True), [])
-        eq(text.search_all('a.a', '1.0', regexp=True), ['1.0', '2.0'])
-
-        eq(text.search_all('ABA', '1.0'), [])
-        eq(text.search_all('ABA', '1.0', nocase=True), ['1.0', '2.0'])
-
-        eq(text.search_all('a.a', '1.0', regexp=True), ['1.0', '2.0'])
-        eq(text.search_all('a.a', '1.0', regexp=True, nolinestop=True), ['1.0', '1.4'])
-
-        eq(text.search_all('aba', '1.0', '2.2'), ['1.0', '2.0'])
-        eq(text.search_all('aba', '1.0', '2.2', strictlimits=True), ['1.0'])
-        eq(text.search_all('aba', '1.0', '2.3', strictlimits=True), ['1.0', '2.0'])
-
-        var = tkinter.Variable(self.root)
-        eq(text.search_all('aba', '1.0', count=var), ['1.0', '2.0'])
-        self.assertEqual(var.get(), (3, 3) if self.wantobjects else '3 3')
 
         # TODO: Add test for elide=True
 
@@ -774,16 +656,10 @@ class TextTest(AbstractTkTest, unittest.TestCase):
         self.assertRaises(TclError, text.count, '1.0', 'end', 'spam')
         self.assertRaises(TclError, text.count, '1.0', 'end', '-lines')
 
-        # The ypixels counts depend on the widget geometry.
-        text.update()
-
-        # Indices on the same display line have zero vertical distance.
-        self.assertEqual(text.count('1.3', '1.5', 'ypixels', return_ints=True), 0)
-        self.assertIsNone(text.count('1.3', '1.5', 'ypixels'))
-        self.assertIsInstance(text.count('1.3', '2.5', 'ypixels', return_ints=True), int)
-        self.assertIsInstance(text.count('1.3', '2.5', 'ypixels'), tuple)
-        self.assertIsInstance(text.count('1.3', '2.5', 'update', 'ypixels', return_ints=True), int)
-        self.assertIsInstance(text.count('1.3', '2.5', 'update', 'ypixels'), int)
+        self.assertIsInstance(text.count('1.3', '1.5', 'ypixels', return_ints=True), int)
+        self.assertIsInstance(text.count('1.3', '1.5', 'ypixels'), tuple)
+        self.assertIsInstance(text.count('1.3', '1.5', 'update', 'ypixels', return_ints=True), int)
+        self.assertIsInstance(text.count('1.3', '1.5', 'update', 'ypixels'), int)
         self.assertEqual(text.count('1.3', '1.3', 'update', 'ypixels', return_ints=True), 0)
         self.assertEqual(text.count('1.3', '1.3', 'update', 'ypixels'), None)
         self.assertEqual(text.count('1.3', '1.5', 'update', 'indices', return_ints=True), 2)

@@ -119,7 +119,7 @@ class StartupTests(TestBase):
         # The main interpreter's sys.path[0] should be used by subinterpreters.
         script = '''
             import sys
-            from concurrent import interpreters
+            from test.support import interpreters
 
             orig = sys.path[0]
 
@@ -132,7 +132,6 @@ class StartupTests(TestBase):
                     'sub': sys.path[0],
                 }}, indent=4), flush=True)
                 """)
-            interp.close()
             '''
         # <tmp>/
         #   pkg/
@@ -171,12 +170,9 @@ class FinalizationTests(TestBase):
         # is reported, even when subinterpreters get cleaned up at the end.
         import subprocess
         argv = [sys.executable, '-c', '''if True:
-            from concurrent import interpreters
+            from test.support import interpreters
             interp = interpreters.create()
-            try:
-                raise Exception
-            finally:
-                interp.close()
+            raise Exception
             ''']
         proc = subprocess.run(argv, capture_output=True, text=True)
         self.assertIn('Traceback', proc.stderr)

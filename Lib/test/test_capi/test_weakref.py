@@ -73,21 +73,6 @@ class CAPIWeakrefTest(unittest.TestCase):
         self.assertRaises(TypeError, getref, 42)
         self.assertRaises(SystemError, getref, NULL)
 
-    def test_pyweakref_isdead(self):
-        # Test PyWeakref_IsDead()
-        isdead = _testcapi.pyweakref_isdead
-        obj = Object()
-        wr = weakref.ref(obj)
-        wp = weakref.proxy(obj)
-        self.assertEqual(isdead(wr), 0)
-        self.assertEqual(isdead(wp), 0)
-        del obj
-        self.assertEqual(isdead(wr), 1)
-        self.assertEqual(isdead(wp), 1)
-
-        self.assertRaises(TypeError, isdead, 42)
-        self.assertRaises(SystemError, isdead, NULL)
-
     def test_pyweakref_newref(self):
         # Test PyWeakref_NewRef()
         newref = _testlimitedcapi.pyweakref_newref
@@ -97,7 +82,6 @@ class CAPIWeakrefTest(unittest.TestCase):
         # PyWeakref_NewRef() handles None callback as NULL callback
         wr = newref(obj, None)
         self.assertIs(type(wr), weakref.ReferenceType)
-        self.assertRaises(TypeError, newref, obj, 42)
         log = []
         wr = newref(obj, log.append)
         self.assertIs(type(wr), weakref.ReferenceType)
@@ -117,7 +101,6 @@ class CAPIWeakrefTest(unittest.TestCase):
         # PyWeakref_NewProxy() handles None callback as NULL callback
         wp = newproxy(obj, None)
         self.assertIs(type(wp), weakref.ProxyType)
-        self.assertRaises(TypeError, newproxy, obj, 42)
         log = []
         wp = newproxy(obj, log.append)
         self.assertIs(type(wp), weakref.ProxyType)

@@ -7,11 +7,8 @@ from test import support
 if support.PGO:
     raise unittest.SkipTest("test is not helpful for PGO")
 
-if sys.platform in ("win32", "cygwin"):
+if sys.platform == "win32":
     raise unittest.SkipTest("forkserver is not available on Windows")
-
-if not support.has_fork_support:
-    raise unittest.SkipTest("requires working os.fork()")
 
 # The forkserver start method requires passing file descriptors over a Unix
 # socket, which is not available on every platform (e.g. Solaris/illumos).

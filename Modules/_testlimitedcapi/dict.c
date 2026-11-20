@@ -32,7 +32,6 @@ dictproxy_new(PyObject *self, PyObject *obj)
 static PyObject *
 dict_clear(PyObject *self, PyObject *obj)
 {
-    NULLABLE(obj);
     PyDict_Clear(obj);
     Py_RETURN_NONE;
 }

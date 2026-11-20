@@ -1384,7 +1384,7 @@ class PyShell(OutputWindow):
             self.text.see("insert")
             self.text.undo_block_stop()
 
-    _last_newline_re = re.compile(r"[ \t]*(\n[ \t]*)?\z")
+    _last_newline_re = re.compile(r"[ \t]*(\n[ \t]*)?\Z")
     def runit(self):
         index_before = self.text.index("end-2c")
         line = self.text.get("iomark", "end-1c")

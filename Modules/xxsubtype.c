@@ -26,26 +26,21 @@ typedef struct {
     int state;
 } spamlistobject;
 
-#define _spamlistobject_CAST(op)    ((spamlistobject *)(op))
-
 static PyObject *
-spamlist_getstate(PyObject *op, PyObject *args)
+spamlist_getstate(spamlistobject *self, PyObject *args)
 {
-    if (!PyArg_ParseTuple(args, ":getstate")) {
+    if (!PyArg_ParseTuple(args, ":getstate"))
         return NULL;
-    }
-    spamlistobject *self = _spamlistobject_CAST(op);
     return PyLong_FromLong(self->state);
 }
 
 static PyObject *
-spamlist_setstate(PyObject *op, PyObject *args)
+spamlist_setstate(spamlistobject *self, PyObject *args)
 {
     int state;
-    if (!PyArg_ParseTuple(args, "i:setstate", &state)) {
+
+    if (!PyArg_ParseTuple(args, "i:setstate", &state))
         return NULL;
-    }
-    spamlistobject *self = _spamlistobject_CAST(op);
     self->state = state;
     return Py_NewRef(Py_None);
 }
@@ -68,9 +63,9 @@ spamlist_specialmeth(PyObject *self, PyObject *args, PyObject *kw)
 }
 
 static PyMethodDef spamlist_methods[] = {
-    {"getstate", spamlist_getstate, METH_VARARGS,
+    {"getstate", (PyCFunction)spamlist_getstate, METH_VARARGS,
         PyDoc_STR("getstate() -> state")},
-    {"setstate", spamlist_setstate, METH_VARARGS,
+    {"setstate", (PyCFunction)spamlist_setstate, METH_VARARGS,
         PyDoc_STR("setstate(state)")},
     /* These entries differ only in the flags; they are used by the tests
        in test.test_descr. */
@@ -84,25 +79,22 @@ static PyMethodDef spamlist_methods[] = {
 };
 
 static int
-spamlist_init(PyObject *op, PyObject *args, PyObject *kwds)
+spamlist_init(spamlistobject *self, PyObject *args, PyObject *kwds)
 {
-    if (PyList_Type.tp_init(op, args, kwds) < 0) {
+    if (PyList_Type.tp_init((PyObject *)self, args, kwds) < 0)
         return -1;
-    }
-    spamlistobject *self = _spamlistobject_CAST(op);
     self->state = 0;
     return 0;
 }
 
 static PyObject *
-spamlist_state_get(PyObject *op, void *Py_UNUSED(closure))
+spamlist_state_get(spamlistobject *self, void *Py_UNUSED(ignored))
 {
-    spamlistobject *self = _spamlistobject_CAST(op);
     return PyLong_FromLong(self->state);
 }
 
 static PyGetSetDef spamlist_getsets[] = {
-    {"state", spamlist_state_get, NULL,
+    {"state", (getter)spamlist_state_get, NULL,
      PyDoc_STR("an int variable for demonstration purposes")},
     {0}
 };
@@ -143,7 +135,7 @@ static PyTypeObject spamlist_type = {
     0,                                          /* tp_descr_get */
     0,                                          /* tp_descr_set */
     0,                                          /* tp_dictoffset */
-    spamlist_init,                              /* tp_init */
+    (initproc)spamlist_init,                    /* tp_init */
     0,                                          /* tp_alloc */
     0,                                          /* tp_new */
 };
@@ -155,46 +147,38 @@ typedef struct {
     int state;
 } spamdictobject;
 
-#define _spamdictobject_CAST(op)    ((spamdictobject *)(op))
-
 static PyObject *
-spamdict_getstate(PyObject *op, PyObject *args)
+spamdict_getstate(spamdictobject *self, PyObject *args)
 {
-    if (!PyArg_ParseTuple(args, ":getstate")) {
+    if (!PyArg_ParseTuple(args, ":getstate"))
         return NULL;
-    }
-    spamdictobject *self = _spamdictobject_CAST(op);
     return PyLong_FromLong(self->state);
 }
 
 static PyObject *
-spamdict_setstate(PyObject *op, PyObject *args)
+spamdict_setstate(spamdictobject *self, PyObject *args)
 {
     int state;
-    if (!PyArg_ParseTuple(args, "i:setstate", &state)) {
-        return NULL;
-    }
 
-    spamdictobject *self = _spamdictobject_CAST(op);
+    if (!PyArg_ParseTuple(args, "i:setstate", &state))
+        return NULL;
     self->state = state;
     return Py_NewRef(Py_None);
 }
 
 static PyMethodDef spamdict_methods[] = {
-    {"getstate", spamdict_getstate, METH_VARARGS,
+    {"getstate", (PyCFunction)spamdict_getstate, METH_VARARGS,
         PyDoc_STR("getstate() -> state")},
-    {"setstate", spamdict_setstate, METH_VARARGS,
+    {"setstate", (PyCFunction)spamdict_setstate, METH_VARARGS,
         PyDoc_STR("setstate(state)")},
     {NULL,      NULL},
 };
 
 static int
-spamdict_init(PyObject *op, PyObject *args, PyObject *kwds)
+spamdict_init(spamdictobject *self, PyObject *args, PyObject *kwds)
 {
-    if (PyDict_Type.tp_init(op, args, kwds) < 0) {
+    if (PyDict_Type.tp_init((PyObject *)self, args, kwds) < 0)
         return -1;
-    }
-    spamdictobject *self = _spamdictobject_CAST(op);
     self->state = 0;
     return 0;
 }
@@ -241,7 +225,7 @@ static PyTypeObject spamdict_type = {
     0,                                          /* tp_descr_get */
     0,                                          /* tp_descr_set */
     0,                                          /* tp_dictoffset */
-    spamdict_init,                              /* tp_init */
+    (initproc)spamdict_init,                    /* tp_init */
     0,                                          /* tp_alloc */
     0,                                          /* tp_new */
 };
@@ -301,10 +285,7 @@ xxsubtype_exec(PyObject* m)
     return 0;
 }
 
-PyABIInfo_VAR(abi_info);
-
 static struct PyModuleDef_Slot xxsubtype_slots[] = {
-    {Py_mod_abi, &abi_info},
     {Py_mod_exec, xxsubtype_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {Py_mod_gil, Py_MOD_GIL_NOT_USED},

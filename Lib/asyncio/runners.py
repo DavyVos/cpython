@@ -3,7 +3,6 @@ __all__ = ('Runner', 'run')
 import contextvars
 import enum
 import functools
-import inspect
 import threading
 import signal
 from . import coroutines
@@ -27,7 +26,6 @@ class Runner:
 
     If debug is True, the event loop will be run in debug mode.
     If loop_factory is passed, it is used for new event loop creation.
-    If eager_tasks is True, the loop creates eager tasks by default.
 
     asyncio.run(main(), debug=True)
 
@@ -48,11 +46,10 @@ class Runner:
 
     # Note: the class is final, it is not intended for inheritance.
 
-    def __init__(self, *, debug=None, loop_factory=None, eager_tasks=False):
+    def __init__(self, *, debug=None, loop_factory=None):
         self._state = _State.CREATED
         self._debug = debug
         self._loop_factory = loop_factory
-        self._eager_tasks = eager_tasks
         self._loop = None
         self._context = None
         self._interrupt_count = 0
@@ -88,7 +85,10 @@ class Runner:
         return self._loop
 
     def run(self, coro, *, context=None):
-        """Run code in the embedded event loop."""
+        """Run a coroutine inside the embedded event loop."""
+        if not coroutines.iscoroutine(coro):
+            raise ValueError("a coroutine was expected, got {!r}".format(coro))
+
         if events._get_running_loop() is not None:
             # fail fast with short traceback
             raise RuntimeError(
@@ -96,19 +96,8 @@ class Runner:
 
         self._lazy_init()
 
-        if not coroutines.iscoroutine(coro):
-            if inspect.isawaitable(coro):
-                async def _wrap_awaitable(awaitable):
-                    return await awaitable
-
-                coro = _wrap_awaitable(coro)
-            else:
-                raise TypeError('An asyncio.Future, a coroutine or an '
-                                'awaitable is required')
-
         if context is None:
             context = self._context
-
         task = self._loop.create_task(coro, context=context)
 
         if (threading.current_thread() is threading.main_thread()
@@ -156,8 +145,6 @@ class Runner:
             self._loop = self._loop_factory()
         if self._debug is not None:
             self._loop.set_debug(self._debug)
-        if self._eager_tasks:
-            self._loop.set_task_factory(tasks.eager_task_factory)
         self._context = contextvars.copy_context()
         self._state = _State.INITIALIZED
 
@@ -171,7 +158,7 @@ class Runner:
         raise KeyboardInterrupt()
 
 
-def run(main, *, debug=None, loop_factory=None, eager_tasks=False):
+def run(main, *, debug=None, loop_factory=None):
     """Execute the coroutine and return the result.
 
     This function runs the passed coroutine, taking care of
@@ -183,7 +170,6 @@ def run(main, *, debug=None, loop_factory=None, eager_tasks=False):
 
     If debug is True, the event loop will be run in debug mode.
     If loop_factory is passed, it is used for new event loop creation.
-    If eager_tasks is True, the loop creates eager tasks by default.
 
     This function always creates a new event loop and closes it at the end.
     It should be used as a main entry point for asyncio programs, and should
@@ -206,8 +192,7 @@ def run(main, *, debug=None, loop_factory=None, eager_tasks=False):
         raise RuntimeError(
             "asyncio.run() cannot be called from a running event loop")
 
-    with Runner(debug=debug, loop_factory=loop_factory,
-                eager_tasks=eager_tasks) as runner:
+    with Runner(debug=debug, loop_factory=loop_factory) as runner:
         return runner.run(main)
 
 

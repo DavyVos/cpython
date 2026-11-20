@@ -7,9 +7,7 @@ from .errors import (
 )
 from .formatting import (
     SIG_END_MARKER,
-    c_str_repr,
-    c_bytes_repr,
-    c_unichar_repr,
+    c_repr,
     docstring_for_c_string,
     format_escape,
     indent_all_lines,
@@ -30,7 +28,7 @@ from .utils import (
     FileWriter,
     FormatCounterFormatter,
     NULL,
-    NullType,
+    Null,
     Sentinels,
     VersionTuple,
     compute_checksum,
@@ -50,9 +48,7 @@ __all__ = [
 
     # Formatting helpers
     "SIG_END_MARKER",
-    "c_str_repr",
-    "c_bytes_repr",
-    "c_unichar_repr",
+    "c_repr",
     "docstring_for_c_string",
     "format_escape",
     "indent_all_lines",
@@ -73,7 +69,7 @@ __all__ = [
     "FileWriter",
     "FormatCounterFormatter",
     "NULL",
-    "NullType",
+    "Null",
     "Sentinels",
     "VersionTuple",
     "compute_checksum",
@@ -94,7 +90,6 @@ CLINIC_PREFIXED_ARGS: Final = frozenset(
         "argsbuf",
         "fastargs",
         "kwargs",
-        "kwds",
         "kwnames",
         "nargs",
         "noptargs",

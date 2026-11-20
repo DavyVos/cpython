@@ -1,18 +1,18 @@
 import os
 import base64
 import gettext
-import io
 import unittest
 import unittest.mock
 from functools import partial
 
 from test import support
-from test.support import cpython_only, os_helper
-from test.support.import_helper import ensure_lazy_imports
+from test.support import os_helper
 
 
 # TODO:
 #  - Add new tests, for example for "dgettext"
+#  - Remove dummy tests, for example testing for single and double quotes
+#    has no sense, it would have if we were testing a parser (i.e. pygettext)
 #  - Tests should have only one assert.
 
 GNU_MO_DATA = b'''\
@@ -40,7 +40,7 @@ bmsgd2luayAoaW4gIm15IG90aGVyIGNvbnRleHQiKQB3aW5rIHdpbmsA
 '''
 
 # .mo file with an invalid magic number
-GNU_MO_DATA_BAD_MAGIC_NUMBER = base64.b64encode(b'ABCD' + bytes(16))
+GNU_MO_DATA_BAD_MAGIC_NUMBER = base64.b64encode(b'ABCD')
 
 # This data contains an invalid major version number (5)
 # An unexpected major version number should be treated as an error when
@@ -231,6 +231,30 @@ class GettextTestCase1(GettextBaseTest):
         eq(pgettext('my other context', 'nudge nudge'),
            'wink wink (in "my other context")')
 
+    def test_double_quotes(self):
+        eq = self.assertEqual
+        # double quotes
+        eq(_("albatross"), 'albatross')
+        eq(_("mullusk"), 'bacon')
+        eq(_(r"Raymond Luxury Yach-t"), 'Throatwobbler Mangrove')
+        eq(_(r"nudge nudge"), 'wink wink')
+
+    def test_triple_single_quotes(self):
+        eq = self.assertEqual
+        # triple single quotes
+        eq(_('''albatross'''), 'albatross')
+        eq(_('''mullusk'''), 'bacon')
+        eq(_(r'''Raymond Luxury Yach-t'''), 'Throatwobbler Mangrove')
+        eq(_(r'''nudge nudge'''), 'wink wink')
+
+    def test_triple_double_quotes(self):
+        eq = self.assertEqual
+        # triple double quotes
+        eq(_("""albatross"""), 'albatross')
+        eq(_("""mullusk"""), 'bacon')
+        eq(_(r"""Raymond Luxury Yach-t"""), 'Throatwobbler Mangrove')
+        eq(_(r"""nudge nudge"""), 'wink wink')
+
     def test_multiline_strings(self):
         eq = self.assertEqual
         # multiline strings
@@ -315,39 +339,6 @@ class GettextTestCase2(GettextBaseTest):
             self.assertEqual(exception.strerror, "File is corrupt")
             self.assertEqual(exception.filename, MOFILE_CORRUPT)
 
-    def test_truncated_header(self):
-        magic = b'\xde\x12\x04\x95'
-        for buf in (b'', magic, magic + bytes(15)):
-            with self.subTest(buflen=len(buf)):
-                with self.assertRaises(OSError) as cm:
-                    gettext.GNUTranslations(io.BytesIO(buf))
-                self.assertEqual(cm.exception.errno, 0)
-                self.assertEqual(cm.exception.strerror, "File is corrupt")
-
-    def test_offsets_out_of_bounds(self):
-        buf = bytes([
-            0xde, 0x12, 0x04, 0x95,  # Magic
-            0x00, 0x00, 0x00, 0x00,  # Version
-            0x01, 0x00, 0x00, 0x00,  # Message count
-            0xe8, 0x03, 0x00, 0x00,  # Message offset (past EOF)
-            0xd0, 0x07, 0x00, 0x00,  # Translation offset (past EOF)
-        ])
-        with self.assertRaises(OSError) as cm:
-            gettext.GNUTranslations(io.BytesIO(buf))
-        self.assertEqual(cm.exception.errno, 0)
-        self.assertEqual(cm.exception.strerror, "File is corrupt")
-
-    def test_empty_catalog(self):
-        buf = bytes([
-            0xde, 0x12, 0x04, 0x95,  # Magic
-            0x00, 0x00, 0x00, 0x00,  # Version
-            0x00, 0x00, 0x00, 0x00,  # Message count
-            0x14, 0x00, 0x00, 0x00,  # Message offset
-            0x14, 0x00, 0x00, 0x00,  # Translation offset
-        ])
-        t = gettext.GNUTranslations(io.BytesIO(buf))
-        self.assertEqual(t.gettext('foo'), 'foo')
-
     def test_big_endian_file(self):
         with open(MOFILE_BIG_ENDIAN, 'rb') as fp:
             t = gettext.GNUTranslations(fp)
@@ -375,6 +366,30 @@ class GettextTestCase2(GettextBaseTest):
            'wink wink (in "my context")')
         eq(gettext.dpgettext('gettext', 'my other context', 'nudge nudge'),
            'wink wink (in "my other context")')
+
+    def test_double_quotes(self):
+        eq = self.assertEqual
+        # double quotes
+        eq(self._("albatross"), 'albatross')
+        eq(self._("mullusk"), 'bacon')
+        eq(self._(r"Raymond Luxury Yach-t"), 'Throatwobbler Mangrove')
+        eq(self._(r"nudge nudge"), 'wink wink')
+
+    def test_triple_single_quotes(self):
+        eq = self.assertEqual
+        # triple single quotes
+        eq(self._('''albatross'''), 'albatross')
+        eq(self._('''mullusk'''), 'bacon')
+        eq(self._(r'''Raymond Luxury Yach-t'''), 'Throatwobbler Mangrove')
+        eq(self._(r'''nudge nudge'''), 'wink wink')
+
+    def test_triple_double_quotes(self):
+        eq = self.assertEqual
+        # triple double quotes
+        eq(self._("""albatross"""), 'albatross')
+        eq(self._("""mullusk"""), 'bacon')
+        eq(self._(r"""Raymond Luxury Yach-t"""), 'Throatwobbler Mangrove')
+        eq(self._(r"""nudge nudge"""), 'wink wink')
 
     def test_multiline_strings(self):
         eq = self.assertEqual
@@ -601,7 +616,6 @@ class PluralFormsInternalTestCase(unittest.TestCase):
         s = ''.join([ str(f(x)) for x in range(200) ])
         eq(s, "01233333333444444444444444444444444444444444444444444444444444444444444444444444444444444444444444445553333333344444444444444444444444444444444444444444444444444444444444444444444444444444444444444444")
 
-    @support.skip_wasi_stack_overflow()
     def test_security(self):
         raises = self.assertRaises
         # Test for a dangerous expression
@@ -982,10 +996,6 @@ class MiscTestCase(unittest.TestCase):
     def test__all__(self):
         support.check__all__(self, gettext,
                              not_exported={'c2py', 'ENOENT'})
-
-    @cpython_only
-    def test_lazy_import(self):
-        ensure_lazy_imports("gettext", {"re", "warnings", "locale"})
 
 
 class TranslationFallbackTestCase(unittest.TestCase):

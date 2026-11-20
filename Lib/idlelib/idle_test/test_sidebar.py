@@ -5,8 +5,8 @@ import sys
 from itertools import chain
 import unittest
 import unittest.mock
-from test.support import requires, swap_attr
-from test import support
+from test.support import adjust_int_max_str_digits, requires, swap_attr
+from test.support.testcase import ExtraAssertions
 import tkinter as tk
 from idlelib.idle_test.tkinter_testing_utils import run_in_tk_mainloop
 
@@ -317,10 +317,6 @@ class LineNumbersTest(unittest.TestCase):
         self.assertEqual(self.get_selection(), ('2.0', '5.0'))
 
     def test_scroll(self):
-        # Synchronized scrolling needs the geometry of mapped widgets.
-        self.root.deiconify()
-        self.addCleanup(self.root.withdraw)
-
         self.linenumber.show_sidebar()
         self.text.insert('1.0', 'line\n' * 100)
         self.root.update()
@@ -395,7 +391,7 @@ class LineNumbersTest(unittest.TestCase):
         assert_colors_are_equal(orig_colors)
 
 
-class ShellSidebarTest(unittest.TestCase):
+class ShellSidebarTest(unittest.TestCase, ExtraAssertions):
     root: tk.Tk = None
     shell: PyShell = None
 
@@ -617,7 +613,7 @@ class ShellSidebarTest(unittest.TestCase):
 
     @run_in_tk_mainloop()
     def test_very_long_wrapped_line(self):
-        with support.adjust_int_max_str_digits(11_111), \
+        with adjust_int_max_str_digits(11_111), \
                 swap_attr(self.shell, 'squeezer', None):
             self.do_input('x = ' + '1'*10_000 + '\n')
             yield

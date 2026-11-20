@@ -2,7 +2,7 @@
 
 import unittest
 from test import support
-from test.support import cpython_only, import_helper
+from test.support import cpython_only, import_helper, isolation
 
 testmeths = [
 
@@ -135,7 +135,6 @@ for method in testmeths:
 AllTests = type("AllTests", (object,), d)
 del d, statictests, method, method_template
 
-@support.thread_unsafe("callLst is shared between threads")
 class ClassTests(unittest.TestCase):
     def setUp(self):
         callLst[:] = []
@@ -555,9 +554,6 @@ class ClassTests(unittest.TestCase):
         self.assertFalse(hasattr(o, "__call__"))
         self.assertFalse(hasattr(c, "__call__"))
 
-    @support.skip_if_huge_c_stack()
-    @support.skip_emscripten_stack_overflow()
-    @support.skip_wasi_stack_overflow()
     def testSFBug532646(self):
         # Test for SF bug 532646
 
@@ -652,7 +648,6 @@ class ClassTests(unittest.TestCase):
         a = A(hash(A.f)^(-1))
         hash(a.f)
 
-    @cpython_only
     def testSetattrWrapperNameIntern(self):
         # Issue #25794: __setattr__ should intern the attribute name
         class A:
@@ -843,19 +838,6 @@ class ClassTests(unittest.TestCase):
             Type(i)
         self.assertEqual(calls, 100)
 
-    def test_specialization_class_call_doesnt_crash(self):
-        # gh-123185
-
-        class Foo:
-            def __init__(self, arg):
-                pass
-
-        for _ in range(8):
-            try:
-                Foo()
-            except:
-                pass
-
 
 from _testinternalcapi import has_inline_values
 
@@ -1014,6 +996,7 @@ class TestInlineValues(unittest.TestCase):
         C.a = X()
 
     @support.nomemtest
+    @isolation.runInSubprocess()
     def test_detach_materialized_dict_no_memory(self):
         import _testcapi
 
@@ -1025,27 +1008,31 @@ class TestInlineValues(unittest.TestCase):
         # The failing allocation should be the one which detaches the
         # dictionary from the object, but other allocations can happen
         # first, so try to fail every one of the first allocations.
-        # Drop the last reference from C, so that nothing else (such as
-        # GC) runs between arming the failure and the deallocation.
-        seen = []
+        raised = False
         for n in range(20):
-            lst = [A()]
-            d = lst[0].__dict__
-            with support.catch_unraisable_exception() as ex:
-                _testcapi.call_with_nomemory(n, n + 1, lst.clear)
-                if ex.unraisable is None:
-                    continue
-                exc_type = ex.unraisable.exc_type
-                err_msg = ex.unraisable.err_msg
-            seen.append((n, exc_type, err_msg))
-            if (exc_type is MemoryError and err_msg ==
-                    'Exception ignored while clearing an object managed dict'):
-                # The dictionary should have been cleared.
-                self.assertNotIn("a", d)
+            a = A()
+            d = a.__dict__
+            try:
+                with support.catch_unraisable_exception() as ex:
+                    _testcapi.set_nomemory(n, n + 1)
+                    try:
+                        del a
+                    finally:
+                        _testcapi.remove_mem_hooks()
+                    exc_type = ex.unraisable and ex.unraisable.exc_type
+            except MemoryError:
+                # The failing allocation was not in the deallocation code.
+                continue
+            if exc_type is not MemoryError:
+                continue
+            raised = True
+            if "a" not in d:
+                # The dictionary was cleared, as expected.
                 break
         else:
-            self.fail("MemoryError was not raised while detaching "
-                      f"the dictionary: {seen}")
+            if not raised:
+                self.fail("MemoryError was not raised during deallocation")
+            self.fail("the dictionary was not cleared")
 
 class DefinitionOrderTests(unittest.TestCase):
     # PEP 520: Preserving Class Attribute Definition Order

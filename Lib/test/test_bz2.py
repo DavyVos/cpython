@@ -16,7 +16,7 @@ import threading
 from test.support import import_helper
 from test.support import threading_helper
 from test.support.os_helper import unlink, FakePath
-from compression._common import _streams
+import _compression
 import sys
 
 
@@ -136,15 +136,15 @@ class BZ2FileTest(BaseTest):
     def testReadMonkeyMultiStream(self):
         # Test BZ2File.read() on a multi-stream archive where a stream
         # boundary coincides with the end of the raw read buffer.
-        buffer_size = _streams.BUFFER_SIZE
-        _streams.BUFFER_SIZE = len(self.DATA)
+        buffer_size = _compression.BUFFER_SIZE
+        _compression.BUFFER_SIZE = len(self.DATA)
         try:
             self.createTempFile(streams=5)
             with BZ2File(self.filename) as bz2f:
                 self.assertRaises(TypeError, bz2f.read, float())
                 self.assertEqual(bz2f.read(), self.TEXT * 5)
         finally:
-            _streams.BUFFER_SIZE = buffer_size
+            _compression.BUFFER_SIZE = buffer_size
 
     def testReadTrailingJunk(self):
         self.createTempFile(suffix=self.BAD_DATA)
@@ -155,22 +155,6 @@ class BZ2FileTest(BaseTest):
         self.createTempFile(streams=5, suffix=self.BAD_DATA)
         with BZ2File(self.filename) as bz2f:
             self.assertEqual(bz2f.read(), self.TEXT * 5)
-
-    def testReadMultiStreamDamagedStream(self):
-        # A damaged bzip2 stream following a valid one is not trailing junk,
-        # whatever the size of the reads.
-        for pos in 4, 100, -3:
-            with self.subTest(pos=pos):
-                damaged = bytearray(self.DATA)
-                damaged[pos] ^= 1
-                self.createTempFile(suffix=damaged)
-                with BZ2File(self.filename) as bz2f:
-                    self.assertRaises(OSError, bz2f.read)
-                with BZ2File(self.filename) as bz2f:
-                    self.assertEqual(bz2f.read(len(self.TEXT)), self.TEXT)
-                    with self.assertRaises(OSError):
-                        while bz2f.read(10):
-                            pass
 
     def testRead0(self):
         self.createTempFile()
@@ -210,7 +194,7 @@ class BZ2FileTest(BaseTest):
         with BZ2File(self.filename) as bz2f:
             pdata = bz2f.peek()
             self.assertNotEqual(len(pdata), 0)
-            self.assertStartsWith(self.TEXT, pdata)
+            self.assertTrue(self.TEXT.startswith(pdata))
             self.assertEqual(bz2f.read(), self.TEXT)
 
     def testReadInto(self):
@@ -768,7 +752,7 @@ class BZ2FileTest(BaseTest):
     def testDecompressLimited(self):
         """Decompressed data buffering should be limited"""
         bomb = bz2.compress(b'\0' * int(2e6), compresslevel=9)
-        self.assertLess(len(bomb), _streams.BUFFER_SIZE)
+        self.assertLess(len(bomb), _compression.BUFFER_SIZE)
 
         decomp = BZ2File(BytesIO(bomb))
         self.assertEqual(decomp.read(1), b'\0')
@@ -794,7 +778,7 @@ class BZ2FileTest(BaseTest):
             with BZ2File(bio) as bz2f:
                 pdata = bz2f.peek()
                 self.assertNotEqual(len(pdata), 0)
-                self.assertStartsWith(self.TEXT, pdata)
+                self.assertTrue(self.TEXT.startswith(pdata))
                 self.assertEqual(bz2f.read(), self.TEXT)
 
     def testWriteBytesIO(self):
@@ -1116,65 +1100,6 @@ class CompressDecompressTest(BaseTest):
         text = bz2.decompress(self.DATA * 5 + self.BAD_DATA)
         self.assertEqual(text, self.TEXT * 5)
 
-    def testDecompressMultiStreamBig(self):
-        big = random.randbytes(100_000)
-        streams = [self.TEXT, b'', big, self.TEXT, big]
-        expected = b''.join(streams)
-        data = b''.join(map(bz2.compress, streams))
-        self.assertEqual(bz2.decompress(data), expected)
-        self.assertEqual(bz2.decompress(bytearray(data)), expected)
-        self.assertEqual(bz2.decompress(memoryview(data)), expected)
-        self.assertEqual(bz2.decompress(data + self.BAD_DATA), expected)
-        self.assertRaises(ValueError, bz2.decompress, data[:-50_000])
-        # The damage is past the first chunk fed for the second stream.
-        damaged = bytearray(bz2.compress(big))
-        damaged[-3] ^= 1
-        self.assertRaises(OSError, bz2.decompress, self.DATA + damaged)
-
-    def testDecompressErrorReleasesBuffer(self):
-        # The argument can be resized while the exception is handled.
-        for data in self.DATA[:-10], self.BAD_DATA:
-            with self.subTest(data=data[:10]):
-                data = bytearray(data)
-                try:
-                    bz2.decompress(data)
-                except (ValueError, OSError):
-                    data += b'more'
-                else:
-                    self.fail('no exception')
-
-    def testDecompressManyStreams(self):
-        # The amount of data passed to the decompressors should grow
-        # linearly with the number of streams.
-        class Decompressor:
-            def __init__(self, *args, **kwargs):
-                self.decomp = BZ2Decompressor(*args, **kwargs)
-            def __getattr__(self, name):
-                return getattr(self.decomp, name)
-            def decompress(self, data):
-                nonlocal fed
-                fed += len(data)
-                return self.decomp.decompress(data)
-        with support.swap_attr(bz2, 'BZ2Decompressor', Decompressor):
-            fed = 0
-            self.assertEqual(bz2.decompress(self.EMPTY_DATA * 1000), b'')
-            fed1 = fed
-            fed = 0
-            self.assertEqual(bz2.decompress(self.EMPTY_DATA * 2000), b'')
-        self.assertLess(fed, fed1 * 3)
-
-    def testDecompressMultiStreamDamagedStream(self):
-        # A damaged bzip2 stream following a valid one is not trailing junk.
-        for pos in 4, 100, -3:
-            with self.subTest(pos=pos):
-                damaged = bytearray(self.DATA)
-                damaged[pos] ^= 1
-                self.assertRaises(OSError, bz2.decompress,
-                                  self.DATA + damaged)
-        # Not a bzip2 header: the block size digit must be 1 to 9.
-        text = bz2.decompress(self.DATA + b"BZh0" + self.BAD_DATA)
-        self.assertEqual(text, self.TEXT)
-
 
 class OpenTest(BaseTest):
     "Test the open function."
@@ -1295,40 +1220,6 @@ class OpenTest(BaseTest):
             f.write(text)
         with self.open(self.filename, "rt", encoding="utf-8", newline="\r") as f:
             self.assertEqual(f.readlines(), [text])
-
-
-class MiscTests(unittest.TestCase):
-
-    def test_bzlib_version(self):
-        if support.verbose:
-            print(f'bzlib_version = {bz2.bzlib_version}', flush=True)
-            print(f'bzlib_version_info = {bz2.bzlib_version_info}', flush=True)
-        v = bz2.bzlib_version_info
-        self.assertIsInstance(v[:], tuple)
-        self.assertEqual(len(v), 3)
-        self.assertIsInstance(v[0], int)
-        self.assertIsInstance(v[1], int)
-        self.assertIsInstance(v[2], int)
-        self.assertIsInstance(v.major, int)
-        self.assertIsInstance(v.minor, int)
-        self.assertIsInstance(v.patch, int)
-        self.assertEqual(v[0], v.major)
-        self.assertEqual(v[1], v.minor)
-        self.assertEqual(v[2], v.patch)
-        self.assertGreaterEqual(v.major, 0)
-        self.assertGreaterEqual(v.minor, 0)
-        self.assertGreaterEqual(v.patch, 0)
-
-        # The version string can have a suffix, e.g. "1.0.8, 13-Jul-2019"
-        # for bzip2 or "1.1.0-libbz2-rs-sys-0.2.5" for libbz2-rs.
-        self.assertStartsWith(bz2.bzlib_version, '%d.%d.%d' % v)
-
-
-class TestModule(unittest.TestCase):
-    def test_deprecated_module_attributes(self):
-        support.check_deprecated_module_attributes(
-            self, bz2, "__author__", remove=(3, 20),
-        )
 
 
 def tearDownModule():

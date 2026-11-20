@@ -45,40 +45,27 @@ static const char header[] =
 static void
 runtime_init(void)
 {
-    PyInitConfig *config = PyInitConfig_Create();
-    if (config == NULL) {
-        printf("memory allocation failed\n");
-        exit(1);
-    }
+    PyConfig config;
+    PyConfig_InitIsolatedConfig(&config);
 
-    if (PyInitConfig_SetInt(config, "site_import", 0) < 0) {
-        goto error;
-    }
-    if (PyInitConfig_SetStr(config, "program_name", "./_freeze_module") < 0) {
-        goto error;
+    config.site_import = 0;
+
+    PyStatus status;
+    status = PyConfig_SetString(&config, &config.program_name,
+                                L"./_freeze_module");
+    if (PyStatus_Exception(status)) {
+        PyConfig_Clear(&config);
+        Py_ExitStatusException(status);
     }
 
     /* Don't install importlib, since it could execute outdated bytecode. */
-    if (PyInitConfig_SetInt(config, "_install_importlib", 0) < 0) {
-        goto error;
-    }
-    if (PyInitConfig_SetInt(config, "_init_main", 0) < 0) {
-        goto error;
-    }
+    config._install_importlib = 0;
+    config._init_main = 0;
 
-    if (Py_InitializeFromInitConfig(config) < 0) {
-        goto error;
-    }
-    PyInitConfig_Free(config);
-    return;
-
-error:
-    {
-        const char *err_msg;
-        (void)PyInitConfig_GetError(config, &err_msg);
-        printf("Python init error: %s\n", err_msg);
-        PyInitConfig_Free(config);
-        exit(1);
+    status = Py_InitializeFromConfig(&config);
+    PyConfig_Clear(&config);
+    if (PyStatus_Exception(status)) {
+        Py_ExitStatusException(status);
     }
 }
 
@@ -122,12 +109,11 @@ read_text(const char *inpath)
 static PyObject *
 compile_and_marshal(const char *name, const char *text)
 {
-    int text_size = strlen(name) + 10;
-    char *filename = (char *) malloc(text_size);
+    char *filename = (char *) malloc(strlen(name) + 10);
     if (filename == NULL) {
         return PyErr_NoMemory();
     }
-    PyOS_snprintf(filename, text_size, "<frozen %s>", name);
+    sprintf(filename, "<frozen %s>", name);
     PyObject *code = Py_CompileStringExFlags(text, filename,
                                              Py_file_input, NULL, 0);
     free(filename);
@@ -135,7 +121,6 @@ compile_and_marshal(const char *name, const char *text)
         return NULL;
     }
 
-    assert(Py_MARSHAL_VERSION >= 6);
     PyObject *marshalled = PyMarshal_WriteObjectToString(code, Py_MARSHAL_VERSION);
     Py_CLEAR(code);
     if (marshalled == NULL) {

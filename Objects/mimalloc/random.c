@@ -99,8 +99,7 @@ static void chacha_init(mi_random_ctx_t* ctx, const uint8_t key[32], uint64_t no
   // since we only use chacha for randomness (and not encryption) we
   // do not _need_ to read 32-bit values as little endian but we do anyways
   // just for being compatible :-)
-  ctx->output_available = 0;
-  _mi_memzero(ctx->output,sizeof(ctx->output));
+  memset(ctx, 0, sizeof(*ctx));
   for (size_t i = 0; i < 4; i++) {
     const uint8_t* sigma = (uint8_t*)"expand 32-byte k";
     ctx->input[i] = read32(sigma,i);
@@ -115,8 +114,7 @@ static void chacha_init(mi_random_ctx_t* ctx, const uint8_t key[32], uint64_t no
 }
 
 static void chacha_split(mi_random_ctx_t* ctx, uint64_t nonce, mi_random_ctx_t* ctx_new) {
-  _mi_memzero(ctx_new, sizeof(*ctx_new));
-  ctx_new->weak = ctx->weak;
+  memset(ctx_new, 0, sizeof(*ctx_new));
   _mi_memcpy(ctx_new->input, ctx->input, sizeof(ctx_new->input));
   ctx_new->input[12] = 0;
   ctx_new->input[13] = 0;
@@ -140,23 +138,18 @@ static bool mi_random_is_initialized(mi_random_ctx_t* ctx) {
 void _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* ctx_new) {
   mi_assert_internal(mi_random_is_initialized(ctx));
   mi_assert_internal(ctx != ctx_new);
-  const uintptr_t nonce_rnd = _mi_random_next(ctx);
-  chacha_split(ctx, (uintptr_t)ctx_new ^ nonce_rnd /*nonce*/, ctx_new);
+  chacha_split(ctx, (uintptr_t)ctx_new /*nonce*/, ctx_new);
 }
 
 uintptr_t _mi_random_next(mi_random_ctx_t* ctx) {
   mi_assert_internal(mi_random_is_initialized(ctx));
-  uintptr_t r;
-  do {
-    #if MI_INTPTR_SIZE <= 4
-    r = chacha_next32(ctx);
-    #elif MI_INTPTR_SIZE == 8
-    r = (((uintptr_t)chacha_next32(ctx) << 32) | chacha_next32(ctx));
-    #else
-    # error "define mi_random_next for this platform"
-    #endif
-  } while (r==0);
-  return r;
+  #if MI_INTPTR_SIZE <= 4
+    return chacha_next32(ctx);
+  #elif MI_INTPTR_SIZE == 8
+    return (((uintptr_t)chacha_next32(ctx) << 32) | chacha_next32(ctx));
+  #else
+  # error "define mi_random_next for this platform"
+  #endif
 }
 
 
@@ -170,7 +163,7 @@ uintptr_t _mi_os_random_weak(uintptr_t extra_seed) {
   x ^= _mi_prim_clock_now();
   // and do a few randomization steps
   uintptr_t max = ((x ^ (x >> 17)) & 0x0F) + 1;
-  for (uintptr_t i = 0; i < max || x==0; i++, x++) {
+  for (uintptr_t i = 0; i < max; i++) {
     x = _mi_random_shuffle(x);
   }
   mi_assert_internal(x != 0);
@@ -178,7 +171,7 @@ uintptr_t _mi_os_random_weak(uintptr_t extra_seed) {
 }
 
 static void mi_random_init_ex(mi_random_ctx_t* ctx, bool use_weak) {
-  uint8_t key[32] = {0};  // CPython: zero-initialize to avoid an MSAN report
+  uint8_t key[32] = {0};
   if (use_weak || !_mi_prim_random_buf(key, sizeof(key))) {
     // if we fail to get random data from the OS, we fall back to a
     // weak random source based on the current time
@@ -186,12 +179,9 @@ static void mi_random_init_ex(mi_random_ctx_t* ctx, bool use_weak) {
     if (!use_weak) { _mi_warning_message("unable to use secure randomness\n"); }
     #endif
     uintptr_t x = _mi_os_random_weak(0);
-    for (size_t i = 0; i < 32; i+=4, x++) {
+    for (size_t i = 0; i < 8; i++) {  // key is eight 32-bit words.
       x = _mi_random_shuffle(x);
-      key[i]   = (uint8_t)(x);
-      key[i+1] = (uint8_t)(x>>8);
-      key[i+2] = (uint8_t)(x>>16);
-      key[i+3] = (uint8_t)(x>>24);
+      ((uint32_t*)key)[i] = (uint32_t)x;
     }
     ctx->weak = true;
   }

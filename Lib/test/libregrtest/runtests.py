@@ -93,8 +93,6 @@ class RunTests:
     hunt_refleak: HuntRefleak | None
     test_dir: StrPath | None
     use_junit: bool
-    # Failed tests are not re-run after this run
-    final_run: bool
     coverage: bool
     memory_limit: str | None
     gc_threshold: int | None
@@ -102,20 +100,14 @@ class RunTests:
     python_cmd: tuple[str, ...] | None
     randomize: bool
     random_seed: int | str
-    parallel_threads: int | None
-    single_process_per_case: bool
-    case_groups: tuple[tuple[TestName, tuple[TestName, ...]], ...] | None
 
     def copy(self, **override) -> 'RunTests':
         state = dataclasses.asdict(self)
         state.update(override)
         return RunTests(**state)
 
-    def create_worker_runtests(self, **override) -> WorkerRunTests:
-        # Drop the large fields *before* converting: asdict() copies them
-        # deeply, which is expensive when the whole run has many cases.
-        state = dataclasses.asdict(
-            dataclasses.replace(self, tests=(), case_groups=None))
+    def create_worker_runtests(self, **override) -> 'WorkerRunTests':
+        state = dataclasses.asdict(self)
         state.update(override)
         return WorkerRunTests(**state)
 
@@ -138,20 +130,6 @@ class RunTests:
                 yield from self.tests
         else:
             yield from self.tests
-
-    def iter_case_groups(self) -> Iterator[tuple[TestName, tuple[TestName, ...]]]:
-        """
-        Yield (module_name, case_ids) pairs. All case_ids in a group
-        must run sequentially on the same worker thread.
-        """
-        if self.case_groups is None:
-            for name in self.iter_tests():
-                yield (name, (name,))
-        elif self.forever:
-            while True:
-                yield from self.case_groups
-        else:
-            yield from self.case_groups
 
     def json_file_use_stdout(self) -> bool:
         # Use STDOUT in two cases:
@@ -180,7 +158,7 @@ class RunTests:
         if '-u' not in python_opts:
             cmd.append('-u')  # Unbuffered stdout and stderr
         if self.coverage:
-            cmd.append("-Xpresite=test.cov:enable")
+            cmd.append("-Xpresite=test.cov")
         return cmd
 
     def bisect_cmd_args(self) -> list[str]:
@@ -213,8 +191,6 @@ class RunTests:
             args.extend(("--python", cmd))
         if self.randomize:
             args.append(f"--randomize")
-        if self.parallel_threads:
-            args.append(f"--parallel-threads={self.parallel_threads}")
         args.append(f"--randseed={self.random_seed}")
         return args
 

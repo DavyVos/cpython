@@ -14,7 +14,7 @@
 // thread states within each bucket.
 //
 // The queueing thread uses the eval breaker mechanism to notify the owning
-// thread that it has objects to merge. Additionally, all queued objects are
+// thread that it has objects to merge. Additionaly, all queued objects are
 // merged during GC.
 #include "Python.h"
 #include "pycore_object.h"      // _Py_ExplicitMergeRefcount
@@ -46,28 +46,6 @@ find_thread_state(struct _brc_bucket *bucket, uintptr_t thread_id)
         }
     }
     return NULL;
-}
-
-// Merge the refcounts of all objects in `stack`, keeping the queue's reference.
-static void
-merge_queued_refcounts(_PyObjectStack *stack)
-{
-    for (_PyObjectStackChunk *buf = stack->head; buf != NULL; buf = buf->prev) {
-        for (Py_ssize_t i = 0; i < buf->n; i++) {
-            _Py_ExplicitMergeRefcount(buf->objs[i], 0);
-        }
-    }
-}
-
-// Release the queue's reference to each merged object. This may run
-// destructors, so the bucket mutex must not be held.
-static void
-decref_merged_objects(_PyObjectStack *stack)
-{
-    PyObject *ob;
-    while ((ob = _PyObjectStack_Pop(stack)) != NULL) {
-        Py_DECREF(ob);
-    }
 }
 
 // Enqueue an object to be merged by the owning thread. This steals a
@@ -112,22 +90,6 @@ _Py_brc_queue_object(PyObject *ob)
         if (refcount == 0) {
             _Py_Dealloc(ob);
         }
-        return;
-    }
-
-    if (_PyThreadState_TrySuspendDetached(&tstate->base)) {
-        // The owning thread is detached (e.g. blocked on a lock or in a
-        // system call) and may not run Python code again for a long time,
-        // so merge its queue on its behalf instead of waiting for it. While
-        // it is held in the "suspended" state it cannot attach and therefore
-        // cannot touch ob_ref_local or ob_tid.
-        _PyObjectStack merged = {0};
-        _PyObjectStack_Merge(&merged, &tstate->brc.objects_to_merge);
-        merge_queued_refcounts(&merged);
-        _PyThreadState_ResumeDetached(&tstate->base);
-        PyMutex_Unlock(&bucket->mutex);
-
-        decref_merged_objects(&merged);
         return;
     }
 
@@ -235,7 +197,7 @@ _Py_brc_after_fork(PyInterpreterState *interp)
 {
     // Unlock all bucket mutexes. Some of the buckets may be locked because
     // locks can be handed off to a parked thread (see lock.c). We don't have
-    // to worry about consistency here, because no thread can be actively
+    // to worry about consistency here, becuase no thread can be actively
     // modifying a bucket, but it might be paused (not yet woken up) on a
     // PyMutex_Lock while holding that lock.
     for (Py_ssize_t i = 0; i < _Py_BRC_NUM_BUCKETS; i++) {

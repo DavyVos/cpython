@@ -31,7 +31,6 @@ typedef struct {
     PyObject *end_offset;
     PyObject *text;
     PyObject *print_file_and_line;
-    PyObject *metadata;
 } PySyntaxErrorObject;
 
 typedef struct {

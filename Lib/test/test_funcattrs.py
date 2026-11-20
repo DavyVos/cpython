@@ -1,10 +1,8 @@
-import gc
 import textwrap
 import types
 import typing
 import unittest
 import warnings
-import weakref
 from test import support
 
 
@@ -51,35 +49,6 @@ class FunctionPropertiesTest(FuncAttrsTest):
     # Include the external setUp method that is common to all tests
     def test_module(self):
         self.assertEqual(self.b.__module__, __name__)
-
-    def test_qualname_replaced_during_argument_error(self):
-        class Qualname(str):
-            pass
-
-        def target(x, /):
-            pass
-
-        target.__qualname__ = Qualname('original_qualname')
-        ref = weakref.ref(target.__qualname__)
-
-        class Keyword(str):
-            __hash__ = str.__hash__
-
-            def __eq__(self, other):
-                # Replacing and freeing the qualname while comparisons
-                # execute Python must not leave a dangling pointer.
-                target.__qualname__ = 'new_qualname'
-                gc.collect()
-                return True
-
-        with self.assertRaisesRegex(
-            TypeError,
-            r"new_qualname\(\) got some positional-only arguments "
-            r"passed as keyword arguments: 'x'",
-        ):
-            target(**{Keyword('x'): 1})
-        gc.collect()
-        self.assertIsNone(ref())
 
     def test_dir_includes_correct_attrs(self):
         self.b.known_attr = 7
@@ -260,7 +229,7 @@ class FunctionPropertiesTest(FuncAttrsTest):
         for func in (not_generic, lambda_):
             with self.subTest(func=func):
                 self.assertEqual(func.__type_params__, ())
-                with self.assertRaises(AttributeError):
+                with self.assertRaises(TypeError):
                     del func.__type_params__
                 with self.assertRaises(TypeError):
                     func.__type_params__ = 42
@@ -524,24 +493,6 @@ class StaticMethodAttrsTest(unittest.TestCase):
 class BuiltinFunctionPropertiesTest(unittest.TestCase):
     # XXX Not sure where this should really go since I can't find a
     # test module specifically for builtin_function_or_method.
-
-    def test_builtin__module__(self):
-        import math
-
-        # builtin function:
-        self.assertEqual(len.__module__, 'builtins')
-        self.assertEqual(math.sin.__module__, 'math')
-
-        # instance method:
-        self.assertRaises(AttributeError, getattr, int.to_bytes, '__module__')
-        self.assertEqual(int.to_bytes.__objclass__.__module__, 'builtins')
-
-        # builtin classmethod:
-        self.assertEqual(int.from_bytes.__module__, None)
-        self.assertEqual(int.from_bytes.__self__.__module__, 'builtins')
-
-        # builtin staticmethod:
-        self.assertEqual(bytes.maketrans.__module__, 'builtins')
 
     def test_builtin__qualname__(self):
         import time

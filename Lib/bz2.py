@@ -5,19 +5,16 @@ This module provides a file interface, classes for incremental
 """
 
 __all__ = ["BZ2File", "BZ2Compressor", "BZ2Decompressor",
-           "open", "compress", "decompress",
-           "bzlib_version", "bzlib_version_info"]
+           "open", "compress", "decompress"]
 
-# Original author: Nadeem Vawda <nadeem.vawda@gmail.com>
+__author__ = "Nadeem Vawda <nadeem.vawda@gmail.com>"
 
 from builtins import open as _builtin_open
-from compression._common import _streams
 import io
 import os
-lazy import warnings
+import _compression
 
-from _bz2 import (BZ2Compressor, BZ2Decompressor,
-                  bzlib_version, bzlib_version_info)
+from _bz2 import BZ2Compressor, BZ2Decompressor
 
 
 # Value 0 no longer used
@@ -25,11 +22,8 @@ _MODE_READ     = 1
 # Value 2 no longer used
 _MODE_WRITE    = 3
 
-# Every bzip2 stream starts with one of these, "BZh" and the block size.
-_STREAM_MAGIC = (b'BZh1', b'BZh2', b'BZh3', b'BZh4', b'BZh5', b'BZh6', b'BZh7', b'BZh8', b'BZh9')
 
-
-class BZ2File(_streams.BaseStream):
+class BZ2File(_compression.BaseStream):
 
     """A file object providing transparent bzip2 (de)compression.
 
@@ -94,9 +88,8 @@ class BZ2File(_streams.BaseStream):
             raise TypeError("filename must be a str, bytes, file or PathLike object")
 
         if self._mode == _MODE_READ:
-            raw = _streams.DecompressReader(self._fp,
-                BZ2Decompressor, trailing_error=OSError,
-                stream_magic=_STREAM_MAGIC)
+            raw = _compression.DecompressReader(self._fp,
+                BZ2Decompressor, trailing_error=OSError)
             self._buffer = io.BufferedReader(raw)
         else:
             self._pos = 0
@@ -255,7 +248,7 @@ class BZ2File(_streams.BaseStream):
 
         Line separators are not added between the written byte strings.
         """
-        return _streams.BaseStream.writelines(self, seq)
+        return _compression.BaseStream.writelines(self, seq)
 
     def seek(self, offset, whence=io.SEEK_SET):
         """Change the file position.
@@ -341,15 +334,19 @@ def decompress(data):
 
     For incremental decompression, use a BZ2Decompressor object instead.
     """
-    if not data:
-        return b""
-    return _streams._decompress_all(data, BZ2Decompressor, OSError,
-                                    stream_magic=_STREAM_MAGIC,
-                                    truncated_error=ValueError)
-
-
-def __getattr__(name):
-    if name == "__author__":
-        warnings._deprecated("__author__", remove=(3, 20))
-        return "Nadeem Vawda <nadeem.vawda@gmail.com>"  # Do not change
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    results = []
+    while data:
+        decomp = BZ2Decompressor()
+        try:
+            res = decomp.decompress(data)
+        except OSError:
+            if results:
+                break  # Leftover data is not a valid bzip2 stream; ignore it.
+            else:
+                raise  # Error on the first iteration; bail out.
+        results.append(res)
+        if not decomp.eof:
+            raise ValueError("Compressed data ended before the "
+                             "end-of-stream marker was reached")
+        data = decomp.unused_data
+    return b"".join(results)

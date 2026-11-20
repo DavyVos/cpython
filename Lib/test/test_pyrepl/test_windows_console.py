@@ -6,15 +6,12 @@ if sys.platform != "win32":
 
 
 import itertools
-from _colorize import ANSIColors
 from functools import partial
-from test.support import force_not_colorized_test_class
 from typing import Iterable
 from unittest import TestCase
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, call
 
 from .support import handle_all_events, code_to_events
-from .support import prepare_reader as default_prepare_reader
 
 try:
     from _pyrepl.console import Event, Console
@@ -31,26 +28,10 @@ except ImportError:
     pass
 
 
-def _mock_console_init(self, f_in=0, f_out=1, term="", encoding="utf-8"):
-    """Mock __init__ to avoid real Windows API calls in headless environments."""
-    super(WindowsConsole, self).__init__(f_in, f_out, term, encoding)
-    self.width = 80
-    self.height = 25
-    self._WindowsConsole__offset = 0
-    self.posxy = (0, 0)
-    self._WindowsConsole__vt_support = False
-    self._WindowsConsole_original_input_mode = 0
-    self.event_queue = wc.EventQueue('utf-8')
-
-
-@force_not_colorized_test_class
-@patch.object(WindowsConsole, '__init__', _mock_console_init)
 class WindowsConsoleTests(TestCase):
     def console(self, events, **kwargs) -> Console:
         console = WindowsConsole()
         console.get_event = MagicMock(side_effect=events)
-        console.getpending = MagicMock(return_value=Event("key", ""))
-        console.wait = MagicMock()
         console._scroll = MagicMock()
         console._hide_cursor = MagicMock()
         console._show_cursor = MagicMock()
@@ -66,22 +47,14 @@ class WindowsConsoleTests(TestCase):
             setattr(console, key, val)
         return console
 
-    def handle_events(
-        self,
-        events: Iterable[Event],
-        prepare_console=None,
-        prepare_reader=None,
-        **kwargs,
-    ):
-        prepare_console = prepare_console or partial(self.console, **kwargs)
-        prepare_reader = prepare_reader or default_prepare_reader
-        return handle_all_events(events, prepare_console, prepare_reader)
+    def handle_events(self, events: Iterable[Event], **kwargs):
+        return handle_all_events(events, partial(self.console, **kwargs))
 
     def handle_events_narrow(self, events):
         return self.handle_events(events, width=5)
 
-    def handle_events_short(self, events, **kwargs):
-        return self.handle_events(events, height=1, **kwargs)
+    def handle_events_short(self, events):
+        return self.handle_events(events, height=1)
 
     def handle_events_height_3(self, events):
         return self.handle_events(events, height=3)
@@ -129,7 +102,9 @@ class WindowsConsoleTests(TestCase):
         events = code_to_events(code)
         reader, console = self.handle_events_narrow(events)
 
-        console.getheightwidth = MagicMock(side_effect=lambda: (20, 80))
+        console.height = 20
+        console.width = 80
+        console.getheightwidth = MagicMock(lambda _: (20, 80))
 
         def same_reader(_):
             return reader
@@ -155,7 +130,9 @@ class WindowsConsoleTests(TestCase):
         events = code_to_events(code)
         reader, console = self.handle_events(events)
 
-        console.getheightwidth = MagicMock(side_effect=lambda: (20, 4))
+        console.height = 20
+        console.width = 4
+        console.getheightwidth = MagicMock(lambda _: (20, 4))
 
         def same_reader(_):
             return reader
@@ -288,7 +265,8 @@ class WindowsConsoleTests(TestCase):
         events = itertools.chain(code_to_events(code))
         reader, console = self.handle_events_short(events)
 
-        console.getheightwidth = MagicMock(side_effect=lambda: (2, 80))
+        console.height = 2
+        console.getheightwidth = MagicMock(lambda _: (2, 80))
 
         def same_reader(_):
             return reader
@@ -307,8 +285,7 @@ class WindowsConsoleTests(TestCase):
                 call(self.move_left(5)),
                 call(self.move_up()),
                 call(b"def f():"),
-                call(self.move_left(8)),
-                call(self.move_right(5)),
+                call(self.move_left(3)),
                 call(self.move_down()),
             ]
         )
@@ -326,7 +303,8 @@ class WindowsConsoleTests(TestCase):
         events = itertools.chain(code_to_events(code))
         reader, console = self.handle_events_height_3(events)
 
-        console.getheightwidth = MagicMock(side_effect=lambda: (1, 80))
+        console.height = 1
+        console.getheightwidth = MagicMock(lambda _: (1, 80))
 
         def same_reader(_):
             return reader
@@ -381,30 +359,7 @@ class WindowsConsoleTests(TestCase):
         self.assertEqual(reader.cxy, (2, 3))
         con.restore()
 
-    def test_reset_on_finish(self):
-        # gh-152068: finish() must emit the ANSI reset sequence so any
-        # active color does not leak past the prompt.
-        code = "1"
-        events = code_to_events(code)
-        _, con = self.handle_events(events)
-        con.finish()
-        con.out.write.assert_any_call(ANSIColors.RESET.encode(con.encoding))
-        con.restore()
 
-    def test_reset_on_restore(self):
-        # gh-152068: restore() must emit the ANSI reset sequence when VT
-        # support is enabled.
-        code = "1"
-        events = code_to_events(code)
-        _, con = self.handle_events(events)
-        con._WindowsConsole__vt_support = True
-        con._WindowsConsole__original_input_mode = 0
-        with patch.object(wc, "SetConsoleMode", return_value=1):
-            con.restore()
-        con.out.write.assert_any_call(ANSIColors.RESET.encode(con.encoding))
-
-
-@patch.object(WindowsConsole, '__init__', _mock_console_init)
 class WindowsConsoleGetEventTests(TestCase):
     # Virtual-Key Codes: https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
     VK_BACK = 0x08
@@ -432,7 +387,6 @@ class WindowsConsoleGetEventTests(TestCase):
         self.console._read_input = self.mock
         self.console._WindowsConsole__vt_support = kwargs.get("vt_support",
                                                               False)
-        self.console.wait = MagicMock(return_value=True)
         event = self.console.get_event(block=False)
         return event
 

@@ -4,6 +4,10 @@
 .. module:: plistlib
    :synopsis: Generate and parse Apple plist files.
 
+.. moduleauthor:: Jack Jansen
+.. sectionauthor:: Georg Brandl <georg@python.org>
+.. (harvested from docstrings in the original file)
+
 **Source code:** :source:`Lib/plistlib.py`
 
 .. index::
@@ -18,7 +22,7 @@ and XML plist files.
 
 The property list (``.plist``) file format is a simple serialization supporting
 basic object types, like dictionaries, lists, numbers and strings.  Usually the
-top level object is a dictionary or a frozen dictionary.
+top level object is a dictionary.
 
 To write out and to parse a plist file, use the :func:`dump` and
 :func:`load` functions.

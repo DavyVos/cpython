@@ -316,7 +316,7 @@ class MockTest(unittest.TestCase):
         passed to the wrapped object and the return_value is returned instead.
         """
         def my_func():
-            return None  # pragma: no cover
+            return None
         func_mock = create_autospec(spec=my_func, wraps=my_func)
         return_value = "explicit return value"
         func_mock.return_value = return_value
@@ -1073,10 +1073,6 @@ class MockTest(unittest.TestCase):
         mock.__iter__ = lambda s: iter([])
         self.assertIn('__iter__', dir(mock))
 
-        # spec from a tuple
-        mock_tuple_spec = Mock(spec=('something',))
-        self.assertIn('something', dir(mock_tuple_spec))
-
 
     def test_dir_from_spec(self):
         mock = Mock(spec=unittest.TestCase)
@@ -1747,13 +1743,6 @@ class MockTest(unittest.TestCase):
                 mock_method.assert_called_once_with()
                 self.assertRaises(TypeError, mock_method, 'extra_arg')
 
-    # gh-145754
-    def test_create_autospec_type_hints_typechecking(self):
-        def foo(x: Tuple[int, ...]) -> None:
-            pass
-
-        mock.create_autospec(foo)
-
     #Issue21238
     def test_mock_unsafe(self):
         m = Mock()
@@ -2112,6 +2101,15 @@ class MockTest(unittest.TestCase):
         self.assertEqual([], h.readlines())
         self.assertEqual([], h.readlines())
 
+    def test_mock_open_exit_with_contextlib_exit_stack(self):
+        # gh-150484: mock_open's __exit__ should work when called from
+        # contextlib.ExitStack, which passes (exctype, excinst, exctb).
+        from contextlib import ExitStack
+        with mock.patch('builtins.open', mock.mock_open()) as m:
+            with ExitStack() as exit_stack:
+                with exit_stack.enter_context(open('/tmp/test.txt', 'w')):
+                    pass
+
     def test_mock_parents(self):
         for Klass in Mock, MagicMock:
             m = Klass()
@@ -2226,13 +2224,13 @@ class MockTest(unittest.TestCase):
     def test_attribute_deletion(self):
         for mock in (Mock(), MagicMock(), NonCallableMagicMock(),
                      NonCallableMock()):
-            self.assertHasAttr(mock, 'm')
+            self.assertTrue(hasattr(mock, 'm'))
 
             del mock.m
-            self.assertNotHasAttr(mock, 'm')
+            self.assertFalse(hasattr(mock, 'm'))
 
             del mock.f
-            self.assertNotHasAttr(mock, 'f')
+            self.assertFalse(hasattr(mock, 'f'))
             self.assertRaises(AttributeError, getattr, mock, 'f')
 
 
@@ -2241,18 +2239,18 @@ class MockTest(unittest.TestCase):
         for mock in (Mock(), MagicMock(), NonCallableMagicMock(),
                      NonCallableMock()):
             mock.foo = 3
-            self.assertHasAttr(mock, 'foo')
+            self.assertTrue(hasattr(mock, 'foo'))
             self.assertEqual(mock.foo, 3)
 
             del mock.foo
-            self.assertNotHasAttr(mock, 'foo')
+            self.assertFalse(hasattr(mock, 'foo'))
 
             mock.foo = 4
-            self.assertHasAttr(mock, 'foo')
+            self.assertTrue(hasattr(mock, 'foo'))
             self.assertEqual(mock.foo, 4)
 
             del mock.foo
-            self.assertNotHasAttr(mock, 'foo')
+            self.assertFalse(hasattr(mock, 'foo'))
 
 
     def test_mock_raises_when_deleting_nonexistent_attribute(self):
@@ -2270,7 +2268,7 @@ class MockTest(unittest.TestCase):
         mock.child = True
         del mock.child
         mock.reset_mock()
-        self.assertNotHasAttr(mock, 'child')
+        self.assertFalse(hasattr(mock, 'child'))
 
 
     def test_class_assignable(self):

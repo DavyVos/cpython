@@ -37,12 +37,12 @@ IGNORE = {
     '_testlimitedcapi',
     '_testmultiphase',
     '_testsinglephase',
+    '_testexternalinspection',
     '_xxtestfuzz',
     'idlelib.idle_test',
     'test',
     'xxlimited',
     'xxlimited_35',
-    'xxlimited_3_13',
     'xxsubtype',
 }
 

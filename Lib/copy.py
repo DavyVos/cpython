@@ -67,15 +67,13 @@ def copy(x):
 
     cls = type(x)
 
-    if cls in _copy_atomic_types:
-        return x
-    if cls in _copy_builtin_containers:
-        return cls.copy(x)
-
+    copier = _copy_dispatch.get(cls)
+    if copier:
+        return copier(x)
 
     if issubclass(cls, type):
         # treat it as a regular class:
-        return x
+        return _copy_immutable(x)
 
     copier = getattr(cls, "__copy__", None)
     if copier is not None:
@@ -100,37 +98,46 @@ def copy(x):
     return _reconstruct(x, None, *rv)
 
 
-_copy_atomic_types = frozenset({types.NoneType, int, float, bool, complex, str, tuple,
-          bytes, frozendict, frozenset, type, range, slice, property,
+_copy_dispatch = d = {}
+
+def _copy_immutable(x):
+    return x
+for t in (types.NoneType, int, float, bool, complex, str, tuple,
+          bytes, frozenset, type, range, slice, property,
           types.BuiltinFunctionType, types.EllipsisType,
           types.NotImplementedType, types.FunctionType, types.CodeType,
-          weakref.ref, super})
-_copy_builtin_containers = frozenset({list, dict, set, bytearray})
+          weakref.ref):
+    d[t] = _copy_immutable
 
-def deepcopy(x, memo=None):
+d[list] = list.copy
+d[dict] = dict.copy
+d[set] = set.copy
+d[bytearray] = bytearray.copy
+
+del d, t
+
+def deepcopy(x, memo=None, _nil=[]):
     """Deep copy operation on arbitrary Python objects.
 
     See the module's __doc__ string for more info.
     """
 
-    cls = type(x)
-
-    if cls in _atomic_types:
-        return x
-
     d = id(x)
     if memo is None:
         memo = {}
     else:
-        if d in memo:
-            return memo[d]
+        y = memo.get(d, _nil)
+        if y is not _nil:
+            return y
+
+    cls = type(x)
 
     copier = _deepcopy_dispatch.get(cls)
     if copier is not None:
         y = copier(x, memo)
     else:
         if issubclass(cls, type):
-            y = x # atomic copy
+            y = _deepcopy_atomic(x, memo)
         else:
             copier = getattr(x, "__deepcopy__", None)
             if copier is not None:
@@ -161,12 +168,26 @@ def deepcopy(x, memo=None):
         _keep_alive(x, memo) # Make sure x lives at least as long as d
     return y
 
-_atomic_types = frozenset({types.NoneType, types.EllipsisType, types.NotImplementedType,
-          int, float, bool, complex, bytes, str, types.CodeType, type, range,
-          types.BuiltinFunctionType, types.FunctionType, weakref.ref, property})
-
 _deepcopy_dispatch = d = {}
 
+def _deepcopy_atomic(x, memo):
+    return x
+d[types.NoneType] = _deepcopy_atomic
+d[types.EllipsisType] = _deepcopy_atomic
+d[types.NotImplementedType] = _deepcopy_atomic
+d[int] = _deepcopy_atomic
+d[float] = _deepcopy_atomic
+d[bool] = _deepcopy_atomic
+d[complex] = _deepcopy_atomic
+d[bytes] = _deepcopy_atomic
+d[str] = _deepcopy_atomic
+d[types.CodeType] = _deepcopy_atomic
+d[type] = _deepcopy_atomic
+d[range] = _deepcopy_atomic
+d[types.BuiltinFunctionType] = _deepcopy_atomic
+d[types.FunctionType] = _deepcopy_atomic
+d[weakref.ref] = _deepcopy_atomic
+d[property] = _deepcopy_atomic
 
 def _deepcopy_list(x, memo, deepcopy=deepcopy):
     y = []
@@ -202,21 +223,6 @@ def _deepcopy_dict(x, memo, deepcopy=deepcopy):
     return y
 d[dict] = _deepcopy_dict
 
-def _deepcopy_frozendict(x, memo, deepcopy=deepcopy):
-    y = {}
-    for key, value in x.items():
-        y[deepcopy(key, memo)] = deepcopy(value, memo)
-
-    # We're not going to put the frozendict in the memo, but it's still
-    # important we check for it, in case the frozendict contains recursive
-    # mutable structures.
-    try:
-        return memo[id(x)]
-    except KeyError:
-        pass
-    return frozendict(y)
-d[frozendict] = _deepcopy_frozendict
-
 def _deepcopy_method(x, memo): # Copy instance methods
     return type(x)(x.__func__, deepcopy(x.__self__, memo))
 d[types.MethodType] = _deepcopy_method
@@ -244,7 +250,7 @@ def _reconstruct(x, memo, func, args,
                  *, deepcopy=deepcopy):
     deep = memo is not None
     if deep and args:
-        args = [deepcopy(arg, memo) for arg in args]
+        args = (deepcopy(arg, memo) for arg in args)
     y = func(*args)
     if deep:
         memo[id(x)] = y

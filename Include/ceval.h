@@ -42,7 +42,7 @@ PyAPI_FUNC(int) Py_MakePendingCalls(void);
      level exceeds "current recursion limit + 50". By construction, this
      protection can only be triggered when the "overflowed" flag is set. It
      means the cleanup code has itself gone into an infinite loop, or the
-     RecursionError has been mistakenly ignored. When this protection is
+     RecursionError has been mistakingly ignored. When this protection is
      triggered, the interpreter aborts with a Fatal Error.
 
    In addition, the "overflowed" flag is automatically reset when the
@@ -111,6 +111,8 @@ PyAPI_FUNC(PyObject *) PyEval_EvalFrameEx(PyFrameObject *f, int exc);
 PyAPI_FUNC(PyThreadState *) PyEval_SaveThread(void);
 PyAPI_FUNC(void) PyEval_RestoreThread(PyThreadState *);
 
+Py_DEPRECATED(3.9) PyAPI_FUNC(void) PyEval_InitThreads(void);
+
 PyAPI_FUNC(void) PyEval_AcquireThread(PyThreadState *tstate);
 PyAPI_FUNC(void) PyEval_ReleaseThread(PyThreadState *tstate);
 
@@ -122,12 +124,14 @@ PyAPI_FUNC(void) PyEval_ReleaseThread(PyThreadState *tstate);
 #define Py_END_ALLOW_THREADS    PyEval_RestoreThread(_save); \
                  }
 
-/* String conversion constants. */
+/* Masks and values used by FORMAT_VALUE opcode. */
 #define FVC_MASK      0x3
 #define FVC_NONE      0x0
 #define FVC_STR       0x1
 #define FVC_REPR      0x2
 #define FVC_ASCII     0x3
+#define FVS_MASK      0x4
+#define FVS_HAVE_SPEC 0x4
 
 #ifndef Py_LIMITED_API
 #  define Py_CPYTHON_CEVAL_H

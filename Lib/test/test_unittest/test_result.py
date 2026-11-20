@@ -13,7 +13,7 @@ class MockTraceback(object):
     class TracebackException:
         def __init__(self, *args, **kwargs):
             self.capture_locals = kwargs.get('capture_locals', False)
-        def format(self, **kwargs):
+        def format(self):
             result = ['A traceback']
             if self.capture_locals:
                 result.append('locals')
@@ -54,13 +54,6 @@ class Test_TestResult(unittest.TestCase):
         self.assertEqual(result.shouldStop, False)
         self.assertIsNone(result._stdout_buffer)
         self.assertIsNone(result._stderr_buffer)
-        self.assertEqual(result.verbosity, 1)
-
-    def test_init_verbosity(self):
-        for verbosity in range(4):
-            with self.subTest(verbosity=verbosity):
-                result = unittest.TestResult(None, None, verbosity)
-                self.assertEqual(result.verbosity, verbosity)
 
     # "This method can be called to signal that the set of tests being
     # run should be aborted by setting the TestResult's shouldStop
@@ -193,7 +186,7 @@ class Test_TestResult(unittest.TestCase):
         test = Foo('test_1')
         try:
             test.fail("foo")
-        except AssertionError:
+        except:
             exc_info_tuple = sys.exc_info()
 
         result = unittest.TestResult()
@@ -221,7 +214,7 @@ class Test_TestResult(unittest.TestCase):
         def get_exc_info():
             try:
                 test.fail("foo")
-            except AssertionError:
+            except:
                 return sys.exc_info()
 
         exc_info_tuple = get_exc_info()
@@ -248,9 +241,9 @@ class Test_TestResult(unittest.TestCase):
             try:
                 try:
                     test.fail("foo")
-                except AssertionError:
+                except:
                     raise ValueError(42)
-            except ValueError:
+            except:
                 return sys.exc_info()
 
         exc_info_tuple = get_exc_info()
@@ -278,7 +271,7 @@ class Test_TestResult(unittest.TestCase):
                 loop.__cause__ = loop
                 loop.__context__ = loop
                 raise loop
-            except Exception:
+            except:
                 return sys.exc_info()
 
         exc_info_tuple = get_exc_info()
@@ -307,7 +300,7 @@ class Test_TestResult(unittest.TestCase):
                     ex1.__cause__ = ex2
                     ex2.__context__ = ex1
                 raise C
-            except Exception:
+            except:
                 return sys.exc_info()
 
         exc_info_tuple = get_exc_info()
@@ -352,7 +345,7 @@ class Test_TestResult(unittest.TestCase):
         test = Foo('test_1')
         try:
             raise TypeError()
-        except TypeError:
+        except:
             exc_info_tuple = sys.exc_info()
 
         result = unittest.TestResult()
@@ -461,7 +454,7 @@ class Test_TestResult(unittest.TestCase):
             self.assertTrue(result.failfast)
         result = runner.run(test)
         stream.flush()
-        self.assertEndsWith(stream.getvalue(), '\n\nOK\n')
+        self.assertTrue(stream.getvalue().endswith('\n\nOK\n'))
 
 
 @force_not_colorized_test_class
@@ -1289,20 +1282,12 @@ class TestOutputBuffering(unittest.TestCase):
         suite(result)
         expected_out = '\nStdout:\ndo cleanup2\ndo cleanup1\n'
         self.assertEqual(stdout.getvalue(), expected_out)
-        self.assertEqual(len(result.errors), 2)
+        self.assertEqual(len(result.errors), 1)
         description = 'tearDownModule (Module)'
         test_case, formatted_exc = result.errors[0]
         self.assertEqual(test_case.description, description)
         self.assertIn('ValueError: bad cleanup2', formatted_exc)
-        self.assertNotIn('ExceptionGroup', formatted_exc)
         self.assertNotIn('TypeError', formatted_exc)
-        self.assertIn(expected_out, formatted_exc)
-
-        test_case, formatted_exc = result.errors[1]
-        self.assertEqual(test_case.description, description)
-        self.assertIn('TypeError: bad cleanup1', formatted_exc)
-        self.assertNotIn('ExceptionGroup', formatted_exc)
-        self.assertNotIn('ValueError', formatted_exc)
         self.assertIn(expected_out, formatted_exc)
 
     def testBufferSetUpModule_DoModuleCleanups(self):
@@ -1328,32 +1313,20 @@ class TestOutputBuffering(unittest.TestCase):
         suite(result)
         expected_out = '\nStdout:\nset up module\ndo cleanup2\ndo cleanup1\n'
         self.assertEqual(stdout.getvalue(), expected_out)
-        self.assertEqual(len(result.errors), 3)
+        self.assertEqual(len(result.errors), 2)
         description = 'setUpModule (Module)'
         test_case, formatted_exc = result.errors[0]
         self.assertEqual(test_case.description, description)
         self.assertIn('ZeroDivisionError: division by zero', formatted_exc)
-        self.assertNotIn('ExceptionGroup', formatted_exc)
         self.assertNotIn('ValueError', formatted_exc)
         self.assertNotIn('TypeError', formatted_exc)
         self.assertIn('\nStdout:\nset up module\n', formatted_exc)
-
         test_case, formatted_exc = result.errors[1]
         self.assertIn(expected_out, formatted_exc)
         self.assertEqual(test_case.description, description)
         self.assertIn('ValueError: bad cleanup2', formatted_exc)
-        self.assertNotIn('ExceptionGroup', formatted_exc)
         self.assertNotIn('ZeroDivisionError', formatted_exc)
         self.assertNotIn('TypeError', formatted_exc)
-        self.assertIn(expected_out, formatted_exc)
-
-        test_case, formatted_exc = result.errors[2]
-        self.assertIn(expected_out, formatted_exc)
-        self.assertEqual(test_case.description, description)
-        self.assertIn('TypeError: bad cleanup1', formatted_exc)
-        self.assertNotIn('ExceptionGroup', formatted_exc)
-        self.assertNotIn('ZeroDivisionError', formatted_exc)
-        self.assertNotIn('ValueError', formatted_exc)
         self.assertIn(expected_out, formatted_exc)
 
     def testBufferTearDownModule_DoModuleCleanups(self):
@@ -1382,30 +1355,19 @@ class TestOutputBuffering(unittest.TestCase):
         suite(result)
         expected_out = '\nStdout:\ntear down module\ndo cleanup2\ndo cleanup1\n'
         self.assertEqual(stdout.getvalue(), expected_out)
-        self.assertEqual(len(result.errors), 3)
+        self.assertEqual(len(result.errors), 2)
         description = 'tearDownModule (Module)'
         test_case, formatted_exc = result.errors[0]
         self.assertEqual(test_case.description, description)
         self.assertIn('ZeroDivisionError: division by zero', formatted_exc)
-        self.assertNotIn('ExceptionGroup', formatted_exc)
         self.assertNotIn('ValueError', formatted_exc)
         self.assertNotIn('TypeError', formatted_exc)
         self.assertIn('\nStdout:\ntear down module\n', formatted_exc)
-
         test_case, formatted_exc = result.errors[1]
         self.assertEqual(test_case.description, description)
         self.assertIn('ValueError: bad cleanup2', formatted_exc)
-        self.assertNotIn('ExceptionGroup', formatted_exc)
         self.assertNotIn('ZeroDivisionError', formatted_exc)
         self.assertNotIn('TypeError', formatted_exc)
-        self.assertIn(expected_out, formatted_exc)
-
-        test_case, formatted_exc = result.errors[2]
-        self.assertEqual(test_case.description, description)
-        self.assertIn('TypeError: bad cleanup1', formatted_exc)
-        self.assertNotIn('ExceptionGroup', formatted_exc)
-        self.assertNotIn('ZeroDivisionError', formatted_exc)
-        self.assertNotIn('ValueError', formatted_exc)
         self.assertIn(expected_out, formatted_exc)
 
 

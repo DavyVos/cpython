@@ -4,11 +4,13 @@
 .. module:: xml.etree.ElementTree
    :synopsis: Implementation of the ElementTree API.
 
+.. moduleauthor:: Fredrik Lundh <fredrik@pythonware.com>
+
 **Source code:** :source:`Lib/xml/etree/ElementTree.py`
 
 --------------
 
-The :mod:`!xml.etree.ElementTree` module implements a simple and efficient API
+The :mod:`xml.etree.ElementTree` module implements a simple and efficient API
 for parsing and creating XML data.
 
 .. versionchanged:: 3.3
@@ -26,7 +28,7 @@ for parsing and creating XML data.
 Tutorial
 --------
 
-This is a short tutorial for using :mod:`!xml.etree.ElementTree` (``ET`` in
+This is a short tutorial for using :mod:`xml.etree.ElementTree` (``ET`` in
 short).  The goal is to demonstrate some of the building blocks and basic
 concepts of the module.
 
@@ -561,13 +563,13 @@ Functions
 
    - *with_comments*: set to true to include comments (default: false)
    - *strip_text*: set to true to strip whitespace before and after text content
-     (default: false)
+                   (default: false)
    - *rewrite_prefixes*: set to true to replace namespace prefixes by "n{number}"
-     (default: false)
+                         (default: false)
    - *qname_aware_tags*: a set of qname aware tag names in which prefixes
-     should be replaced in text content (default: empty)
+                         should be replaced in text content (default: empty)
    - *qname_aware_attrs*: a set of qname aware attribute names in which prefixes
-     should be replaced in text content (default: empty)
+                          should be replaced in text content (default: empty)
    - *exclude_attrs*: a set of attribute names that should not be serialised
    - *exclude_tags*: a set of tag names that should not be serialised
 
@@ -631,15 +633,7 @@ Functions
    characters by default.  For indenting partial subtrees inside of an
    already indented tree, pass the initial indentation level as *level*.
 
-   No whitespace is added inside an element
-   which is marked with ``xml:space="preserve"``
-   or which contains text, because this would change its content.
-
    .. versionadded:: 3.9
-
-   .. versionchanged:: 3.16
-      Whitespace is no longer added inside an element with mixed content
-      or marked with ``xml:space="preserve"``.
 
 
 .. function:: iselement(element)
@@ -648,11 +642,10 @@ Functions
    element instance.  Return ``True`` if this is an element object.
 
 
-.. function:: iterparse(source, events=None, parser=None, *, target=None)
+.. function:: iterparse(source, events=None, parser=None)
 
-   Parses an XML section incrementally, and reports what's going on to the
-   user.  Unless a custom target is used, an element tree is built.
-   *source* is a filename or :term:`file object`
+   Parses an XML section into an element tree incrementally, and reports what's
+   going on to the user.  *source* is a filename or :term:`file object`
    containing XML data.  *events* is a sequence of events to report back.  The
    supported events are the strings ``"start"``, ``"end"``, ``"comment"``,
    ``"pi"``, ``"start-ns"`` and ``"end-ns"``
@@ -660,18 +653,11 @@ Functions
    information).  If *events* is omitted, only ``"end"`` events are reported.
    *parser* is an optional parser instance.
    If not given, the standard :class:`XMLParser` parser is used.
-   *parser* must be an instance of :class:`XMLParser` or its subclass.
-   *target* is the target of the standard parser,
-   as for :class:`XMLPullParser`;
-   it cannot be used together with *parser*.
-   Returns an :term:`iterator` providing ``(event, obj)`` pairs,
-   as described for :meth:`XMLPullParser.read_events`;
+   *parser* must be an instance of :class:`XMLParser` or its subclass
+   and can only use the default :class:`TreeBuilder` as a target.
+   Returns an :term:`iterator` providing ``(event, elem)`` pairs;
    it has a ``root`` attribute that references the root element of the
-   resulting XML tree, or the value returned by the ``close()`` method
-   of a custom target, once *source* is fully read.
-   If a custom target is used, it is set to the value returned
-   by the :meth:`!close` method of the target.
-
+   resulting XML tree once *source* is fully read.
    The iterator has the :meth:`!close` method that closes the internal
    file object if *source* is a filename.
 
@@ -702,13 +688,6 @@ Functions
 
    .. versionchanged:: 3.13
       Added the :meth:`!close` method.
-
-   .. versionchanged:: 3.15
-      A :exc:`ResourceWarning` is now emitted if the iterator opened a file
-      and is not explicitly closed.
-
-   .. versionchanged:: 3.16
-      Added the *target* parameter.
 
 
 .. function:: parse(source, parser=None)
@@ -743,7 +722,7 @@ Functions
    .. versionadded:: 3.2
 
 
-.. function:: SubElement(parent, tag, /, attrib={}, **extra)
+.. function:: SubElement(parent, tag, attrib={}, **extra)
 
    Subelement factory.  This function creates an element instance, and appends
    it to an existing element.
@@ -753,25 +732,19 @@ Functions
    attributes.  *extra* contains additional attributes, given as keyword
    arguments.  Returns an element instance.
 
-   .. versionchanged:: 3.15
-      *attrib* can now be a :class:`frozendict`.
-
-   .. versionchanged:: 3.15
-      *parent* and *tag* are now positional-only parameters.
-
 
 .. function:: tostring(element, encoding="us-ascii", method="xml", *, \
                        xml_declaration=None, default_namespace=None, \
-                       short_empty_elements=True, standalone=None)
+                       short_empty_elements=True)
 
    Generates a string representation of an XML element, including all
    subelements.  *element* is an :class:`Element` instance.  *encoding* [1]_ is
    the output encoding (default is US-ASCII).  Use ``encoding="unicode"`` to
    generate a Unicode string (otherwise, a bytestring is generated).  *method*
    is either ``"xml"``, ``"html"`` or ``"text"`` (default is ``"xml"``).
-   *xml_declaration*, *default_namespace*, *short_empty_elements* and
-   *standalone* has the same meaning as in :meth:`ElementTree.write`.
-   Returns an (optionally) encoded string containing the XML data.
+   *xml_declaration*, *default_namespace* and *short_empty_elements* has the same
+   meaning as in :meth:`ElementTree.write`. Returns an (optionally) encoded string
+   containing the XML data.
 
    .. versionchanged:: 3.4
       Added the *short_empty_elements* parameter.
@@ -783,23 +756,19 @@ Functions
       The :func:`tostring` function now preserves the attribute order
       specified by the user.
 
-   .. versionchanged:: 3.16
-      Added the *standalone* parameter.
-
 
 .. function:: tostringlist(element, encoding="us-ascii", method="xml", *, \
                            xml_declaration=None, default_namespace=None, \
-                           short_empty_elements=True, standalone=None)
+                           short_empty_elements=True)
 
    Generates a string representation of an XML element, including all
    subelements.  *element* is an :class:`Element` instance.  *encoding* [1]_ is
    the output encoding (default is US-ASCII).  Use ``encoding="unicode"`` to
    generate a Unicode string (otherwise, a bytestring is generated).  *method*
    is either ``"xml"``, ``"html"`` or ``"text"`` (default is ``"xml"``).
-   *xml_declaration*, *default_namespace*, *short_empty_elements* and
-   *standalone* has the same meaning as in :meth:`ElementTree.write`.
-   Returns a list of (optionally) encoded strings containing the XML data.
-   It does not guarantee any specific sequence,
+   *xml_declaration*, *default_namespace* and *short_empty_elements* has the same
+   meaning as in :meth:`ElementTree.write`. Returns a list of (optionally) encoded
+   strings containing the XML data. It does not guarantee any specific sequence,
    except that ``b"".join(tostringlist(element)) == tostring(element)``.
 
    .. versionadded:: 3.2
@@ -813,9 +782,6 @@ Functions
    .. versionchanged:: 3.8
       The :func:`tostringlist` function now preserves the attribute order
       specified by the user.
-
-   .. versionchanged:: 3.16
-      Added the *standalone* parameter.
 
 
 .. function:: XML(text, parser=None)
@@ -857,8 +823,7 @@ Here's an example that demonstrates use of the XInclude module. To include an XM
 
 By default, the **href** attribute is treated as a file name. You can use custom loaders to override this behaviour. Also note that the standard helper does not support XPointer syntax.
 
-To process this file, load it as usual, and pass the root element to the
-:mod:`xml.etree.ElementInclude` module:
+To process this file, load it as usual, and pass the root element to the :mod:`xml.etree.ElementTree` module:
 
 .. code-block:: python
 
@@ -942,7 +907,7 @@ Element Objects
    :noindex:
    :no-index:
 
-.. class:: Element(tag, /, attrib={}, **extra)
+.. class:: Element(tag, attrib={}, **extra)
 
    Element class.  This class defines the Element interface, and provides a
    reference implementation of this interface.
@@ -962,13 +927,6 @@ Element Objects
    With ``method="html"`` the attribute value can also be ``None``,
    which produces an empty attribute (such as ``checked``).
    Other objects can be stored in the tree, but they cannot be serialized.
-
-   .. versionchanged:: 3.15
-      *attrib* can now be a :class:`frozendict`.
-
-   .. versionchanged:: 3.15
-      *tag* is now a positional-only parameter.
-
 
    .. attribute:: tag
 
@@ -1254,7 +1212,7 @@ ElementTree Objects
 
    .. method:: write(file, encoding="us-ascii", xml_declaration=None, \
                      default_namespace=None, method="xml", *, \
-                     short_empty_elements=True, standalone=None)
+                     short_empty_elements=True)
 
       Writes the element tree to a file, as XML.  *file* is a file name, or a
       :term:`file object` opened for writing.  *encoding* [1]_ is the output
@@ -1270,13 +1228,6 @@ ElementTree Objects
       emitted as a single self-closed tag, otherwise they are emitted as a pair
       of start/end tags.
 
-      The keyword-only *standalone* parameter is the value of the standalone
-      document declaration in the XML declaration.
-      Use ``True`` for ``standalone="yes"``, ``False`` for ``standalone="no"``,
-      and ``None`` (the default) to omit it.
-      An XML declaration is written if *standalone* is not ``None``;
-      combining it with ``xml_declaration=False`` raises a :exc:`ValueError`.
-
       The output is either a string (:class:`str`) or binary (:class:`bytes`).
       This is controlled by the *encoding* argument.  If *encoding* is
       ``"unicode"``, the output is a string; otherwise, it's binary.  Note that
@@ -1290,9 +1241,6 @@ ElementTree Objects
       .. versionchanged:: 3.8
          The :meth:`write` method now preserves the attribute order specified
          by the user.
-
-      .. versionchanged:: 3.16
-         Added the *standalone* parameter.
 
 
 This is the XML file that is going to be manipulated::
@@ -1490,10 +1438,10 @@ XMLParser Objects
       Disabling reparse deferral has security consequences; please see
       :meth:`xml.parsers.expat.xmlparser.SetReparseDeferralEnabled` for details.
 
-      :meth:`!flush`
-      has been backported to some prior releases of CPython as a security fix.
-      Check for availability using :func:`hasattr` if used in code running
-      across a variety of Python versions.
+      Note that :meth:`flush` has been backported to some prior releases of
+      CPython as a security fix.  Check for availability of :meth:`flush`
+      using :func:`hasattr` if used in code running across a variety of Python
+      versions.
 
       .. versionadded:: 3.13
 
@@ -1544,7 +1492,7 @@ XMLParser Objects
 XMLPullParser Objects
 ^^^^^^^^^^^^^^^^^^^^^
 
-.. class:: XMLPullParser(events=None, *, target=None)
+.. class:: XMLPullParser(events=None)
 
    A pull parser suitable for non-blocking applications.  Its input-side API is
    similar to that of :class:`XMLParser`, but instead of pushing calls to a
@@ -1554,20 +1502,6 @@ XMLPullParser Objects
    ``"comment"``, ``"pi"``, ``"start-ns"`` and ``"end-ns"`` (the "ns" events
    are used to get detailed namespace information).  If *events* is omitted,
    only ``"end"`` events are reported.
-
-   *target* is the target object of the underlying :class:`XMLParser`.
-   If omitted, the standard :class:`TreeBuilder` is used,
-   and the reported objects are :class:`Element` instances.
-   With other targets the reported object is the value returned
-   by the corresponding method of the target,
-   so no tree is built if the target does not build one.
-   The target must implement the methods for all requested events,
-   except :meth:`!start_ns` and :meth:`!end_ns`:
-   if they are not implemented, a ``(prefix, uri)`` tuple and ``None``
-   are reported for the ``"start-ns"`` and ``"end-ns"`` events.
-
-   .. versionchanged:: 3.16
-      Added the *target* parameter.
 
    .. method:: feed(data)
 
@@ -1583,10 +1517,10 @@ XMLPullParser Objects
       Disabling reparse deferral has security consequences; please see
       :meth:`xml.parsers.expat.xmlparser.SetReparseDeferralEnabled` for details.
 
-      :meth:`!flush`
-      has been backported to some prior releases of CPython as a security fix.
-      Check for availability using :func:`hasattr` if used in code running
-      across a variety of Python versions.
+      Note that :meth:`flush` has been backported to some prior releases of
+      CPython as a security fix.  Check for availability of :meth:`flush`
+      using :func:`hasattr` if used in code running across a variety of Python
+      versions.
 
       .. versionadded:: 3.13
 
@@ -1601,10 +1535,9 @@ XMLPullParser Objects
 
       Return an iterator over the events which have been encountered in the
       data fed to the
-      parser.  The iterator yields ``(event, obj)`` pairs, where *event* is a
-      string representing the type of event (e.g. ``"end"``) and *obj* is the
-      object returned by the corresponding method of the target.
-      With the standard :class:`TreeBuilder` it is as follows.
+      parser.  The iterator yields ``(event, elem)`` pairs, where *event* is a
+      string representing the type of event (e.g. ``"end"``) and *elem* is the
+      encountered :class:`Element` object, or other context value as follows.
 
       * ``start``, ``end``: the current Element.
       * ``comment``, ``pi``: the current comment / processing instruction

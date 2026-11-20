@@ -6,6 +6,9 @@
 Using Python on macOS
 *********************
 
+.. sectionauthor:: Bob Savage <bobsavage@mac.com>
+.. sectionauthor:: Ned Deily <nad@python.org>
+
 This document aims to give an overview of macOS-specific behavior you should
 know about to get started with Python on Mac computers.
 Python on a Mac running macOS is very similar to Python on other Unix-derived platforms,
@@ -30,24 +33,24 @@ Installation steps
 For `current Python versions <https://www.python.org/downloads/>`_
 (other than those in ``security`` status), the release team produces a
 **Python for macOS** installer package for each new release.
-A list of available installers is provided on the
-`macOS downloads page <https://www.python.org/downloads/macos/>`__.
+A list of available installers
+is available `here <https://www.python.org/downloads/macos/>`_.
 We recommend using the most recent supported Python version where possible.
 Current installers provide a
 `universal2 binary <https://en.wikipedia.org/wiki/Universal_binary>`_ build
 of Python which runs natively on all Macs (Apple Silicon and Intel) that are
 supported by a wide range of macOS versions,
-currently typically from at least **macOS 10.15 Catalina** on.
+currently typically from at least **macOS 10.13 High Sierra** on.
 
 The downloaded file is a standard macOS installer package file (``.pkg``).
-File integrity information (such as checksum, size, and Sigstore signature) for each file is included
+File integrity information (checksum, size, sigstore signature, etc) for each file is included
 on the release download page. Installer packages and their contents are signed and notarized
 with ``Python Software Foundation`` Apple Developer ID certificates
 to meet `macOS Gatekeeper requirements <https://support.apple.com/en-us/102445>`_.
 
 For a default installation, double-click on the downloaded installer package file.
 This should launch the standard macOS Installer app and display the first of several
-installer steps.
+installer windows steps.
 
 .. image:: mac_installer_01_introduction.png
 
@@ -74,8 +77,8 @@ display. For most uses, the standard set of installation operations is appropria
 By pressing the **Customize** button, you can choose to omit or select certain package
 components of the installer. Click on each package name to see a description of
 what it installs.
-For details of the optional free-threaded feature, which is installed
-by default, see :ref:`install-freethreaded-macos`.
+To also install support for the optional experimental free-threaded feature,
+see :ref:`install-freethreaded-macos`.
 
 .. image:: mac_installer_05_custom_install.png
 
@@ -99,7 +102,7 @@ for its use.
 
 .. image:: mac_installer_08_install_certificates.png
 
-If ``Successfully installed certifi`` and ``update complete`` appear
+If ``Successfully installed certifi`` and ``update complete`` appears
 in the terminal window, the installation is complete.
 Close this terminal window and the installer window.
 
@@ -172,7 +175,7 @@ be certain of what you are about to run.
 
 .. _alternative_bundles:
 
-Alternative distributions
+Alternative Distributions
 =========================
 
 Besides the standard ``python.org`` for macOS installer, there are third-party
@@ -200,7 +203,7 @@ other libraries, and are not maintained or supported by the core Python team.
 
 .. _mac-package-manager:
 
-Installing additional Python packages
+Installing Additional Python Packages
 =====================================
 
 Refer to the `Python Packaging User Guide`_ for more information.
@@ -212,7 +215,7 @@ Refer to the `Python Packaging User Guide`_ for more information.
 
 .. _gui-programming-on-the-mac:
 
-GUI programming
+GUI Programming
 ===============
 
 There are several options for building GUI applications on the Mac with Python.
@@ -241,49 +244,42 @@ A number of alternative macOS GUI toolkits are available including:
 * `wxPython <https://wxpython.org>`_: A cross-platform toolkit that
   supports desktop operating systems.
 
-* `Flet <https://flet.dev/>`_: A framework for building cross-platform desktop,
-  mobile, and web applications in Python.
 
-
-Advanced topics
+Advanced Topics
 ===============
 
 .. _install-freethreaded-macos:
 
-Installing free-threaded binaries
+Installing Free-threaded Binaries
 ---------------------------------
 
-.. versionadded:: 3.13
+.. versionadded:: 3.13 (Experimental)
 
-.. versionchanged:: 3.15
-   Free-threading support is now installed by default.
+.. note::
+
+   Everything described in this section is considered experimental,
+   and should be expected to change in future releases.
 
 The ``python.org`` :ref:`Python for macOS <getting-and-installing-macpython>`
-installer package installs, by default, an additional build of
-Python |version| that supports :term:`free threading`
+installer package can optionally install an additional build of
+Python |version| that supports :pep:`703`, the experimental free-threading feature
 (running with the :term:`global interpreter lock` disabled).
 Check the release page on ``python.org`` for possible updated information.
 
-The free-threaded mode is working and continues to be improved, but
-there is some additional overhead in single-threaded workloads compared
-to the regular build. Additionally, third-party packages, in particular ones
-with an :term:`extension module`, may not be ready for use in a
-free-threaded build, and will re-enable the :term:`GIL`.
-As of Python 3.15, free-threading support is installed by default.
-It is packaged as a separate install option, which can be deselected
-by clicking the **Customize** button on the **Installation Type**
+Because this feature is still considered experimental, the support for it
+is not installed by default. It is packaged as a separate install option,
+available by clicking the **Customize** button on the **Installation Type**
 step of the installer as described above.
 
 .. image:: mac_installer_09_custom_install_free_threaded.png
 
-If the box next to the **Free-threaded Python** package name is checked
-(as it is by default),
+If the box next to the **Free-threaded Python** package name is checked,
 a separate :file:`PythonT.framework` will also be installed
 alongside the normal :file:`Python.framework` in :file:`/Library/Frameworks`.
 This configuration allows a free-threaded Python |version| build to co-exist
 on your system with a traditional (GIL only) Python |version| build with
-minimal risk while installing or testing. This installation layout may
-change in future releases.
+minimal risk while installing or testing. This installation layout is itself
+experimental and is subject to change in future releases.
 
 Known cautions and limitations:
 
@@ -292,7 +288,7 @@ Known cautions and limitations:
   the free-threaded interpreter, and |python_x_dot_y_t_literal_config|,
   a configuration utility which may be useful for package builders.
   Since :file:`/usr/local/bin` is typically included in your shell ``PATH``,
-  in most cases no changes to your ``PATH`` environment variable should
+  in most cases no changes to your ``PATH`` environment variables should
   be needed to use |python_x_dot_y_t_literal|.
 
 - For this release, the **Shell profile updater** package and the
@@ -375,8 +371,8 @@ the macOS command line :command:`installer` utility lets you select non-default
 options, too. If you are not familiar with :command:`installer`, it can be
 somewhat cryptic (see :command:`man installer` for more information).
 As an example, the following shell snippet shows one way to do it,
-using the |x_dot_y_b2_literal| release and deselecting the free-threaded
-interpreter option:
+using the |x_dot_y_b2_literal| release and selecting the free-threaded interpreter
+option:
 
 .. parsed-literal::
 
@@ -386,7 +382,7 @@ interpreter option:
     curl -O \https://www.python.org/ftp/python/\ |version|\ .0/${RELEASE}
 
     # create installer choicechanges to customize the install:
-    #    disable the PythonTFramework-\ |version|\  package
+    #    enable the PythonTFramework-\ |version|\  package
     #    while accepting the other defaults (install all other packages)
     cat > ./choicechanges.plist <<EOF
     <?xml version="1.0" encoding="UTF-8"?>
@@ -395,7 +391,7 @@ interpreter option:
     <array>
             <dict>
                     <key>attributeSetting</key>
-                    <integer>0</integer>
+                    <integer>1</integer>
                     <key>choiceAttribute</key>
                     <string>selected</string>
                     <key>choiceIdentifier</key>
@@ -408,19 +404,19 @@ interpreter option:
     sudo installer -pkg ./${RELEASE} -applyChoiceChangesXML ./choicechanges.plist -target /
 
 
-After a default install, you can test that both builds are available with something like:
+You can then test that both installer builds are now available with something like:
 
 .. parsed-literal::
 
     $ # test that the free-threaded interpreter was installed if the Unix Command Tools package was enabled
     $ /usr/local/bin/python\ |version|\ t -VV
-    Python \ |version|\ .0b2 free-threading build (v\ |version|\ .0b2:3a83b172af, Jun  5 2024, 12:57:31) [Clang 15.0.0 (clang-1500.3.9.4)]
+    Python \ |version|\ .0b2 experimental free-threading build (v\ |version|\ .0b2:3a83b172af, Jun  5 2024, 12:57:31) [Clang 15.0.0 (clang-1500.3.9.4)]
     $ #    and the traditional interpreter
     $ /usr/local/bin/python\ |version|\  -VV
     Python \ |version|\ .0b2 (v\ |version|\ .0b2:3a83b172af, Jun  5 2024, 12:50:24) [Clang 15.0.0 (clang-1500.3.9.4)]
     $ # test that they are also available without the prefix if /usr/local/bin is on $PATH
     $ python\ |version|\ t -VV
-    Python \ |version|\ .0b2 free-threading build (v\ |version|\ .0b2:3a83b172af, Jun  5 2024, 12:57:31) [Clang 15.0.0 (clang-1500.3.9.4)]
+    Python \ |version|\ .0b2 experimental free-threading build (v\ |version|\ .0b2:3a83b172af, Jun  5 2024, 12:57:31) [Clang 15.0.0 (clang-1500.3.9.4)]
     $ python\ |version|\  -VV
     Python \ |version|\ .0b2 (v\ |version|\ .0b2:3a83b172af, Jun  5 2024, 12:50:24) [Clang 15.0.0 (clang-1500.3.9.4)]
 
@@ -433,7 +429,7 @@ After a default install, you can test that both builds are available with someth
 
 .. _distributing-python-applications-on-the-mac:
 
-Distributing Python applications
+Distributing Python Applications
 --------------------------------
 
 A range of tools exist for converting your Python code into a standalone
@@ -450,7 +446,7 @@ distributable application:
 * `PyInstaller <https://pyinstaller.org/>`_: A cross-platform packaging tool that creates
   a single file or folder as a distributable artifact.
 
-App Store compliance
+App Store Compliance
 --------------------
 
 Apps submitted for distribution through the macOS App Store must pass Apple's
@@ -472,7 +468,7 @@ This patch is not normally required to use CPython on a Mac; nor is it required
 if you are distributing an app *outside* the macOS App Store. It is *only*
 required if you are using the macOS App Store as a distribution channel.
 
-Other resources
+Other Resources
 ===============
 
 The `python.org Help page <https://www.python.org/about/help/>`_ has links to many useful resources.

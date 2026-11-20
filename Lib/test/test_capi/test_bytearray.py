@@ -1,9 +1,5 @@
-import sys
-import textwrap
 import unittest
-from test import support
 from test.support import import_helper
-from test.support.script_helper import assert_python_failure
 
 _testlimitedcapi = import_helper.import_module('_testlimitedcapi')
 from _testcapi import PY_SSIZE_T_MIN, PY_SSIZE_T_MAX
@@ -59,9 +55,7 @@ class CAPITest(unittest.TestCase):
         self.assertEqual(fromstringandsize(b'', 0), bytearray())
         self.assertEqual(fromstringandsize(NULL, 0), bytearray())
         self.assertEqual(len(fromstringandsize(NULL, 3)), 3)
-        self.assertRaises(OverflowError, fromstringandsize, NULL, PY_SSIZE_T_MAX)
-        self.assertRaises(OverflowError, fromstringandsize, NULL,
-                          PY_SSIZE_T_MAX-sys.getsizeof(b'') + 1)
+        self.assertRaises(MemoryError, fromstringandsize, NULL, PY_SSIZE_T_MAX)
 
         self.assertRaises(SystemError, fromstringandsize, b'abc', -1)
         self.assertRaises(SystemError, fromstringandsize, b'abc', PY_SSIZE_T_MIN)
@@ -166,34 +160,13 @@ class CAPITest(unittest.TestCase):
         self.assertEqual(resize(ba, 3), 0)
         self.assertEqual(ba, bytearray(b'abc'))
 
-        self.assertRaises(ValueError, resize, bytearray(), -1)
-        self.assertRaises(ValueError, resize, bytearray(), -200)
         self.assertRaises(MemoryError, resize, bytearray(), PY_SSIZE_T_MAX)
         self.assertRaises(MemoryError, resize, bytearray(1000), PY_SSIZE_T_MAX)
 
+        # CRASHES resize(bytearray(b'abc'), -1)
         # CRASHES resize(b'abc', 0)
         # CRASHES resize(object(), 0)
         # CRASHES resize(NULL, 0)
-
-    @unittest.skipUnless(support.Py_DEBUG, 'need debug build (Py_DEBUG)')
-    def test_detect_overflow(self):
-        # Test detection of buffer overflow
-        size = 123    # bytes
-        overflow = 1  # bytes
-        code = textwrap.dedent(f'''
-            from test.support import SuppressCrashReport
-            import _testcapi
-
-            size = {size}
-            overflow = {overflow}
-            with SuppressCrashReport():
-                # Trigger a buffer overflow in a new bytearray
-                ba = _testcapi.bytearray_overflow(size, overflow)
-                ba = None
-        ''')
-        proc = assert_python_failure('-c', code)
-        self.assertIn(b'Buffer overflow detected in bytearray object', proc.err)
-        self.assertIn(f'at position {size}'.encode(), proc.err)
 
 
 if __name__ == "__main__":

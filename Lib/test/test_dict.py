@@ -3,13 +3,12 @@ import collections.abc
 import gc
 import pickle
 import random
-import re
 import string
 import sys
 import unittest
 import weakref
 from test import support
-from test.support import import_helper
+from test.support import import_helper, get_c_recursion_limit
 
 
 class CustomHash:
@@ -115,24 +114,6 @@ class DictTest(unittest.TestCase):
         self.assertEqual(set(d.items()), {(1, 2)})
         self.assertRaises(TypeError, d.items, None)
         self.assertEqual(repr(dict(a=1).items()), "dict_items([('a', 1)])")
-
-    @support.cpython_only
-    def test_item_iterator_oom(self):
-        import_helper.import_module('_testcapi')
-        from test.support.script_helper import assert_python_ok
-        code = """if 1:
-            from test import support
-            items = {1: 2, 3: 4}.items()
-            ballast = [(i, i) for i in range(3000)]
-            held = []
-            for start in range(1, 5):
-                try:
-                    with support.inject_memory_error_cm(start):
-                        held.append(iter(items))
-                except MemoryError:
-                    pass
-            """
-        assert_python_ok('-c', code)
 
     def test_views_mapping(self):
         mappingproxy = type(type.__dict__)
@@ -293,30 +274,6 @@ class DictTest(unittest.TestCase):
 
         self.assertRaises(ValueError, {}.update, [(1, 2, 3)])
 
-    def test_update_type_error(self):
-        with self.assertRaises(TypeError) as cm:
-            {}.update([object() for _ in range(3)])
-
-        self.assertEqual(str(cm.exception), "object is not iterable")
-        self.assertEqual(
-            cm.exception.__notes__,
-            ['Cannot convert dictionary update sequence element #0 to a sequence'],
-        )
-
-        def badgen():
-            yield "key"
-            raise TypeError("oops")
-            yield "value"
-
-        with self.assertRaises(TypeError) as cm:
-            dict([badgen() for _ in range(3)])
-
-        self.assertEqual(str(cm.exception), "oops")
-        self.assertEqual(
-            cm.exception.__notes__,
-            ['Cannot convert dictionary update sequence element #0 to a sequence'],
-        )
-
     def test_update_shared_keys(self):
         class MyClass: pass
 
@@ -476,13 +433,6 @@ class DictTest(unittest.TestCase):
             del d[k]
         d2 = d.copy()
         self.assertEqual(d2, d)
-
-    @support.nomemtest
-    def test_copy_empty_no_memory(self):
-        import _testcapi
-        d = {}
-        with self.assertRaises(MemoryError):
-            _testcapi.call_with_nomemory(0, 0, d.copy)
 
     def test_get(self):
         d = {}
@@ -703,12 +653,9 @@ class DictTest(unittest.TestCase):
         d = {1: BadRepr()}
         self.assertRaises(Exc, repr, d)
 
-    @support.run_with_limited_c_stack()
-    @support.skip_wasi_stack_overflow()
-    @support.skip_emscripten_stack_overflow()
     def test_repr_deep(self):
         d = {}
-        for i in range(support.exceeds_recursion_limit()):
+        for i in range(get_c_recursion_limit() + 1):
             d = {1: d}
         self.assertRaises(RecursionError, repr, d)
 
@@ -854,8 +801,8 @@ class DictTest(unittest.TestCase):
 
     def test_missing(self):
         # Make sure dict doesn't have a __missing__ method
-        self.assertNotHasAttr(dict, "__missing__")
-        self.assertNotHasAttr({}, "__missing__")
+        self.assertFalse(hasattr(dict, "__missing__"))
+        self.assertFalse(hasattr({}, "__missing__"))
         # Test several cases:
         # (D) subclass defines __missing__ method returning a value
         # (E) subclass defines __missing__ method raising RuntimeError
@@ -992,6 +939,127 @@ class DictTest(unittest.TestCase):
             gc.collect()
             self.assertIs(ref(), None, "Cycle was not collected")
 
+    def _not_tracked(self, t):
+        # Nested containers can take several collections to untrack
+        gc.collect()
+        gc.collect()
+        self.assertFalse(gc.is_tracked(t), t)
+
+    def _tracked(self, t):
+        self.assertTrue(gc.is_tracked(t), t)
+        gc.collect()
+        gc.collect()
+        self.assertTrue(gc.is_tracked(t), t)
+
+    def test_string_keys_can_track_values(self):
+        # Test that this doesn't leak.
+        for i in range(10):
+            d = {}
+            for j in range(10):
+                d[str(j)] = j
+            d["foo"] = d
+
+    @support.cpython_only
+    def test_track_literals(self):
+        # Test GC-optimization of dict literals
+        x, y, z, w = 1.5, "a", (1, None), []
+
+        self._not_tracked({})
+        self._not_tracked({x:(), y:x, z:1})
+        self._not_tracked({1: "a", "b": 2})
+        self._not_tracked({1: 2, (None, True, False, ()): int})
+        self._not_tracked({1: object()})
+
+        # Dicts with mutable elements are always tracked, even if those
+        # elements are not tracked right now.
+        self._tracked({1: []})
+        self._tracked({1: ([],)})
+        self._tracked({1: {}})
+        self._tracked({1: set()})
+
+    @support.cpython_only
+    def test_track_dynamic(self):
+        # Test GC-optimization of dynamically-created dicts
+        class MyObject(object):
+            pass
+        x, y, z, w, o = 1.5, "a", (1, object()), [], MyObject()
+
+        d = dict()
+        self._not_tracked(d)
+        d[1] = "a"
+        self._not_tracked(d)
+        d[y] = 2
+        self._not_tracked(d)
+        d[z] = 3
+        self._not_tracked(d)
+        self._not_tracked(d.copy())
+        d[4] = w
+        self._tracked(d)
+        self._tracked(d.copy())
+        d[4] = None
+        self._not_tracked(d)
+        self._not_tracked(d.copy())
+
+        # dd isn't tracked right now, but it may mutate and therefore d
+        # which contains it must be tracked.
+        d = dict()
+        dd = dict()
+        d[1] = dd
+        self._not_tracked(dd)
+        self._tracked(d)
+        dd[1] = d
+        self._tracked(dd)
+
+        d = dict.fromkeys([x, y, z])
+        self._not_tracked(d)
+        dd = dict()
+        dd.update(d)
+        self._not_tracked(dd)
+        d = dict.fromkeys([x, y, z, o])
+        self._tracked(d)
+        dd = dict()
+        dd.update(d)
+        self._tracked(dd)
+
+        d = dict(x=x, y=y, z=z)
+        self._not_tracked(d)
+        d = dict(x=x, y=y, z=z, w=w)
+        self._tracked(d)
+        d = dict()
+        d.update(x=x, y=y, z=z)
+        self._not_tracked(d)
+        d.update(w=w)
+        self._tracked(d)
+
+        d = dict([(x, y), (z, 1)])
+        self._not_tracked(d)
+        d = dict([(x, y), (z, w)])
+        self._tracked(d)
+        d = dict()
+        d.update([(x, y), (z, 1)])
+        self._not_tracked(d)
+        d.update([(x, y), (z, w)])
+        self._tracked(d)
+
+    @support.cpython_only
+    def test_track_subtypes(self):
+        # Dict subtypes are always tracked
+        class MyDict(dict):
+            pass
+        self._tracked(MyDict())
+
+    @support.cpython_only
+    def test_track_lazy_instance_dicts(self):
+        class C:
+            pass
+        o = C()
+        d = o.__dict__
+        self._not_tracked(d)
+        o.untracked = 42
+        self._not_tracked(d)
+        o.tracked = []
+        self._tracked(d)
+
     def make_shared_key_dict(self, n):
         class C:
             pass
@@ -1019,26 +1087,6 @@ class DictTest(unittest.TestCase):
 
         self.assertEqual(list(a), ['x', 'y', 'z', 'a', 'b'])
         self.assertEqual(list(b), ['x', 'y', 'z', 'b', 'a'])
-
-    @support.cpython_only
-    def test_splittable_setdefault_str_subclass(self):
-        class C:
-            pass
-
-        class S(str):
-            pass
-
-        a = C()
-        a.x = 1
-        b = C()
-        b.y = 2
-        d = b.__dict__
-
-        self.assertEqual(d.setdefault(S('x'), 5), 5)
-        self.assertEqual(d, {'y': 2, 'x': 5})
-        self.assertEqual(d.setdefault(S('x'), 6), 5)
-        self.assertEqual(list(d), ['y', 'x'])
-        self.assertEqual(a.__dict__, {'x': 1})
 
     @support.cpython_only
     def test_splittable_del(self):
@@ -1680,48 +1728,6 @@ class DictTest(unittest.TestCase):
         gc.collect()
         self.assertEqual(holds_reference.ref['data'], 42)
         self.assertEqual(holds_reference.attr, "whatever")
-
-    def test_unhashable_key(self):
-        d = {'a': 1}
-        key = [1, 2, 3]
-
-        def check_unhashable_key():
-            msg = "cannot use 'list' as a dict key (unhashable type: 'list')"
-            return self.assertRaisesRegex(TypeError, re.escape(msg))
-
-        with check_unhashable_key():
-            key in d
-        with check_unhashable_key():
-            d[key]
-        with check_unhashable_key():
-            d[key] = 2
-        with check_unhashable_key():
-            d.setdefault(key, 2)
-        with check_unhashable_key():
-            d.pop(key)
-        with check_unhashable_key():
-            d.get(key)
-
-        # Only TypeError exception is overridden,
-        # other exceptions are left unchanged.
-        class HashError:
-            def __hash__(self):
-                raise KeyError('error')
-
-        key2 = HashError()
-        with self.assertRaises(KeyError):
-            key2 in d
-        with self.assertRaises(KeyError):
-            d[key2]
-        with self.assertRaises(KeyError):
-            d[key2] = 2
-        with self.assertRaises(KeyError):
-            d.setdefault(key2, 2)
-        with self.assertRaises(KeyError):
-            d.pop(key2)
-        with self.assertRaises(KeyError):
-            d.get(key2)
-
     def test_clear_at_lookup(self):
         # gh-140551 dict crash if clear is called at lookup stage
         class X:
@@ -1855,45 +1861,6 @@ class DictTest(unittest.TestCase):
         d = x.__dict__
         d.clear()
 
-    def test_clear_reentrant_detached_split(self):
-        # gh-158198 follow-up: dict.clear() on a detached split-table dict
-        # must not expose (Py_EMPTY_KEYS, non-NULL ma_values) to a
-        # finalizer.  A reentrant insert must see a consistent empty dict.
-        class MyObj: pass
-        class Reinsert:
-            def __del__(self):
-                d['reentrant'] = 1
-
-        x = MyObj()
-        x.a = Reinsert()
-        x.b = 'other'
-
-        d = x.__dict__
-        # Detach: the old dict becomes a heap-allocated split table
-        # (ma_values non-NULL, embedded == 0).
-        x.__dict__ = {}
-        d.clear()
-        self.assertEqual(d, {'reentrant': 1})
-
-    def test_clear_reentrant_detached_split_update(self):
-        # Same as above but with a reentrant update large enough to force
-        # a resize.  On the buggy code this frees the values array that
-        # clear() is still iterating over (use-after-free / segfault).
-        class MyObj: pass
-        other = {f'k{i}': i for i in range(20)}
-        class Reinsert:
-            def __del__(self):
-                d.update(other)
-
-        x = MyObj()
-        x.a = Reinsert()
-        x.b = 'other'
-
-        d = x.__dict__
-        x.__dict__ = {}
-        d.clear()
-        self.assertEqual(d, other)
-
 
 class CAPITest(unittest.TestCase):
 
@@ -1936,279 +1903,6 @@ class Dict(dict):
 
 class SubclassMappingTests(mapping_tests.BasicTestMappingProtocol):
     type2test = Dict
-
-class FrozenDictMappingTests(mapping_tests.BasicTestImmutableMappingProtocol):
-    type2test = frozendict
-
-
-class FrozenDict(frozendict):
-    pass
-
-
-class FrozenDictSlots(frozendict):
-    __slots__ = ('slot_attr',)
-
-
-class FrozenDictTests(unittest.TestCase):
-    def test_constructor(self):
-        # frozendict.__init__() has no effect
-        d = frozendict(a=1, b=2, c=3)
-        d.__init__(x=1)
-        self.assertEqual(d, frozendict(a=1, b=2, c=3))
-
-        # dict constructor cannot be used on frozendict
-        with self.assertRaises(TypeError):
-            dict.__init__(d, x=1)
-
-        # Avoid copy if it's frozendict type
-        d2 = frozendict(d)
-        self.assertIs(d2, d)
-        d2 = FrozenDict(d)
-        self.assertIsNot(d2, d)
-        self.assertEqual(d2, d)
-
-    def test_copy(self):
-        d = frozendict(x=1, y=2)
-        d2 = d.copy()
-        self.assertIs(d2, d)
-
-        d = FrozenDict(x=1, y=2)
-        d2 = d.copy()
-        self.assertIsNot(d2, d)
-        self.assertEqual(d2, frozendict(x=1, y=2))
-        self.assertEqual(type(d2), frozendict)
-
-    def test_copy_iter_override(self):
-        class CustomReversedDict(frozendict):
-            def keys(self):
-                return reversed(list(frozendict.keys(self)))
-
-            __iter__ = keys
-
-        pairs = [('a', 1), ('b', 2), ('c', 3)]
-        d = CustomReversedDict(pairs)
-        d2 = d.copy()
-        self.assertIsNot(d2, d)
-        self.assertEqual(type(d2), frozendict)
-        self.assertEqual(list(d2.items()), pairs[::-1])
-
-    def test_merge(self):
-        # test "a | b" operator
-        self.assertEqual(frozendict(x=1) | frozendict(y=2),
-                         frozendict({'x': 1, 'y': 2}))
-        self.assertEqual(frozendict(x=1) | dict(y=2),
-                         frozendict({'x': 1, 'y': 2}))
-        self.assertEqual(frozendict(x=1, y=2) | frozendict(y=5),
-                         frozendict({'x': 1, 'y': 5}))
-        self.assertEqual(FrozenDict(x=1, y=2) | FrozenDict(y=5),
-                         frozendict({'x': 1, 'y': 5}))
-
-        fd = frozendict(x=1, y=2)
-        self.assertIs(fd | frozendict(), fd)
-        self.assertIs(fd | {}, fd)
-        self.assertIs(frozendict() | fd, fd)
-
-        fd = FrozenDict(x=1, y=2)
-        self.assertEqual(fd | frozendict(), fd)
-        self.assertEqual(fd | {}, fd)
-        self.assertEqual(frozendict() | fd, fd)
-
-        # gh-149676: Test hash(frozendict | frozendict)
-        a = frozendict({"a": 1})
-        b = frozendict({"b": 2})
-        self.assertEqual(hash(a | b), hash(frozendict({"a": 1, "b": 2})))
-
-    def test_update(self):
-        # test "a |= b" operator
-        d = frozendict(x=1)
-        copy = d
-        self.assertIs(copy, d)
-        d |= frozendict(y=2)
-        self.assertIsNot(copy, d)
-        self.assertEqual(d, frozendict({'x': 1, 'y': 2}))
-        self.assertEqual(copy, frozendict({'x': 1}))
-
-    def test_items_xor(self):
-        # test "a ^ b" operator on items views
-        res = frozendict(a=1, b=2).items() ^ frozendict(b=2, c=3).items()
-        self.assertEqual(res, {('a', 1), ('c', 3)})
-
-    def test_repr(self):
-        d = frozendict()
-        self.assertEqual(repr(d), "frozendict()")
-
-        d = frozendict(x=1, y=2)
-        self.assertEqual(repr(d), "frozendict({'x': 1, 'y': 2})")
-
-        d = FrozenDict(x=1, y=2)
-        self.assertEqual(repr(d), "FrozenDict({'x': 1, 'y': 2})")
-
-    def test_hash(self):
-        # hash() doesn't rely on the items order
-        self.assertEqual(hash(frozendict(x=1, y=2)),
-                         hash(frozendict(y=2, x=1)))
-
-        # Check that hash() computes the hash of (key, value) pairs
-        cases = [
-            frozendict(a=False, b=True, c=True),
-            frozendict(a=True, b=False, c=True),
-            frozendict(a=True, b=True, c=False),
-            frozendict({False: "a", "b": True, "c": True}),
-            frozendict({"a": "b", False: True, True: "c"}),
-        ]
-        hashes = {hash(fd) for fd in cases}
-        self.assertEqual(len(hashes), len(cases))
-
-        fd = frozendict(x=[1], y=[2])
-        with self.assertRaisesRegex(TypeError, "unhashable type: 'list'"):
-            hash(fd)
-
-    @support.skip_if_huge_c_stack(500_000)
-    @support.skip_wasi_stack_overflow()
-    @support.skip_emscripten_stack_overflow()
-    def test_hash_deeply_nested(self):
-        # This should raise a RecursionError and not crash.
-        # Nesting through *values*: unlike keys, values are not hashed at
-        # construction time, so hashing recurses the full depth.
-        # See https://github.com/python/cpython/issues/154318.
-        fd = frozendict({0: 0})
-        for _ in range(500_000):
-            fd = frozendict({0: fd})
-        with self.assertRaisesRegex(RecursionError,
-                                    "while hashing a frozendict"):
-            hash(fd)
-
-    @support.cpython_only
-    def test_hash_cpython(self):
-        # Check that hash(frozendict) implementation is:
-        # hash(frozenset(fd.items()))
-        for fd in (
-            frozendict(),
-            frozendict(x=1, y=2),
-            frozendict(y=2, x=1),
-            frozendict(a=False, b=True, c=True),
-            frozendict.fromkeys('abc'),
-        ):
-            with self.subTest(fd=fd):
-                self.assertEqual(hash(fd), hash(frozenset(fd.items())))
-
-    def test_fromkeys(self):
-        self.assertEqual(frozendict.fromkeys('abc'),
-                         frozendict(a=None, b=None, c=None))
-
-        # Subclass which overrides the constructor
-        created = frozendict(x=1)
-        class FrozenDictSubclass(frozendict):
-            def __new__(cls, *args, **kwargs):
-                if args or kwargs:
-                    return super().__new__(cls, *args, **kwargs)
-                else:
-                    return created
-
-        fd = FrozenDictSubclass.fromkeys("abc")
-        self.assertEqual(fd, frozendict(x=1, a=None, b=None, c=None))
-        self.assertEqual(type(fd), FrozenDictSubclass)
-        self.assertEqual(created, frozendict(x=1))
-
-        fd = FrozenDictSubclass.fromkeys(frozendict(y=2))
-        self.assertEqual(fd, frozendict(x=1, y=None))
-        self.assertEqual(type(fd), FrozenDictSubclass)
-        self.assertEqual(created, frozendict(x=1))
-
-        # Dict subclass with a constructor which returns a frozendict
-        # by default
-        class DictSubclass(dict):
-            def __new__(cls, *args, **kwargs):
-                if args or kwargs:
-                    return super().__new__(cls, *args, **kwargs)
-                else:
-                    return created
-
-        fd = DictSubclass.fromkeys("abc")
-        self.assertEqual(fd, frozendict(x=1, a=None, b=None, c=None))
-        self.assertEqual(type(fd), DictSubclass)
-        self.assertEqual(created, frozendict(x=1))
-
-        # Subclass which doesn't override the constructor
-        class FrozenDictSubclass2(frozendict):
-            pass
-
-        fd = FrozenDictSubclass2.fromkeys("abc")
-        self.assertEqual(fd, frozendict(a=None, b=None, c=None))
-        self.assertEqual(type(fd), FrozenDictSubclass2)
-
-    def test_pickle(self):
-        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
-            for fd in (
-                frozendict(),
-                frozendict(x=1, y=2),
-                FrozenDict(x=1, y=2),
-                FrozenDictSlots(x=1, y=2),
-            ):
-                if type(fd) == FrozenDict:
-                    fd.attr = 123
-                if type(fd) == FrozenDictSlots:
-                    fd.slot_attr = 456
-                with self.subTest(fd=fd, proto=proto):
-                    if proto >= 2:
-                        p = pickle.dumps(fd, proto)
-                        fd2 = pickle.loads(p)
-                        self.assertEqual(fd2, fd)
-                        self.assertEqual(type(fd2), type(fd))
-                        if type(fd) == FrozenDict:
-                            self.assertEqual(fd2.attr, 123)
-                        if type(fd) == FrozenDictSlots:
-                            self.assertEqual(fd2.slot_attr, 456)
-                    else:
-                        # protocol 0 and 1 don't support frozendict
-                        with self.assertRaises(TypeError):
-                            pickle.dumps(fd, proto)
-
-    def test_pickle_iter(self):
-        fd = frozendict(c=1, b=2, a=3, d=4, e=5, f=6)
-        for method_name in (None, 'keys', 'values', 'items'):
-            if method_name is not None:
-                meth = getattr(fd, method_name)
-            else:
-                meth = lambda: fd
-            expected = list(meth())[1:]
-            for proto in range(pickle.HIGHEST_PROTOCOL + 1):
-                with self.subTest(method_name=method_name, protocol=proto):
-                    it = iter(meth())
-                    next(it)
-                    p = pickle.dumps(it, proto)
-                    unpickled = pickle.loads(p)
-                    self.assertEqual(list(unpickled), expected)
-                    self.assertEqual(list(it), expected)
-
-    def test_unhashable_key(self):
-        d = frozendict(a=1)
-        key = [1, 2, 3]
-
-        def check_unhashable_key():
-            msg = "cannot use 'list' as a frozendict key (unhashable type: 'list')"
-            return self.assertRaisesRegex(TypeError, re.escape(msg))
-
-        with check_unhashable_key():
-            key in d
-        with check_unhashable_key():
-            d[key]
-        with check_unhashable_key():
-            d.get(key)
-
-        # Only TypeError exception is overridden,
-        # other exceptions are left unchanged.
-        class HashError:
-            def __hash__(self):
-                raise KeyError('error')
-
-        key2 = HashError()
-        with self.assertRaises(KeyError):
-            key2 in d
-        with self.assertRaises(KeyError):
-            d[key2]
-        with self.assertRaises(KeyError):
-            d.get(key2)
 
 
 if __name__ == "__main__":

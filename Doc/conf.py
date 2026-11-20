@@ -26,12 +26,10 @@ extensions = [
     'c_annotations',
     'changes',
     'glossary_search',
-    'grammar_snippet',
     'implementation_detail',
     'issue_role',
     'lexers',
     'misc_news',
-    'profiling_trace',
     'pydoc_topics',
     'pyspecific',
     'sphinx.ext.coverage',
@@ -71,7 +69,7 @@ manpages_url = 'https://manpages.debian.org/{path}'
 
 # General substitutions.
 project = 'Python'
-copyright = "2001 Python Software Foundation"
+copyright = "2001-%Y, Python Software Foundation"
 _doc_authors = 'Python documentation authors'
 
 # We look for the Include/patchlevel.h file in the current Python source tree
@@ -86,23 +84,9 @@ rst_epilog = f"""
 .. |python_x_dot_y_literal| replace:: ``python{version}``
 .. |python_x_dot_y_t_literal| replace:: ``python{version}t``
 .. |python_x_dot_y_t_literal_config| replace:: ``python{version}t-config``
-.. |python_x_dot_y_exe_literal| replace:: ``python{version}.exe``
-.. |python_x_dot_y_t_exe_literal| replace:: ``python{version}t.exe``
-.. |python_xy_dll_literal| replace:: ``python{v.major}{v.minor}.dll``
-.. |py_v_x_dot_y_literal| replace:: ``py -V:{version}``
-.. |py_v_x_dot_y_t_literal| replace:: ``py -V:{version}t``
-.. |x_dot_y_literal| replace:: ``{version}``
-.. |x_dot_y_64_literal| replace:: ``{version}-64``
 .. |x_dot_y_b2_literal| replace:: ``{version}.0b2``
 .. |applications_python_version_literal| replace:: ``/Applications/Python {version}/``
 .. |usr_local_bin_python_x_dot_y_literal| replace:: ``/usr/local/bin/python{version}``
-
-.. Apparently this how you hack together a formatted link:
-   (https://www.docutils.org/docs/ref/rst/directives.html#replacement-text)
-.. |FORCE_COLOR| replace:: ``FORCE_COLOR``
-.. _FORCE_COLOR: https://force-color.org/
-.. |NO_COLOR| replace:: ``NO_COLOR``
-.. _NO_COLOR: https://no-color.org/
 """
 
 # There are two options for replacing |today|. Either, you set today to some
@@ -187,26 +171,6 @@ nitpick_ignore = [
     ('c:type', 'unsigned __int64'),
     ('c:type', 'double'),
     ('c:type', '_Float16'),
-    # Expat types
-    ('c:type', 'XML_Bool'),
-    ('c:type', 'XML_Char'),
-    ('c:type', 'XML_CharacterDataHandler'),
-    ('c:type', 'XML_CommentHandler'),
-    ('c:type', 'XML_DefaultHandler'),
-    ('c:type', 'XML_Encoding'),
-    ('c:type', 'XML_EndElementHandler'),
-    ('c:type', 'XML_EndNamespaceDeclHandler'),
-    ('c:type', 'XML_Error'),
-    ('c:type', 'XML_LChar'),
-    ('c:type', 'XML_Memory_Handling_Suite'),
-    ('c:type', 'XML_Parser'),
-    ('c:type', 'XML_ProcessingInstructionHandler'),
-    ('c:type', 'XML_Size'),
-    ('c:type', 'XML_StartDoctypeDeclHandler'),
-    ('c:type', 'XML_StartElementHandler'),
-    ('c:type', 'XML_StartNamespaceDeclHandler'),
-    ('c:type', 'XML_Status'),
-    ('c:type', 'XML_UnknownEncodingHandler'),
     # Standard C structures
     ('c:struct', 'in6_addr'),
     ('c:struct', 'in_addr'),
@@ -221,10 +185,6 @@ nitpick_ignore = [
     ('c:macro', 'LONG_MIN'),
     # Standard C variables
     ('c:data', 'errno'),
-    # Platform-specific socket constants documented collectively as SO_*.
-    ('py:const', 'socket.SO_EXCLUSIVEADDRUSE'),
-    ('py:const', 'socket.SO_REUSEADDR'),
-    ('py:const', 'socket.SO_REUSEPORT'),
     # Standard environment variables
     ('envvar', 'BROWSER'),
     ('envvar', 'COLUMNS'),
@@ -263,8 +223,13 @@ nitpick_ignore = [
 # Temporary undocumented names.
 # In future this list must be empty.
 nitpick_ignore += [
+    # Do not error nit-picky mode builds when _SubParsersAction.add_parser cannot
+    # be resolved, as the method is currently undocumented. For context, see
+    # https://github.com/python/cpython/pull/103289.
+    ('py:meth', '_SubParsersAction.add_parser'),
     # Attributes/methods/etc. that definitely should be documented better,
     # but are deferred for now:
+    ('py:attr', '__annotations__'),
     ('py:attr', '__wrapped__'),
 ]
 
@@ -319,7 +284,7 @@ if any('htmlhelp' in arg for arg in sys.argv):
     print("It may be removed in the future\n")
 
 # Short title used e.g. for <title> HTML tags.
-html_short_title = f'{release} documentation'
+html_short_title = f'{release} Documentation'
 
 # Deployment preview information
 # (See .readthedocs.yml and https://docs.readthedocs.io/en/stable/reference/environment-variables.html)
@@ -385,6 +350,8 @@ latex_elements = {
   \sphinxstrong{Python Software Foundation}\\
   Email: \sphinxemail{docs@python.org}
 }
+\let\Verbatim=\OriginalVerbatim
+\let\endVerbatim=\endOriginalVerbatim
 \setcounter{tocdepth}{2}
 ''',
     # The paper size ('letterpaper' or 'a4paper').
@@ -489,12 +456,7 @@ latex_appendices = ['glossary', 'about', 'license', 'copyright']
 
 epub_author = _doc_authors
 epub_publisher = 'Python Software Foundation'
-epub_exclude_files = (
-    'index.xhtml',
-    'download.xhtml',
-    '_static/tachyon-example-flamegraph.html',
-    '_static/tachyon-example-heatmap.html',
-)
+epub_exclude_files = ('index.xhtml', 'download.xhtml')
 
 # index pages are not valid xhtml
 # https://github.com/sphinx-doc/sphinx/issues/12359
@@ -608,11 +570,6 @@ linkcheck_ignore = [
     r'https://unix.org/version2/whatsnew/lp64_wp.html',
 ]
 
-# Options to adjust search results sorting
-# ----------------------------------------
-
-html_search_scorer = "tools/static/search_scorer.js"
-
 
 # Options for sphinx.ext.extlinks
 # -------------------------------
@@ -633,7 +590,6 @@ extlinks_detect_hardcoded_links = True
 # Relative filename of the data files
 refcount_file = 'data/refcounts.dat'
 stable_abi_file = 'data/stable_abi.dat'
-threadsafety_file = 'data/threadsafety.dat'
 
 # Options for notfound.extension
 # -------------------------------
@@ -673,10 +629,6 @@ rediraffe_redirects = {
     "library/stdtypes.rst": "builtins/stdtypes.rst",
     "library/constants.rst": "builtins/constants.rst",
     "library/exceptions.rst": "builtins/exceptions.rst",
-    "library/threadsafety.rst": "builtins/threadsafety.rst",
-    "library/time-complexity.rst": "builtins/time-complexity.rst",
-    # Renamed to tkinter.dialogs.rst in GH-151656
-    "library/dialog.rst": "library/tkinter.dialogs.rst",
 }
 
 # Refuse to run the doctest builder under a mismatched Python

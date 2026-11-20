@@ -6,29 +6,29 @@ import sys
 import sysconfig
 import time
 import trace
-from _colorize import get_colors  # type: ignore[import-not-found]
 from typing import NoReturn
 
-from test.support import os_helper, MS_WINDOWS, flush_std_streams
+from test.support import (os_helper, MS_WINDOWS, flush_std_streams,
+                          can_use_suppress_immortalization,
+                          suppress_immortalization)
 
 from .cmdline import _parse_args, Namespace
-from .findtests import findtests, split_test_packages, list_cases, collect_cases
+from .findtests import findtests, split_test_packages, list_cases
 from .logger import Logger
 from .pgo import setup_pgo_tests
-from .reporter import get_reporter
-from .result import TestResult
+from .result import State, TestResult
 from .results import TestResults, EXITCODE_INTERRUPTED
 from .runtests import RunTests, HuntRefleak
 from .setup import setup_process, setup_test_dir
 from .single import run_single_test, PROGRESS_MIN_TIME
-from .tsan import setup_tsan_tests, setup_tsan_parallel_tests
+from .tsan import setup_tsan_tests
 from .utils import (
     StrPath, StrJSON, TestName, TestList, TestTuple, TestFilter,
     strip_py_suffix, count, format_duration,
     printlist, get_temp_dir, get_work_dir, exit_timeout,
     display_header, cleanup_temp_dir, print_warning,
     is_cross_compiled, get_host_runner, display_title,
-    get_process_memory_usage, EXIT_TIMEOUT)
+    EXIT_TIMEOUT)
 
 
 class Regrtest:
@@ -61,7 +61,6 @@ class Regrtest:
         self.pgo: bool = ns.pgo
         self.pgo_extended: bool = ns.pgo_extended
         self.tsan: bool = ns.tsan
-        self.tsan_parallel: bool = ns.tsan_parallel
 
         # Test results
         self.results: TestResults = TestResults()
@@ -69,13 +68,11 @@ class Regrtest:
 
         # Logger
         self.logger = Logger(self.results, self.quiet, self.pgo)
-        self.reporter = get_reporter()
 
         # Actions
         self.want_header: bool = ns.header
         self.want_list_tests: bool = ns.list_tests
         self.want_list_cases: bool = ns.list_cases
-        self.want_single_process_per_case: bool = ns.single_process_per_case
         self.want_wait: bool = ns.wait
         self.want_cleanup: bool = ns.cleanup
         self.want_rerun: bool = ns.rerun
@@ -102,10 +99,6 @@ class Regrtest:
         else:
             num_workers = ns.use_mp  # run in parallel
         self.num_workers: int = num_workers
-        if ns.single_process_per_case and ns.use_mp is None:
-            # Each test case runs in its own worker subprocess;
-            # default to one worker when -j was not given.
-            self.num_workers = 1
         self.worker_json: StrJSON | None = ns.worker_json
 
         # Options to run tests
@@ -150,9 +143,6 @@ class Regrtest:
             self.random_seed = random.getrandbits(32)
         else:
             self.random_seed = ns.random_seed
-        self.prioritize_tests: tuple[str, ...] = tuple(ns.prioritize)
-
-        self.parallel_threads = ns.parallel_threads
 
         # tests
         self.first_runtests: RunTests | None = None
@@ -210,11 +200,6 @@ class Regrtest:
 
         if self.tsan:
             setup_tsan_tests(self.cmdline_args)
-            self.want_header = True
-
-        if self.tsan_parallel:
-            setup_tsan_parallel_tests(self.cmdline_args)
-            self.want_header = True
 
         alltests = findtests(testdir=self.test_dir,
                              exclude=exclude_tests)
@@ -252,16 +237,6 @@ class Regrtest:
         if self.randomize:
             random.shuffle(selected)
 
-        for priority_test in reversed(self.prioritize_tests):
-            try:
-                selected.remove(priority_test)
-            except ValueError:
-                print(f"warning: --prioritize={priority_test} used"
-                        f" but test not actually selected")
-                continue
-            else:
-                selected.insert(0, priority_test)
-
         return (tuple(selected), tests)
 
     @staticmethod
@@ -288,10 +263,8 @@ class Regrtest:
             forever=False,
             fail_fast=False,
             match_tests_dict=match_tests_dict,
-            output_on_failure=False,
-            final_run=True)
+            output_on_failure=False)
         self.logger.set_tests(runtests)
-        self.reporter.run_started(runtests)
 
         msg = f"Re-running {len(tests)} failed tests in verbose mode"
         if not self.single_process:
@@ -304,9 +277,6 @@ class Regrtest:
         return runtests
 
     def rerun_failed_tests(self, runtests: RunTests) -> None:
-        ansi = get_colors()
-        red, reset = ansi.BOLD_RED, ansi.RESET
-
         if self.python_cmd:
             # Temp patch for https://github.com/python/cpython/issues/94052
             self.log(
@@ -321,10 +291,7 @@ class Regrtest:
         rerun_runtests = self._rerun_failed_tests(runtests)
 
         if self.results.bad:
-            print(
-                f"{red}{count(len(self.results.bad), 'test')} "
-                f"failed again:{reset}"
-            )
+            print(count(len(self.results.bad), 'test'), "failed again:")
             printlist(self.results.bad)
 
         self.display_result(rerun_runtests)
@@ -401,16 +368,10 @@ class Regrtest:
             result = run_single_test(test_name, runtests)
 
         self.results.accumulate_result(result, runtests)
-        self.reporter.test_result(result)
 
         return result
 
-    def _get_mem_usage(self):
-        return get_process_memory_usage(os.getpid())
-
     def run_tests_sequentially(self, runtests: RunTests) -> None:
-        if not self.pgo:
-            self.logger.get_mem_usage = self._get_mem_usage
         if self.coverage:
             tracer = trace.Trace(trace=False, count=True)
         else:
@@ -466,8 +427,7 @@ class Regrtest:
 
     def _run_tests_mp(self, runtests: RunTests, num_workers: int) -> None:
         from .run_workers import RunWorkers
-        RunWorkers(num_workers, runtests, self.logger, self.results,
-                   self.reporter).run()
+        RunWorkers(num_workers, runtests, self.logger, self.results).run()
 
     def finalize_tests(self, coverage: trace.CoverageResults | None) -> None:
         if self.next_single_filename:
@@ -478,7 +438,8 @@ class Regrtest:
                 os.unlink(self.next_single_filename)
 
         if coverage is not None:
-            coverage.write_results(show_missing=True, summary=True,
+            # uses a new-in-Python 3.13 keyword argument that mypy doesn't know about yet:
+            coverage.write_results(show_missing=True, summary=True,  # type: ignore[call-arg]
                                    coverdir=self.coverage_dir,
                                    ignore_missing_files=True)
 
@@ -487,8 +448,6 @@ class Regrtest:
 
         if self.junit_filename:
             self.results.write_junit(self.junit_filename)
-
-        self.reporter.summary(self.results, self.get_state())
 
     def display_summary(self) -> None:
         if self.first_runtests is None:
@@ -527,7 +486,6 @@ class Regrtest:
             hunt_refleak=self.hunt_refleak,
             test_dir=self.test_dir,
             use_junit=(self.junit_filename is not None),
-            final_run=not self.want_rerun or bool(self.python_cmd),
             coverage=self.coverage,
             memory_limit=self.memory_limit,
             gc_threshold=self.gc_threshold,
@@ -535,9 +493,6 @@ class Regrtest:
             python_cmd=self.python_cmd,
             randomize=self.randomize,
             random_seed=self.random_seed,
-            parallel_threads=self.parallel_threads,
-            single_process_per_case=self.want_single_process_per_case,
-            case_groups=None,
         )
 
     def _run_tests(self, selected: TestTuple, tests: TestList | None) -> int:
@@ -549,7 +504,10 @@ class Regrtest:
         if self.num_workers < 0:
             # Use all CPUs + 2 extra worker processes for tests
             # that like to sleep
-            self.num_workers = (os.process_cpu_count() or 1) + 2
+            #
+            # os.process.cpu_count() is new in Python 3.13;
+            # mypy doesn't know about it yet
+            self.num_workers = (os.process_cpu_count() or 1) + 2  # type: ignore[attr-defined]
 
         # For a partial run, we do not need to clutter the output.
         if (self.want_header
@@ -560,26 +518,8 @@ class Regrtest:
         print("Using random seed:", self.random_seed)
 
         runtests = self.create_run_tests(selected)
-        if self.want_single_process_per_case:
-            cases_by_module, _ = collect_cases(
-                selected,
-                match_tests=self.match_tests,
-                test_dir=self.test_dir)
-            groups = []
-            for module_name in selected:
-                cases = cases_by_module.get(module_name)
-                if cases:
-                    groups.append((module_name, tuple(cases)))
-                else:
-                    groups.append((module_name, (module_name,)))
-            case_groups = tuple(groups)
-            case_ids = tuple(
-                case_id for _, cases in case_groups for case_id in cases
-            )
-            runtests = runtests.copy(tests=case_ids, case_groups=case_groups)
         self.first_runtests = runtests
         self.logger.set_tests(runtests)
-        self.reporter.run_started(runtests)
 
         if (runtests.hunt_refleak is not None) and (not self.num_workers):
             # gh-109739: WindowsLoadTracker thread interferes with refleak check
@@ -594,7 +534,18 @@ class Regrtest:
             if self.num_workers:
                 self._run_tests_mp(runtests, self.num_workers)
             else:
-                self.run_tests_sequentially(runtests)
+                # gh-135734: suppress_immortalization() raises SkipTest
+                # if _testinternalcapi is missing and the -R option is set.
+                if not can_use_suppress_immortalization(runtests.hunt_refleak):
+                    print("Module '_testinternalcapi' is missing. "
+                          "Did you disable it with --disable-test-modules?",
+                          file=sys.stderr)
+                    raise SystemExit(1)
+
+                # gh-117783: don't immortalize deferred objects when tracking
+                # refleaks. Only relevant for the free-threaded build.
+                with suppress_immortalization(runtests.hunt_refleak):
+                    self.run_tests_sequentially(runtests)
 
             coverage = self.results.get_coverage_results()
             self.display_result(runtests)

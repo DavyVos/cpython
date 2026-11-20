@@ -29,22 +29,14 @@ Glossary
       Abstract base classes complement :term:`duck-typing` by
       providing a way to define interfaces when other techniques like
       :func:`hasattr` would be clumsy or subtly wrong (for example with
-      :ref:`magic methods <special-lookup>`).  ABCs introduce
-      :term:`virtual subclasses <virtual subclass>`, which are classes that
-      don't inherit from a class but are still recognized by
-      :func:`isinstance` and :func:`issubclass`; see the
+      :ref:`magic methods <special-lookup>`).  ABCs introduce virtual
+      subclasses, which are classes that don't inherit from a class but are
+      still recognized by :func:`isinstance` and :func:`issubclass`; see the
       :mod:`abc` module documentation.  Python comes with many built-in ABCs for
       data structures (in the :mod:`collections.abc` module), numbers (in the
       :mod:`numbers` module), streams (in the :mod:`io` module), import finders
       and loaders (in the :mod:`importlib.abc` module).  You can create your own
       ABCs with the :mod:`abc` module.
-
-   annotate function
-      A callable that can be called to retrieve the :term:`annotations <annotation>` of
-      an object. Annotate functions are usually :term:`functions <function>`,
-      automatically generated as the :attr:`~object.__annotate__` attribute of functions,
-      classes, and modules. Annotate functions are a subset of
-      :term:`evaluate functions <evaluate function>`.
 
    annotation
       A label associated with a variable, a class
@@ -53,11 +45,12 @@ Glossary
 
       Annotations of local variables cannot be accessed at runtime, but
       annotations of global variables, class attributes, and functions
-      can be retrieved by calling :func:`annotationlib.get_annotations`
-      on modules, classes, and functions, respectively.
+      are stored in the :attr:`__annotations__`
+      special attribute of modules, classes, and functions,
+      respectively.
 
-      See :term:`variable annotation`, :term:`function annotation`, :pep:`484`,
-      :pep:`526`, and :pep:`649`, which describe this functionality.
+      See :term:`variable annotation`, :term:`function annotation`, :pep:`484`
+      and :pep:`526`, which describe this functionality.
       Also see :ref:`annotations-howto`
       for best practices on working with annotations.
 
@@ -146,28 +139,6 @@ Glossary
       (for example, ``x += 1`` performs multiple bytecode operations and is not
       atomic).  Atomicity is only guaranteed where explicitly documented.  See
       also :term:`race condition` and :term:`data race`.
-
-   attached thread state
-
-      A :term:`thread state` that is active for the current OS thread.
-
-      When a :term:`thread state` is attached, the OS thread has
-      access to the full Python C API and can safely invoke the
-      bytecode interpreter.
-
-      Unless a function explicitly notes otherwise, attempting to call
-      the C API without an attached thread state will result in a fatal
-      error or undefined behavior.  A thread state can be attached and detached
-      explicitly by the user through the C API, or implicitly by the runtime,
-      including during blocking C calls and by the bytecode interpreter in between
-      calls.
-
-      On most builds of Python, having an attached thread state implies that the
-      caller holds the :term:`GIL` for the current interpreter, so only
-      one OS thread can have an attached thread state at a given moment. In
-      :term:`free-threaded builds <free-threaded build>` of Python, threads can
-      concurrently hold an attached thread state, allowing for true parallelism of
-      the bytecode interpreter.
 
    attribute
       A value associated with an object which is usually referenced by name
@@ -386,12 +357,6 @@ Glossary
       tasks (see :mod:`asyncio`) associate each task with a context which
       becomes the current context whenever the task starts or resumes execution.
 
-   cyclic isolate
-      A subgroup of one or more objects that reference each other in a reference
-      cycle, but are not referenced by objects outside the group.  The goal of
-      the :term:`cyclic garbage collector <garbage collection>` is to identify these groups and break the reference
-      cycles so that the memory can be reclaimed.
-
    data race
       A situation where multiple threads access the same memory location
       concurrently, at least one of the accesses is a write, and the threads
@@ -501,19 +466,6 @@ Glossary
       statements.  The technique contrasts with the :term:`LBYL` style
       common to many other languages such as C.
 
-   evaluate function
-      A function that can be called to evaluate a lazily evaluated attribute
-      of an object, such as the value of type aliases created with the :keyword:`type`
-      statement.
-
-   exhausted
-      An :term:`iterator` that has produced all of its values is said to be
-      :dfn:`exhausted`.
-      Further attempts to get the next value (for example, calls to
-      :func:`next`) raise :exc:`StopIteration`
-      (or :exc:`StopAsyncIteration` in the case of an :term:`asynchronous
-      iterator`).
-
    expression
       A piece of syntax which can be evaluated to some value.  In other words,
       an expression is an accumulation of expression elements like literals,
@@ -528,8 +480,7 @@ Glossary
       core and with user code.
 
    f-string
-   f-strings
-      String literals prefixed with ``f`` or ``F`` are commonly called
+      String literals prefixed with ``'f'`` or ``'F'`` are commonly called
       "f-strings" which is short for
       :ref:`formatted string literals <f-strings>`.  See also :pep:`498`.
 
@@ -592,13 +543,6 @@ Glossary
       simultaneously within the same interpreter.  This is in contrast to
       the :term:`global interpreter lock` which allows only one thread to
       execute Python bytecode at a time.  See :pep:`703`.
-
-   free-threaded build
-
-      A build of :term:`CPython` that supports :term:`free threading`,
-      configured using the :option:`--disable-gil` option before compilation.
-
-      See :ref:`freethreading-python-howto`.
 
    free variable
       Formally, as defined in the :ref:`language execution model <bind_names>`, a free
@@ -728,13 +672,11 @@ Glossary
       when doing I/O.
 
       As of Python 3.13, the GIL can be disabled using the :option:`--disable-gil`
-      build configuration. This feature enables improved performance for
+      build configuration. After building Python with this option, code must be
+      run with :option:`-X gil=0 <-X>` or after setting the :envvar:`PYTHON_GIL=0 <PYTHON_GIL>`
+      environment variable. This feature enables improved performance for
       multi-threaded applications and makes it easier to use multi-core CPUs
       efficiently. For more details, see :pep:`703`.
-
-      In prior versions of Python's C API, a function might declare that it
-      requires the GIL to be held in order to use it. This refers to having an
-      :term:`attached thread state`.
 
    global state
       Data that is accessible throughout a program, such as module-level
@@ -780,9 +722,6 @@ Glossary
       and therefore it is never deallocated while the interpreter is running.
       For example, :const:`True` and :const:`None` are immortal in CPython.
 
-      Immortal objects can be identified via :func:`sys._is_immortal`, or
-      via :c:func:`PyUnstable_IsImmortal` in the C API.
-
    immutable
       An object with a fixed value.  Immutable objects include numbers, strings and
       tuples.  Such an object cannot be altered.  A new object has to
@@ -806,19 +745,6 @@ Glossary
    importer
       An object that both finds and loads a module; both a
       :term:`finder` and :term:`loader` object.
-
-   index
-      A numeric value that represents the position of an element in
-      a :term:`sequence`.
-
-      In Python, indexing starts at zero.
-      For example, ``things[0]`` names the *first* element of ``things``;
-      ``things[1]`` names the second one.
-
-      In some contexts, Python allows negative indexes for counting from the
-      end of a sequence, and indexing using :term:`slices <slice>`.
-
-      See also :term:`subscript`.
 
    interactive
       Python has an interactive interpreter which means you can enter
@@ -876,7 +802,7 @@ Glossary
       :meth:`~iterator.__next__` method (or passing it to the built-in function
       :func:`next`) return successive items in the stream.  When no more data
       are available a :exc:`StopIteration` exception is raised instead.  At this
-      point, the iterator object is :term:`exhausted` and any further calls to its
+      point, the iterator object is exhausted and any further calls to its
       :meth:`!__next__` method just raise :exc:`StopIteration` again.  Iterators
       are required to have an :meth:`~iterator.__iter__` method that returns the iterator
       object itself so every iterator is also iterable and may be used in most
@@ -897,9 +823,6 @@ Glossary
          CPython does not guarantee :term:`thread-safe` behavior of iterator
          operations.
 
-   key
-      A value that identifies an entry in a :term:`mapping`.
-      See also :term:`subscript`.
 
    key function
       A key function or collation function is a callable that returns a value
@@ -949,7 +872,7 @@ Glossary
    list
       A built-in Python :term:`sequence`.  Despite its name it is more akin
       to an array in other languages than to a linked list since access to
-      elements is *O*\ (1).  See :ref:`time-complexity`.
+      elements is *O*\ (1).
 
    list comprehension
       A compact way to process all or part of the elements in a sequence and
@@ -1168,15 +1091,6 @@ Glossary
       optimized in this fashion. Note: most interpreter optimizations are
       applied to all scopes, only those relying on a known set of local
       and nonlocal variable names are restricted to optimized scopes.
-
-   optional module
-      An :term:`extension module` that is part of the :term:`standard library`,
-      but may be absent in some builds of :term:`CPython`,
-      usually due to missing third-party libraries or because the module
-      is not available for a given platform.
-
-      See :ref:`optional-module-requirements` for a list of optional modules
-      that require third-party libraries.
 
    package
       A Python :term:`module` which can contain submodules or recursively,
@@ -1474,11 +1388,10 @@ Glossary
       chosen based on the type of a single argument.
 
    slice
-      An object of type :class:`slice`, used to describe a portion of
-      a :term:`sequence`.
-      A slice object is created when using the :ref:`slicing <slicings>` form
-      of :ref:`subscript notation <subscriptions>`, with colons inside square
-      brackets, such as in ``variable_name[1:3:5]``.
+      An object usually containing a portion of a :term:`sequence`.  A slice is
+      created using the subscript notation, ``[]`` with colons between numbers
+      when several are given, such as in ``variable_name[1:3:5]``.  The bracket
+      (subscript) notation uses :class:`slice` objects internally.
 
    soft deprecated
       A soft deprecated API should not be used in new code,
@@ -1544,14 +1457,6 @@ Glossary
 
       See also :term:`borrowed reference`.
 
-   subscript
-      The expression in square brackets of a
-      :ref:`subscription expression <subscriptions>`, for example,
-      the ``3`` in ``items[3]``.
-      Usually used to select an element of a container.
-      Also called a :term:`key` when subscripting a :term:`mapping`,
-      or an :term:`index` when subscripting a :term:`sequence`.
-
    synchronization primitive
       A basic building block for coordinating (synchronizing) the execution of
       multiple threads to ensure :term:`thread-safe` access to shared resources.
@@ -1563,12 +1468,6 @@ Glossary
       that are especially useful in multithreaded programs. These
       primitives help prevent :term:`race conditions <race condition>` and
       coordinate thread execution.  See also :term:`lock`.
-
-   t-string
-   t-strings
-      String literals prefixed with ``t`` or ``T`` are commonly called
-      "t-strings" which is short for
-      :ref:`template string literals <t-strings>`.
 
    text encoding
       A string in Python is a sequence of Unicode code points (in range
@@ -1592,29 +1491,6 @@ Glossary
 
       See also :term:`binary file` for a file object able to read and write
       :term:`bytes-like objects <bytes-like object>`.
-
-   thread state
-
-      The information used by the :term:`CPython` runtime to run in an OS thread.
-      For example, this includes the current exception, if any, and the
-      state of the bytecode interpreter.
-
-      Each thread state is bound to a single OS thread, but threads may have
-      many thread states available.  At most, one of them may be
-      :term:`attached <attached thread state>` at once.
-
-      An :term:`attached thread state` is required to call most
-      of Python's C API, unless a function explicitly documents otherwise.
-      The bytecode interpreter only runs under an attached thread state.
-
-      Each thread state belongs to a single interpreter, but each interpreter
-      may have many thread states, including multiple for the same OS thread.
-      Thread states from multiple interpreters may be bound to the same
-      thread, but only one can be :term:`attached <attached thread state>` in
-      that thread at any given moment.
-
-      See :ref:`Thread State and the Global Interpreter Lock <threads>` for more
-      information.
 
    thread-safe
       A module, function, or class that behaves correctly when used by multiple
@@ -1727,12 +1603,6 @@ Glossary
    virtual machine
       A computer defined entirely in software.  Python's virtual machine
       executes the :term:`bytecode` emitted by the bytecode compiler.
-
-   virtual subclass
-      A class that :func:`issubclass` and :func:`isinstance` treat as a
-      subclass of an :term:`abstract base class` even though it does not
-      inherit from it.  A class is made a virtual subclass by registering
-      it with the ABC's :meth:`~abc.ABCMeta.register` method.
 
    walrus operator
       A light-hearted way to refer to the :ref:`assignment expression

@@ -1,3 +1,4 @@
+import importlib
 import pickle
 import threading
 from textwrap import dedent
@@ -8,11 +9,11 @@ from unittest import mock
 from test.support import import_helper, Py_DEBUG
 # Raise SkipTest if subinterpreters not supported.
 _queues = import_helper.import_module('_interpqueues')
-from concurrent import interpreters
-from concurrent.interpreters import _queues as queues, _crossinterp
+from test.support import interpreters
+from test.support.interpreters import queues, _crossinterp
 from .utils import _run_output, TestBase as _TestBase
 
-HUGE_TIMEOUT = 3600
+
 REPLACE = _crossinterp._UNBOUND_CONSTANT_TO_FLAG[_crossinterp.UNBOUND]
 
 
@@ -40,15 +41,10 @@ class LowLevelTests(TestBase):
 
     def test_highlevel_reloaded(self):
         # See gh-115490 (https://github.com/python/cpython/issues/115490).
-        interp = interpreters.create()
-        interp.exec(dedent(f"""
-            import importlib
-            from concurrent.interpreters import _queues as queues
-            importlib.reload(queues)
-            """));
+        importlib.reload(queues)
 
     def test_create_destroy(self):
-        qid = _queues.create(2, REPLACE, -1)
+        qid = _queues.create(2, 0, REPLACE)
         _queues.destroy(qid)
         self.assertEqual(get_num_queues(), 0)
         with self.assertRaises(queues.QueueNotFoundError):
@@ -62,7 +58,7 @@ class LowLevelTests(TestBase):
             '-c',
             dedent(f"""
                 import {_queues.__name__} as _queues
-                _queues.create(2, {REPLACE}, -1)
+                _queues.create(2, 0, {REPLACE})
                 """),
         )
         self.assertEqual(stdout, '')
@@ -73,13 +69,13 @@ class LowLevelTests(TestBase):
 
     def test_bind_release(self):
         with self.subTest('typical'):
-            qid = _queues.create(2, REPLACE, -1)
+            qid = _queues.create(2, 0, REPLACE)
             _queues.bind(qid)
             _queues.release(qid)
             self.assertEqual(get_num_queues(), 0)
 
         with self.subTest('bind too much'):
-            qid = _queues.create(2, REPLACE, -1)
+            qid = _queues.create(2, 0, REPLACE)
             _queues.bind(qid)
             _queues.bind(qid)
             _queues.release(qid)
@@ -87,7 +83,7 @@ class LowLevelTests(TestBase):
             self.assertEqual(get_num_queues(), 0)
 
         with self.subTest('nested'):
-            qid = _queues.create(2, REPLACE, -1)
+            qid = _queues.create(2, 0, REPLACE)
             _queues.bind(qid)
             _queues.bind(qid)
             _queues.release(qid)
@@ -95,7 +91,7 @@ class LowLevelTests(TestBase):
             self.assertEqual(get_num_queues(), 0)
 
         with self.subTest('release without binding'):
-            qid = _queues.create(2, REPLACE, -1)
+            qid = _queues.create(2, 0, REPLACE)
             with self.assertRaises(queues.QueueError):
                 _queues.release(qid)
 
@@ -132,19 +128,19 @@ class QueueTests(TestBase):
 
         interp = interpreters.create()
         interp.exec(dedent(f"""
-            from concurrent.interpreters import _queues as queues
+            from test.support.interpreters import queues
             queue1 = queues.Queue({queue1.id})
             """));
 
         with self.subTest('same interpreter'):
             queue2 = queues.create()
-            queue1.put(queue2)
+            queue1.put(queue2, syncobj=True)
             queue3 = queue1.get()
             self.assertIs(queue3, queue2)
 
         with self.subTest('from current interpreter'):
             queue4 = queues.create()
-            queue1.put(queue4)
+            queue1.put(queue4, syncobj=True)
             out = _run_output(interp, dedent("""
                 queue4 = queue1.get()
                 print(queue4.id)
@@ -155,7 +151,7 @@ class QueueTests(TestBase):
         with self.subTest('from subinterpreter'):
             out = _run_output(interp, dedent("""
                 queue5 = queues.create()
-                queue1.put(queue5)
+                queue1.put(queue5, syncobj=True)
                 print(queue5.id)
                 """))
             qid = int(out)
@@ -194,11 +190,9 @@ class QueueTests(TestBase):
 
     def test_pickle(self):
         queue = queues.create()
-        for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
-            with self.subTest(protocol=protocol):
-                data = pickle.dumps(queue, protocol)
-                unpickled = pickle.loads(data)
-                self.assertEqual(unpickled, queue)
+        data = pickle.dumps(queue)
+        unpickled = pickle.loads(data)
+        self.assertEqual(unpickled, queue)
 
 
 class TestQueueOps(TestBase):
@@ -206,7 +200,7 @@ class TestQueueOps(TestBase):
     def test_empty(self):
         queue = queues.create()
         before = queue.empty()
-        queue.put(None)
+        queue.put(None, syncobj=True)
         during = queue.empty()
         queue.get()
         after = queue.empty()
@@ -281,16 +275,16 @@ class TestQueueOps(TestBase):
         queue = queues.create()
         for _ in range(3):
             actual.append(queue.qsize())
-            queue.put(None)
+            queue.put(None, syncobj=True)
         actual.append(queue.qsize())
         queue.get()
         actual.append(queue.qsize())
-        queue.put(None)
+        queue.put(None, syncobj=True)
         actual.append(queue.qsize())
         for _ in range(3):
             queue.get()
             actual.append(queue.qsize())
-        queue.put(None)
+        queue.put(None, syncobj=True)
         actual.append(queue.qsize())
         queue.get()
         actual.append(queue.qsize())
@@ -299,38 +293,70 @@ class TestQueueOps(TestBase):
 
     def test_put_get_main(self):
         expected = list(range(20))
-        queue = queues.create()
-        for i in range(20):
-            queue.put(i)
-        actual = [queue.get() for _ in range(20)]
+        for syncobj in (True, False):
+            kwds = dict(syncobj=syncobj)
+            with self.subTest(f'syncobj={syncobj}'):
+                queue = queues.create()
+                for i in range(20):
+                    queue.put(i, **kwds)
+                actual = [queue.get() for _ in range(20)]
 
-        self.assertEqual(actual, expected)
+                self.assertEqual(actual, expected)
 
     def test_put_timeout(self):
-        queue = queues.create(2)
-        queue.put(None)
-        queue.put(None)
-        with self.assertRaises(queues.QueueFull):
-            queue.put(None, timeout=0.1)
-        with self.assertRaises(queues.QueueFull):
-            queue.put(None, HUGE_TIMEOUT, 0.1)
-        queue.get()
-        queue.put(None)
+        for syncobj in (True, False):
+            kwds = dict(syncobj=syncobj)
+            with self.subTest(f'syncobj={syncobj}'):
+                queue = queues.create(2)
+                queue.put(None, **kwds)
+                queue.put(None, **kwds)
+                with self.assertRaises(queues.QueueFull):
+                    queue.put(None, timeout=0.1, **kwds)
+                queue.get()
+                queue.put(None, **kwds)
 
     def test_put_nowait(self):
-        queue = queues.create(2)
-        queue.put_nowait(None)
-        queue.put_nowait(None)
-        with self.assertRaises(queues.QueueFull):
-            queue.put_nowait(None)
-        with self.assertRaises(queues.QueueFull):
-            queue.put(None, False)
-        with self.assertRaises(queues.QueueFull):
-            queue.put(None, False, timeout=HUGE_TIMEOUT)
-        queue.get()
-        queue.put_nowait(None)
+        for syncobj in (True, False):
+            kwds = dict(syncobj=syncobj)
+            with self.subTest(f'syncobj={syncobj}'):
+                queue = queues.create(2)
+                queue.put_nowait(None, **kwds)
+                queue.put_nowait(None, **kwds)
+                with self.assertRaises(queues.QueueFull):
+                    queue.put_nowait(None, **kwds)
+                queue.get()
+                queue.put_nowait(None, **kwds)
 
-    def test_put_full_fallback(self):
+    def test_put_syncobj(self):
+        for obj in [
+            None,
+            True,
+            10,
+            'spam',
+            b'spam',
+            (0, 'a'),
+        ]:
+            with self.subTest(repr(obj)):
+                queue = queues.create()
+
+                queue.put(obj, syncobj=True)
+                obj2 = queue.get()
+                self.assertEqual(obj2, obj)
+
+                queue.put(obj, syncobj=True)
+                obj2 = queue.get_nowait()
+                self.assertEqual(obj2, obj)
+
+        for obj in [
+            [1, 2, 3],
+            {'a': 13, 'b': 17},
+        ]:
+            with self.subTest(repr(obj)):
+                queue = queues.create()
+                with self.assertRaises(interpreters.NotShareableError):
+                    queue.put(obj, syncobj=True)
+
+    def test_put_not_syncobj(self):
         for obj in [
             None,
             True,
@@ -345,11 +371,11 @@ class TestQueueOps(TestBase):
             with self.subTest(repr(obj)):
                 queue = queues.create()
 
-                queue.put(obj)
+                queue.put(obj, syncobj=False)
                 obj2 = queue.get()
                 self.assertEqual(obj2, obj)
 
-                queue.put(obj)
+                queue.put(obj, syncobj=False)
                 obj2 = queue.get_nowait()
                 self.assertEqual(obj2, obj)
 
@@ -357,8 +383,6 @@ class TestQueueOps(TestBase):
         queue = queues.create()
         with self.assertRaises(queues.QueueEmpty):
             queue.get(timeout=0.1)
-        with self.assertRaises(queues.QueueEmpty):
-            queue.get(HUGE_TIMEOUT, 0.1)
 
     def test_timeout_uses_monotonic_clock(self):
         # gh-153005: the deadline must be computed from the monotonic clock,
@@ -377,14 +401,25 @@ class TestQueueOps(TestBase):
         queue = queues.create()
         with self.assertRaises(queues.QueueEmpty):
             queue.get_nowait()
-        with self.assertRaises(queues.QueueEmpty):
-            queue.get(False)
-        with self.assertRaises(queues.QueueEmpty):
-            queue.get(False, timeout=HUGE_TIMEOUT)
 
-    def test_put_get_full_fallback(self):
+    def test_put_get_default_syncobj(self):
         expected = list(range(20))
-        queue = queues.create()
+        queue = queues.create(syncobj=True)
+        for methname in ('get', 'get_nowait'):
+            with self.subTest(f'{methname}()'):
+                get = getattr(queue, methname)
+                for i in range(20):
+                    queue.put(i)
+                actual = [get() for _ in range(20)]
+                self.assertEqual(actual, expected)
+
+        obj = [1, 2, 3]  # lists are not shareable
+        with self.assertRaises(interpreters.NotShareableError):
+            queue.put(obj)
+
+    def test_put_get_default_not_syncobj(self):
+        expected = list(range(20))
+        queue = queues.create(syncobj=False)
         for methname in ('get', 'get_nowait'):
             with self.subTest(f'{methname}()'):
                 get = getattr(queue, methname)
@@ -403,14 +438,14 @@ class TestQueueOps(TestBase):
     def test_put_get_same_interpreter(self):
         interp = interpreters.create()
         interp.exec(dedent("""
-            from concurrent.interpreters import _queues as queues
+            from test.support.interpreters import queues
             queue = queues.create()
             """))
         for methname in ('get', 'get_nowait'):
             with self.subTest(f'{methname}()'):
                 interp.exec(dedent(f"""
                     orig = b'spam'
-                    queue.put(orig)
+                    queue.put(orig, syncobj=True)
                     obj = queue.{methname}()
                     assert obj == orig, 'expected: obj == orig'
                     assert obj is not orig, 'expected: obj is not orig'
@@ -425,12 +460,12 @@ class TestQueueOps(TestBase):
         for methname in ('get', 'get_nowait'):
             with self.subTest(f'{methname}()'):
                 obj1 = b'spam'
-                queue1.put(obj1)
+                queue1.put(obj1, syncobj=True)
 
                 out = _run_output(
                     interp,
                     dedent(f"""
-                        from concurrent.interpreters import _queues as queues
+                        from test.support.interpreters import queues
                         queue1 = queues.Queue({queue1.id})
                         queue2 = queues.Queue({queue2.id})
                         assert queue1.qsize() == 1, 'expected: queue1.qsize() == 1'
@@ -442,7 +477,7 @@ class TestQueueOps(TestBase):
                         obj2 = b'eggs'
                         print(id(obj2))
                         assert queue2.qsize() == 0, 'expected: queue2.qsize() == 0'
-                        queue2.put(obj2)
+                        queue2.put(obj2, syncobj=True)
                         assert queue2.qsize() == 1, 'expected: queue2.qsize() == 1'
                         """))
                 self.assertEqual(len(queues.list_all()), 2)
@@ -459,22 +494,22 @@ class TestQueueOps(TestBase):
             if not unbound:
                 extraargs = ''
             elif unbound is queues.UNBOUND:
-                extraargs = ', unbounditems=queues.UNBOUND'
+                extraargs = ', unbound=queues.UNBOUND'
             elif unbound is queues.UNBOUND_ERROR:
-                extraargs = ', unbounditems=queues.UNBOUND_ERROR'
+                extraargs = ', unbound=queues.UNBOUND_ERROR'
             elif unbound is queues.UNBOUND_REMOVE:
-                extraargs = ', unbounditems=queues.UNBOUND_REMOVE'
+                extraargs = ', unbound=queues.UNBOUND_REMOVE'
             else:
                 raise NotImplementedError(repr(unbound))
             interp = interpreters.create()
 
             _run_output(interp, dedent(f"""
-                from concurrent.interpreters import _queues as queues
+                from test.support.interpreters import queues
                 queue = queues.Queue({queue.id})
                 obj1 = b'spam'
                 obj2 = b'eggs'
-                queue.put(obj1{extraargs})
-                queue.put(obj2{extraargs})
+                queue.put(obj1, syncobj=True{extraargs})
+                queue.put(obj2, syncobj=True{extraargs})
                 """))
             self.assertEqual(queue.qsize(), presize + 2)
 
@@ -527,11 +562,11 @@ class TestQueueOps(TestBase):
             with self.assertRaises(queues.QueueEmpty):
                 queue.get_nowait()
 
-            queue.put(b'ham', unbounditems=queues.UNBOUND_REMOVE)
+            queue.put(b'ham', unbound=queues.UNBOUND_REMOVE)
             self.assertEqual(queue.qsize(), 1)
             interp = common(queue, queues.UNBOUND_REMOVE, 1)
             self.assertEqual(queue.qsize(), 3)
-            queue.put(42, unbounditems=queues.UNBOUND_REMOVE)
+            queue.put(42, unbound=queues.UNBOUND_REMOVE)
             self.assertEqual(queue.qsize(), 4)
             del interp
             self.assertEqual(queue.qsize(), 2)
@@ -547,13 +582,13 @@ class TestQueueOps(TestBase):
         queue = queues.create()
         interp = interpreters.create()
         _run_output(interp, dedent(f"""
-            from concurrent.interpreters import _queues as queues
+            from test.support.interpreters import queues
             queue = queues.Queue({queue.id})
-            queue.put(1, unbounditems=queues.UNBOUND)
-            queue.put(2, unbounditems=queues.UNBOUND_ERROR)
-            queue.put(3)
-            queue.put(4, unbounditems=queues.UNBOUND_REMOVE)
-            queue.put(5, unbounditems=queues.UNBOUND)
+            queue.put(1, syncobj=True, unbound=queues.UNBOUND)
+            queue.put(2, syncobj=True, unbound=queues.UNBOUND_ERROR)
+            queue.put(3, syncobj=True)
+            queue.put(4, syncobj=True, unbound=queues.UNBOUND_REMOVE)
+            queue.put(5, syncobj=True, unbound=queues.UNBOUND)
             """))
         self.assertEqual(queue.qsize(), 5)
 
@@ -581,16 +616,16 @@ class TestQueueOps(TestBase):
         interp1 = interpreters.create()
         interp2 = interpreters.create()
 
-        queue.put(1)
+        queue.put(1, syncobj=True)
         _run_output(interp1, dedent(f"""
-            from concurrent.interpreters import _queues as queues
+            from test.support.interpreters import queues
             queue = queues.Queue({queue.id})
             obj1 = queue.get()
-            queue.put(2, unbounditems=queues.UNBOUND)
-            queue.put(obj1, unbounditems=queues.UNBOUND_REMOVE)
+            queue.put(2, syncobj=True, unbound=queues.UNBOUND)
+            queue.put(obj1, syncobj=True, unbound=queues.UNBOUND_REMOVE)
             """))
         _run_output(interp2, dedent(f"""
-            from concurrent.interpreters import _queues as queues
+            from test.support.interpreters import queues
             queue = queues.Queue({queue.id})
             obj2 = queue.get()
             obj1 = queue.get()
@@ -598,21 +633,21 @@ class TestQueueOps(TestBase):
         self.assertEqual(queue.qsize(), 0)
         queue.put(3)
         _run_output(interp1, dedent("""
-            queue.put(4, unbounditems=queues.UNBOUND)
+            queue.put(4, syncobj=True, unbound=queues.UNBOUND)
             # interp closed here
-            queue.put(5, unbounditems=queues.UNBOUND_REMOVE)
-            queue.put(6, unbounditems=queues.UNBOUND)
+            queue.put(5, syncobj=True, unbound=queues.UNBOUND_REMOVE)
+            queue.put(6, syncobj=True, unbound=queues.UNBOUND)
             """))
         _run_output(interp2, dedent("""
-            queue.put(7, unbounditems=queues.UNBOUND_ERROR)
+            queue.put(7, syncobj=True, unbound=queues.UNBOUND_ERROR)
             # interp closed here
-            queue.put(obj1, unbounditems=queues.UNBOUND_ERROR)
-            queue.put(obj2, unbounditems=queues.UNBOUND_REMOVE)
-            queue.put(8, unbounditems=queues.UNBOUND)
+            queue.put(obj1, syncobj=True, unbound=queues.UNBOUND_ERROR)
+            queue.put(obj2, syncobj=True, unbound=queues.UNBOUND_REMOVE)
+            queue.put(8, syncobj=True, unbound=queues.UNBOUND)
             """))
         _run_output(interp1, dedent("""
-            queue.put(9, unbounditems=queues.UNBOUND_REMOVE)
-            queue.put(10, unbounditems=queues.UNBOUND)
+            queue.put(9, syncobj=True, unbound=queues.UNBOUND_REMOVE)
+            queue.put(10, syncobj=True, unbound=queues.UNBOUND)
             """))
         self.assertEqual(queue.qsize(), 10)
 
@@ -668,12 +703,12 @@ class TestQueueOps(TestBase):
                     break
                 except queues.QueueEmpty:
                     continue
-            queue2.put(obj)
+            queue2.put(obj, syncobj=True)
         t = threading.Thread(target=f)
         t.start()
 
         orig = b'spam'
-        queue1.put(orig)
+        queue1.put(orig, syncobj=True)
         obj = queue2.get()
         t.join()
 

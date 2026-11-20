@@ -4,6 +4,9 @@
 Descriptor Guide
 ================
 
+:Author: Raymond Hettinger
+:Contact: <python at rcn dot com>
+
 .. Contents::
 
 
@@ -591,7 +594,7 @@ a pure Python equivalent:
 
     def object_getattribute(obj, name):
         "Emulate PyObject_GenericGetAttr() in Objects/object.c"
-        null = sentinel('null')
+        null = object()
         objtype = type(obj)
         cls_var = find_name_in_mro(objtype, name, null)
         descr_get = getattr(type(cls_var), '__get__', null)
@@ -1342,15 +1345,11 @@ Using the non-data descriptor protocol, a pure Python version of
         def __call__(self, *args, **kwds):
             return self.f(*args, **kwds)
 
-        @property
-        def __annotations__(self):
-            return self.f.__annotations__
-
 The :func:`functools.update_wrapper` call adds a ``__wrapped__`` attribute
 that refers to the underlying function.  Also it carries forward
 the attributes necessary to make the wrapper look like the wrapped
-function, including :attr:`~function.__name__`, :attr:`~function.__qualname__`,
-and :attr:`~function.__doc__`.
+function: :attr:`~function.__name__`, :attr:`~function.__qualname__`,
+:attr:`~function.__doc__`, and :attr:`~function.__annotations__`.
 
 .. testcode::
     :hide:
@@ -1632,7 +1631,7 @@ by member descriptors:
 
 .. testcode::
 
-    null = sentinel('null')
+    null = object()
 
     class Member:
 
@@ -1678,7 +1677,7 @@ variables:
 
         def __new__(mcls, clsname, bases, mapping, **kwargs):
             'Emulate type_new() in Objects/typeobject.c'
-            # type_new() calls PyType_Ready() which calls add_methods()
+            # type_new() calls PyTypeReady() which calls add_methods()
             slot_names = mapping.get('slot_names', [])
             for offset, name in enumerate(slot_names):
                 mapping[name] = Member(name, clsname, offset)
@@ -1754,7 +1753,7 @@ At this point, the metaclass has loaded member objects for *x* and *y*::
     >>> isinstance(vars(H)['y'], Member)
     True
 
-When instances are created, they have a ``_slotvalues`` list where the
+When instances are created, they have a ``slot_values`` list where the
 attributes are stored:
 
 .. doctest::

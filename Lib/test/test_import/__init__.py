@@ -15,7 +15,6 @@ import marshal
 import os
 import py_compile
 import random
-import re
 import shutil
 import stat
 import subprocess
@@ -24,7 +23,6 @@ import textwrap
 import threading
 import time
 import types
-import warnings
 import unittest
 from unittest import mock
 import _imp
@@ -37,19 +35,14 @@ from test.support import (
     cpython_only,
     is_apple_mobile,
     is_emscripten,
-    is_wasm32,
+    is_wasi,
     run_in_subinterp,
     run_in_subinterp_with_config,
     Py_TRACE_REFS,
     requires_gil_enabled,
     Py_GIL_DISABLED,
-    no_rerun,
     force_not_colorized_test_class,
-    catch_unraisable_exception,
-    infinite_recursion,
-    run_with_limited_c_stack,
-    skip_emscripten_stack_overflow,
-    skip_wasi_stack_overflow
+    catch_unraisable_exception
 )
 from test.support.import_helper import (
     forget, make_legacy_pyc, unlink, unload, ready_to_import,
@@ -58,7 +51,8 @@ from test.support.os_helper import (
     TESTFN, rmtree, temp_umask, TESTFN_UNENCODABLE)
 from test.support import script_helper
 from test.support import threading_helper
-from test.test_importlib.util import uncache, temporary_pycache_prefix
+from test.support.testcase import ExtraAssertions
+from test.test_importlib.util import uncache
 from types import ModuleType
 try:
     import _testsinglephase
@@ -70,10 +64,8 @@ except ImportError:
     _testmultiphase = None
 try:
     import _interpreters
-    import concurrent.interpreters
 except ModuleNotFoundError:
     _interpreters = None
-    concurrent = None
 try:
     import _testinternalcapi
 except ImportError:
@@ -81,7 +73,7 @@ except ImportError:
 
 
 skip_if_dont_write_bytecode = unittest.skipIf(
-        sys.dont_write_bytecode or sys.implementation.cache_tag is None,
+        sys.dont_write_bytecode,
         "test meaningful only when writing bytecode")
 
 
@@ -157,6 +149,25 @@ def remove_files(name):
               name + "$py.class"):
         unlink(f)
     rmtree('__pycache__')
+
+
+def no_rerun(reason):
+    """Skip rerunning for a particular test.
+
+    WARNING: Use this decorator with care; skipping rerunning makes it
+    impossible to find reference leaks. Provide a clear reason for skipping the
+    test using the 'reason' parameter.
+    """
+    def deco(func):
+        _has_run = False
+        def wrapper(self):
+            nonlocal _has_run
+            if _has_run:
+                self.skipTest(reason)
+            func(self)
+            _has_run = True
+        return wrapper
+    return deco
 
 
 if _testsinglephase is not None:
@@ -355,7 +366,7 @@ class ModuleSnapshot(types.SimpleNamespace):
 
 
 @force_not_colorized_test_class
-class ImportTests(unittest.TestCase):
+class ImportTests(unittest.TestCase, ExtraAssertions):
 
     def setUp(self):
         remove_files(TESTFN)
@@ -371,11 +382,11 @@ class ImportTests(unittest.TestCase):
     def test_import_null_byte_in_name_raises_ModuleNotFoundError(self):
         # gh-150633: module names containing null bytes should not
         # lead to duplicates in sys.modules
-        before = set(sys.modules)
+        before = set(sys.modules.keys())
         with self.assertRaises(ModuleNotFoundError):
             __import__('zipimport\x00junk')
 
-        self.assertEqual(set(sys.modules), before)
+        self.assertEqual(set(sys.modules.keys()), before)
 
     def test_from_import_missing_module_raises_ModuleNotFoundError(self):
         with self.assertRaises(ModuleNotFoundError):
@@ -430,6 +441,7 @@ class ImportTests(unittest.TestCase):
         self.assertIsNotNone(cm.exception)
 
     def test_from_import_star_invalid_type(self):
+        import re
         with ready_to_import() as (name, path):
             with open(path, 'w', encoding='utf-8') as f:
                 f.write("__all__ = [b'invalid_type']")
@@ -457,7 +469,7 @@ class ImportTests(unittest.TestCase):
 
     def test_double_const(self):
         # Importing double_const checks that float constants
-        # serialized by marshal as PYC files don't lose precision
+        # serialiazed by marshal as PYC files don't lose precision
         # (SF bug 422177).
         from test.test_import.data import double_const
         unload('test.test_import.data.double_const')
@@ -519,7 +531,7 @@ class ImportTests(unittest.TestCase):
         try:
             # Compile & remove .py file; we only need .pyc.
             # Bytecode must be relocated from the PEP 3147 bytecode-only location.
-            make_legacy_pyc(filename, allow_compile=True)
+            py_compile.compile(filename)
         finally:
             unlink(filename)
 
@@ -529,6 +541,7 @@ class ImportTests(unittest.TestCase):
 
         namespace = {}
         try:
+            make_legacy_pyc(filename)
             # This used to crash.
             exec('import ' + module, None, namespace)
         finally:
@@ -786,24 +799,6 @@ class ImportTests(unittest.TestCase):
         finally:
             del sys.path[0]
 
-    @cpython_only
-    @skip_emscripten_stack_overflow()
-    @skip_wasi_stack_overflow()
-    @run_with_limited_c_stack(depth=100_000)
-    def test_acquire_lock_near_c_stack_limit(self):
-        # _imp.acquire_lock() must refuse to take the import lock when there
-        # is not enough C stack left to release it again.
-        def recurse(_):
-            _imp.acquire_lock()
-            _imp.release_lock()
-            list(map(recurse, [None]))
-
-        with infinite_recursion(100_000):
-            with self.assertRaisesRegex(RecursionError,
-                                        'acquiring the import lock'):
-                recurse(None)
-        self.assertFalse(_imp.lock_held())
-
     @unittest.skipUnless(sys.platform == "win32", "Windows-specific")
     def test_dll_dependency_import(self):
         from _winapi import GetModuleFileName
@@ -1037,7 +1032,7 @@ from not_a_module import symbol
 
                 expected_error = error + (
                     rb" \(consider renaming '.*numpy.py' if it has the "
-                    rb"same name as a library you intended to import\)\s+\z"
+                    rb"same name as a library you intended to import\)\s+\Z"
                 )
 
                 popen = script_helper.spawn_python(os.path.join(tmp, "numpy.py"))
@@ -1058,14 +1053,14 @@ from not_a_module import symbol
                 f.write("this_script_does_not_attempt_to_import_numpy = True")
 
             expected_error = (
-                rb"AttributeError: module 'numpy' has no attribute 'attr'\s+\z"
+                rb"AttributeError: module 'numpy' has no attribute 'attr'\s+\Z"
             )
             popen = script_helper.spawn_python('-c', 'import numpy; numpy.attr', cwd=tmp)
             stdout, stderr = popen.communicate()
             self.assertRegex(stdout, expected_error)
 
             expected_error = (
-                rb"ImportError: cannot import name 'attr' from 'numpy' \(.*\)\s+\z"
+                rb"ImportError: cannot import name 'attr' from 'numpy' \(.*\)\s+\Z"
             )
             popen = script_helper.spawn_python('-c', 'from numpy import attr', cwd=tmp)
             stdout, stderr = popen.communicate()
@@ -1091,7 +1086,7 @@ except TypeError as e:
 """)
             popen = script_helper.spawn_python("main.py", cwd=tmp)
             stdout, stderr = popen.communicate()
-            self.assertIn(b"unhashable type: 'substr'", stdout.rstrip())
+            self.assertEqual(stdout.rstrip(), b"unhashable type: 'substr'")
 
             with open(os.path.join(tmp, "main.py"), "w", encoding='utf-8') as f:
                 f.write("""
@@ -1108,7 +1103,7 @@ except TypeError as e:
 
             popen = script_helper.spawn_python("main.py", cwd=tmp)
             stdout, stderr = popen.communicate()
-            self.assertIn(b"unhashable type: 'substr'", stdout.rstrip())
+            self.assertEqual(stdout.rstrip(), b"unhashable type: 'substr'")
 
             # Various issues with sys module
             with open(os.path.join(tmp, "main.py"), "w", encoding='utf-8') as f:
@@ -1287,51 +1282,6 @@ os.does_not_exist
             _imp.create_dynamic(Spec2())
 
 
-    def test_create_dynamic_no_origin(self):
-        with self.assertRaisesRegex(AttributeError, "no attribute 'origin'"):
-            class Spec:
-                name = "abc"
-            _imp.create_dynamic(Spec())
-
-    def test_create_builtin(self):
-        class Spec:
-            pass
-        spec = Spec()
-
-        spec.name = "sys"
-        self.assertIs(_imp.create_builtin(spec), sys)
-
-        spec.name = None
-        with self.assertRaisesRegex(TypeError, 'module name must be a string, not NoneType'):
-            _imp.create_builtin(spec)
-
-        # gh-142029
-        spec.name = "nonexistent_lib"
-        with self.assertRaises(ModuleNotFoundError):
-            _imp.create_builtin(spec)
-
-        # gh-142029
-        spec.name = ""
-        with self.assertRaisesRegex(ValueError, 'module name must not be empty'):
-            _imp.create_builtin(spec)
-
-    def test_filter_syntax_warnings_by_module(self):
-        module_re = r'test\.test_import\.data\.syntax_warnings\z'
-        unload('test.test_import.data.syntax_warnings')
-        with (os_helper.temp_dir() as tmpdir,
-              temporary_pycache_prefix(tmpdir),
-              warnings.catch_warnings(record=True) as wlog):
-            warnings.simplefilter('error')
-            warnings.filterwarnings('always', module=module_re)
-            warnings.filterwarnings('error', module='syntax_warnings')
-            import test.test_import.data.syntax_warnings
-        self.assertEqual(sorted(wm.lineno for wm in wlog), [4, 7, 10, 13, 14, 21])
-        filename = test.test_import.data.syntax_warnings.__file__
-        for wm in wlog:
-            self.assertEqual(wm.filename, filename)
-            self.assertIs(wm.category, SyntaxWarning)
-
-
 @skip_if_dont_write_bytecode
 class FilePermissionTests(unittest.TestCase):
     # tests for file mode on cached .pyc files
@@ -1339,7 +1289,7 @@ class FilePermissionTests(unittest.TestCase):
     @unittest.skipUnless(os.name == 'posix',
                          "test meaningful only on posix systems")
     @unittest.skipIf(
-        is_wasm32,
+        is_emscripten or is_wasi,
         "Emscripten's/WASI's umask is a stub."
     )
     def test_creation_mode(self):
@@ -1432,17 +1382,14 @@ class PycRewritingTests(unittest.TestCase):
 import sys
 code_filename = sys._getframe().f_code.co_filename
 module_filename = __file__
-constant = 1000
+constant = 1
 def func():
     pass
 func_filename = func.__code__.co_filename
 """
     dir_name = os.path.abspath(TESTFN)
     file_name = os.path.join(dir_name, module_name) + os.extsep + "py"
-    try:
-        compiled_name = importlib.util.cache_from_source(file_name)
-    except NotImplementedError:
-        compiled_name = None
+    compiled_name = importlib.util.cache_from_source(file_name)
 
     def setUp(self):
         self.sys_path = sys.path[:]
@@ -1460,8 +1407,7 @@ func_filename = func.__code__.co_filename
         else:
             unload(self.module_name)
         unlink(self.file_name)
-        if self.compiled_name:
-            unlink(self.compiled_name)
+        unlink(self.compiled_name)
         rmtree(self.dir_name)
 
     def import_module(self):
@@ -1480,8 +1426,6 @@ func_filename = func.__code__.co_filename
         self.assertEqual(mod.code_filename, self.file_name)
         self.assertEqual(mod.func_filename, self.file_name)
 
-    @unittest.skipIf(sys.implementation.cache_tag is None,
-                     'requires sys.implementation.cache_tag is not None')
     def test_incorrect_code_name(self):
         py_compile.compile(self.file_name, dfile="another_module.py")
         mod = self.import_module()
@@ -1491,9 +1435,9 @@ func_filename = func.__code__.co_filename
 
     def test_module_without_source(self):
         target = "another_module.py"
-        pyc_file = self.file_name + 'c'
-        py_compile.compile(self.file_name, pyc_file, dfile=target)
+        py_compile.compile(self.file_name, dfile=target)
         os.remove(self.file_name)
+        pyc_file = make_legacy_pyc(self.file_name)
         importlib.invalidate_caches()
         mod = self.import_module()
         self.assertEqual(mod.module_filename, pyc_file)
@@ -1501,26 +1445,23 @@ func_filename = func.__code__.co_filename
         self.assertEqual(mod.func_filename, target)
 
     def test_foreign_code(self):
-        compiled_name = self.compiled_name or (self.file_name + 'c')
-        py_compile.compile(self.file_name, compiled_name)
-        with open(compiled_name, "rb") as f:
+        py_compile.compile(self.file_name)
+        with open(self.compiled_name, "rb") as f:
             header = f.read(16)
             code = marshal.load(f)
         constants = list(code.co_consts)
         foreign_code = importlib.import_module.__code__
-        pos = constants.index(1000)
+        pos = constants.index(1)
         constants[pos] = foreign_code
         code = code.replace(co_consts=tuple(constants))
-        with open(compiled_name, "wb") as f:
+        with open(self.compiled_name, "wb") as f:
             f.write(header)
             marshal.dump(code, f)
-        if not self.compiled_name:
-            os.remove(self.file_name)
         mod = self.import_module()
         self.assertEqual(mod.constant.co_filename, foreign_code.co_filename)
 
 
-class PathsTests(unittest.TestCase):
+class PathsTests(unittest.TestCase, ExtraAssertions):
     SAMPLES = ('test', 'test\u00e4\u00f6\u00fc\u00df', 'test\u00e9\u00e8',
                'test\u00b0\u00b3\u00b2')
     path = TESTFN
@@ -1574,7 +1515,7 @@ class PathsTests(unittest.TestCase):
         unload("test_unc_path")
 
 
-class RelativeImportTests(unittest.TestCase):
+class RelativeImportTests(unittest.TestCase, ExtraAssertions):
 
     def tearDown(self):
         unload("test.relimport")
@@ -1776,6 +1717,78 @@ class PycacheTests(unittest.TestCase):
         finally:
             os.remove(pyc_file)
 
+    def test___cached__(self):
+        # Modules now also have an __cached__ that points to the pyc file.
+        m = __import__(TESTFN)
+        pyc_file = importlib.util.cache_from_source(TESTFN + '.py')
+        self.assertEqual(m.__cached__, os.path.join(os.getcwd(), pyc_file))
+
+    @skip_if_dont_write_bytecode
+    def test___cached___legacy_pyc(self):
+        # Like test___cached__() except that for backward compatibility,
+        # when the pyc file lives where the py file would have been (and named
+        # without the tag), it is importable.  The __cached__ of the imported
+        # module is the pyc location.
+        __import__(TESTFN)
+        # pyc_file gets removed in _clean() via tearDown().
+        pyc_file = make_legacy_pyc(self.source)
+        os.remove(self.source)
+        unload(TESTFN)
+        importlib.invalidate_caches()
+        m = __import__(TESTFN)
+        self.assertEqual(m.__cached__,
+                         os.path.join(os.getcwd(), os.path.relpath(pyc_file)))
+
+    @skip_if_dont_write_bytecode
+    def test_package___cached__(self):
+        # Like test___cached__ but for packages.
+        def cleanup():
+            rmtree('pep3147')
+            unload('pep3147.foo')
+            unload('pep3147')
+        os.mkdir('pep3147')
+        self.addCleanup(cleanup)
+        # Touch the __init__.py
+        with open(os.path.join('pep3147', '__init__.py'), 'wb'):
+            pass
+        with open(os.path.join('pep3147', 'foo.py'), 'wb'):
+            pass
+        importlib.invalidate_caches()
+        m = __import__('pep3147.foo')
+        init_pyc = importlib.util.cache_from_source(
+            os.path.join('pep3147', '__init__.py'))
+        self.assertEqual(m.__cached__, os.path.join(os.getcwd(), init_pyc))
+        foo_pyc = importlib.util.cache_from_source(os.path.join('pep3147', 'foo.py'))
+        self.assertEqual(sys.modules['pep3147.foo'].__cached__,
+                         os.path.join(os.getcwd(), foo_pyc))
+
+    def test_package___cached___from_pyc(self):
+        # Like test___cached__ but ensuring __cached__ when imported from a
+        # PEP 3147 pyc file.
+        def cleanup():
+            rmtree('pep3147')
+            unload('pep3147.foo')
+            unload('pep3147')
+        os.mkdir('pep3147')
+        self.addCleanup(cleanup)
+        # Touch the __init__.py
+        with open(os.path.join('pep3147', '__init__.py'), 'wb'):
+            pass
+        with open(os.path.join('pep3147', 'foo.py'), 'wb'):
+            pass
+        importlib.invalidate_caches()
+        m = __import__('pep3147.foo')
+        unload('pep3147.foo')
+        unload('pep3147')
+        importlib.invalidate_caches()
+        m = __import__('pep3147.foo')
+        init_pyc = importlib.util.cache_from_source(
+            os.path.join('pep3147', '__init__.py'))
+        self.assertEqual(m.__cached__, os.path.join(os.getcwd(), init_pyc))
+        foo_pyc = importlib.util.cache_from_source(os.path.join('pep3147', 'foo.py'))
+        self.assertEqual(sys.modules['pep3147.foo'].__cached__,
+                         os.path.join(os.getcwd(), foo_pyc))
+
     def test_recompute_pyc_same_second(self):
         # Even when the source file doesn't change timestamp, a change in
         # source size is enough to trigger recomputation of the pyc file.
@@ -1834,7 +1847,7 @@ class TestSymbolicallyLinkedPackage(unittest.TestCase):
 
 
 @cpython_only
-class ImportlibBootstrapTests(unittest.TestCase):
+class ImportlibBootstrapTests(unittest.TestCase, ExtraAssertions):
     # These tests check that importlib is bootstrapped.
 
     def test_frozen_importlib(self):
@@ -2044,6 +2057,10 @@ class ImportTracebackTests(unittest.TestCase):
         # away from the traceback.
         self.create_module("foo", "")
         importlib = sys.modules['_frozen_importlib_external']
+        if 'load_module' in vars(importlib.SourceLoader):
+            old_exec_module = importlib.SourceLoader.exec_module
+        else:
+            old_exec_module = None
         try:
             def exec_module(*args):
                 1/0
@@ -2056,7 +2073,10 @@ class ImportTracebackTests(unittest.TestCase):
                 self.fail("ZeroDivisionError should have been raised")
             self.assert_traceback(tb, [__file__, '<frozen importlib', __file__])
         finally:
-            del importlib.SourceLoader.exec_module
+            if old_exec_module is None:
+                del importlib.SourceLoader.exec_module
+            else:
+                importlib.SourceLoader.exec_module = old_exec_module
 
     @unittest.skipUnless(TESTFN_UNENCODABLE, 'need TESTFN_UNENCODABLE')
     def test_unencodable_filename(self):
@@ -2485,21 +2505,6 @@ class SubinterpImportTests(unittest.TestCase):
                         self.check_compatible_here(
                             modname, filename, strict=False, isolated=False)
 
-    @unittest.skipIf(_testmultiphase is None, "test requires _testmultiphase module")
-    def test_testmultiphase_exec_multiple(self):
-        modname = '_testmultiphase_exec_multiple'
-        filename = _testmultiphase.__file__
-        module = import_extension_from_file(modname, filename,
-                                            put_in_sys_modules=False)
-        # All three exec's were called.
-        self.assertEqual(module.a, 1)
-        self.assertEqual(module.b, 2)
-        self.assertEqual(module.c, 3)
-        # They were called in order.
-        keys = list(module.__dict__)
-        self.assertLess(keys.index('a'), keys.index('b'))
-        self.assertLess(keys.index('b'), keys.index('c'))
-
     @unittest.skipIf(_testinternalcapi is None, "requires _testinternalcapi")
     def test_python_compat(self):
         module = 'threading'
@@ -2741,7 +2746,7 @@ class TestSinglePhaseSnapshot(ModuleSnapshot):
 
 
 @requires_singlephase_init
-class SinglephaseInitTests(unittest.TestCase):
+class SinglephaseInitTests(unittest.TestCase, ExtraAssertions):
 
     NAME = '_testsinglephase'
 
@@ -2804,6 +2809,9 @@ class SinglephaseInitTests(unittest.TestCase):
         # This is essentially copied from the old imp module.
         from importlib._bootstrap import _load
         loader = self.LOADER(name, path)
+
+        # Issue bpo-24748: Skip the sys.modules check in _load_module_shim;
+        # always load new extension.
         spec = importlib.util.spec_from_file_location(name, path,
                                                       loader=loader)
         return _load(spec)
@@ -3258,7 +3266,7 @@ class SinglephaseInitTests(unittest.TestCase):
         #  * alive in 1 interpreter (main)
         #  * module def still in _PyRuntime.imports.extensions
         #  * mod init func ran again
-        #  * m_copy is NULL (cleared when the interpreter was destroyed)
+        #  * m_copy is NULL (claered when the interpreter was destroyed)
         #    (was from main interpreter)
         #  * module's global state was updated, not reset
 
@@ -3286,7 +3294,6 @@ class SinglephaseInitTests(unittest.TestCase):
         #  * m_copy was copied from interp2 (was from interp1)
         #  * module's global state was updated, not reset
 
-    @unittest.skip("gh-131229: This is suddenly very flaky")
     @no_rerun(reason="rerun not possible; module state is never cleared (see gh-102251)")
     @requires_subinterpreters
     def test_basic_multiple_interpreters_deleted_no_reset(self):
@@ -3394,7 +3401,7 @@ class SinglephaseInitTests(unittest.TestCase):
         #  * alive in 0 interpreters
         #  * module def in _PyRuntime.imports.extensions
         #  * mod init func ran for the first time (since reset, at least)
-        #  * m_copy is NULL (cleared when the interpreter was destroyed)
+        #  * m_copy is NULL (claered when the interpreter was destroyed)
         #  * module's global state was initialized, not reset
 
         # Use a subinterpreter that sticks around.
@@ -3420,169 +3427,6 @@ class SinglephaseInitTests(unittest.TestCase):
         #  * mod init func ran again
         #  * m_copy was copied from interp2 (was from interp1)
         #  * module's global state was initialized, not reset
-
-
-@unittest.skipIf(_testmultiphase is None, "test requires _testmultiphase module")
-class ModexportTests(unittest.TestCase):
-    def test_from_modexport(self):
-        modname = '_test_from_modexport'
-        filename = _testmultiphase.__file__
-        module = import_extension_from_file(modname, filename,
-                                            put_in_sys_modules=False)
-
-        self.assertEqual(module.__name__, modname)
-
-    @requires_subinterpreters
-    def test_from_modexport_gil_used(self):
-        # Test that a module with Py_MOD_GIL_USED (re-)enables the GIL.
-        # Do this in a new interpreter to avoid interfering with global state.
-        modname = '_test_from_modexport_gil_used'
-        filename = _testmultiphase.__file__
-        interp = concurrent.interpreters.create()
-        self.addCleanup(interp.close)
-        queue = concurrent.interpreters.create_queue()
-        interp.prepare_main(
-            modname=modname,
-            filename=filename,
-            queue=queue,
-        )
-        enabled_before = sys._is_gil_enabled()
-        interp.exec(f"""if True:
-            import sys
-            from test.support.warnings_helper import check_warnings
-            from {__name__} import import_extension_from_file
-            with check_warnings((".*GIL..has been enabled.*", RuntimeWarning),
-                                quiet=True):
-                module = import_extension_from_file(modname, filename,
-                                                    put_in_sys_modules=False)
-            queue.put(module.__name__)
-            queue.put(sys._is_gil_enabled())
-        """)
-
-        self.assertEqual(queue.get(), modname)
-        self.assertEqual(queue.get(), True)
-        self.assertTrue(queue.empty())
-
-        self.assertEqual(enabled_before, sys._is_gil_enabled())
-
-    def test_from_modexport_null(self):
-        modname = '_test_from_modexport_null'
-        filename = _testmultiphase.__file__
-        with self.assertRaises(SystemError):
-            import_extension_from_file(modname, filename,
-                                       put_in_sys_modules=False)
-
-    def test_from_modexport_exception(self):
-        modname = '_test_from_modexport_exception'
-        filename = _testmultiphase.__file__
-        with self.assertRaises(ValueError):
-            import_extension_from_file(modname, filename,
-                                       put_in_sys_modules=False)
-
-    def test_from_modexport_create_nonmodule(self):
-        modname = '_test_from_modexport_create_nonmodule'
-        filename = _testmultiphase.__file__
-        module = import_extension_from_file(modname, filename,
-                                            put_in_sys_modules=False)
-        self.assertIsInstance(module, str)
-
-    @requires_subinterpreters
-    def test_from_modexport_create_nonmodule_gil_used(self):
-        # Test that a module with Py_MOD_GIL_USED (re-)enables the GIL.
-        # Do this in a new interpreter to avoid interfering with global state.
-        modname = '_test_from_modexport_create_nonmodule_gil_used'
-        filename = _testmultiphase.__file__
-        interp = concurrent.interpreters.create()
-        self.addCleanup(interp.close)
-        queue = concurrent.interpreters.create_queue()
-        interp.prepare_main(
-            modname=modname,
-            filename=filename,
-            queue=queue,
-        )
-        enabled_before = sys._is_gil_enabled()
-        interp.exec(f"""if True:
-            import sys
-            from test.support.warnings_helper import check_warnings
-            from {__name__} import import_extension_from_file
-            with check_warnings((".*GIL..has been enabled.*", RuntimeWarning),
-                                quiet=True):
-                module = import_extension_from_file(modname, filename,
-                                                    put_in_sys_modules=False)
-            queue.put(module)
-            queue.put(sys._is_gil_enabled())
-        """)
-
-        self.assertIsInstance(queue.get(), str)
-        self.assertEqual(queue.get(), True)
-        self.assertTrue(queue.empty())
-
-        self.assertEqual(enabled_before, sys._is_gil_enabled())
-
-    def test_from_modexport_smoke(self):
-        # General positive test for sundry features
-        # (PyModule_FromSlotsAndSpec tests exercise these more carefully)
-        modname = '_test_from_modexport_smoke'
-        filename = _testmultiphase.__file__
-        module = import_extension_from_file(modname, filename,
-                                            put_in_sys_modules=False)
-        self.assertEqual(module.__doc__, "the expected docstring")
-        self.assertEqual(module.number, 147)
-        self.assertEqual(module.get_state_int(), 258)
-        self.assertGreater(module.get_test_token(), 0)
-
-    def test_from_modexport_smoke_token(self):
-        _testcapi = import_module("_testcapi")
-
-        modname = '_test_from_modexport_smoke'
-        filename = _testmultiphase.__file__
-        module = import_extension_from_file(modname, filename,
-                                            put_in_sys_modules=False)
-        token = module.get_test_token()
-        self.assertEqual(_testcapi.pymodule_get_token(module), token)
-
-        tp = module.Example
-        self.assertEqual(_testcapi.pytype_getmodulebytoken(tp, token), module)
-        class Sub(tp):
-            pass
-        self.assertEqual(_testcapi.pytype_getmodulebytoken(Sub, token), module)
-
-    def test_from_modexport_empty_slots(self):
-        # Module to test that Py_mod_abi is mandatory for PyModExport
-        modname = '_test_from_modexport_empty_slots'
-        filename = _testmultiphase.__file__
-        with self.assertRaises(SystemError):
-            import_extension_from_file(
-                modname, filename, put_in_sys_modules=False)
-
-    @requires_gil_enabled("this module re-enables GIL")
-    def test_from_modexport_minimal_slots(self):
-        # Module to test that:
-        # - no slots except Py_mod_abi is mandatory for PyModExport
-        # - the slots array is used as the default token
-        modname = '_test_from_modexport_minimal_slots'
-        filename = _testmultiphase.__file__
-        module = import_extension_from_file(
-            modname, filename, put_in_sys_modules=False)
-
-        self.assertEqual(module.__name__, modname)
-        self.assertEqual(module.__doc__, None)
-
-        _testcapi = import_module("_testcapi")
-        smoke_mod = import_extension_from_file(
-            '_test_from_modexport_smoke', filename, put_in_sys_modules=False)
-        self.assertEqual(_testcapi.pymodule_get_token(module),
-                         smoke_mod.get_modexport_minimal_slots())
-
-@cpython_only
-class TestMagicNumber(unittest.TestCase):
-    def test_magic_number_endianness(self):
-        magic_number_bytes = _imp.pyc_magic_number_token.to_bytes(4, 'little')
-        self.assertEqual(magic_number_bytes[2:], b'\r\n')
-        # Starting with Python 3.11, Python 3.n starts with magic number 2900+50n.
-        magic_number = int.from_bytes(magic_number_bytes[:2], 'little')
-        start = 2900 + sys.version_info.minor * 50
-        self.assertIn(magic_number, range(start, start + 50))
 
 
 if __name__ == '__main__':

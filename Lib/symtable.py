@@ -1,30 +1,22 @@
 """Interface to the compiler's internal symbol tables"""
 
 import _symtable
-from _symtable import (
-    USE,
-    DEF_GLOBAL,  # noqa: F401
-    DEF_NONLOCAL, DEF_LOCAL,
-    DEF_PARAM, DEF_TYPE_PARAM, DEF_FREE_CLASS,
-    DEF_IMPORT, DEF_BOUND, DEF_ANNOT,
-    DEF_COMP_ITER,
-    SCOPE_OFF, SCOPE_MASK,
-    FREE, LOCAL, GLOBAL_IMPLICIT, GLOBAL_EXPLICIT, CELL
-)
+from _symtable import (USE, DEF_GLOBAL, DEF_NONLOCAL, DEF_LOCAL, DEF_PARAM,
+     DEF_IMPORT, DEF_BOUND, DEF_ANNOT, SCOPE_OFF, SCOPE_MASK, FREE,
+     LOCAL, GLOBAL_IMPLICIT, GLOBAL_EXPLICIT, CELL)
 
 import weakref
 from enum import StrEnum
 
 __all__ = ["symtable", "SymbolTableType", "SymbolTable", "Class", "Function", "Symbol"]
 
-def symtable(code, filename, compile_type, *, module=None):
+def symtable(code, filename, compile_type):
     """ Return the toplevel *SymbolTable* for the source code.
 
-    *code* can be a string, a bytes object, or an AST object.
     *filename* is the name of the file with the code
     and *compile_type* is the *compile()* mode argument.
     """
-    top = _symtable.symtable(code, filename, compile_type, module=module)
+    top = _symtable.symtable(code, filename, compile_type)
     return _newSymbolTable(top, filename)
 
 class SymbolTableFactory:
@@ -56,7 +48,6 @@ class SymbolTableType(StrEnum):
     TYPE_ALIAS = "type alias"
     TYPE_PARAMETERS = "type parameters"
     TYPE_VARIABLE = "type variable"
-    INLINED_COMPREHENSION = "inlined comprehension"
 
 
 class SymbolTable:
@@ -99,8 +90,6 @@ class SymbolTable:
             return SymbolTableType.TYPE_PARAMETERS
         if self._table.type == _symtable.TYPE_TYPE_VARIABLE:
             return SymbolTableType.TYPE_VARIABLE
-        if self._table.type == _symtable.TYPE_INLINED_COMPREHENSION:
-            return SymbolTableType.INLINED_COMPREHENSION
         assert False, f"unexpected type: {self._table.type}"
 
     def get_id(self):
@@ -154,10 +143,8 @@ class SymbolTable:
             flags = self._table.symbols[name]
             namespaces = self.__check_children(name)
             module_scope = (self._table.name == "top")
-            inlined = (self._table.type == _symtable.TYPE_INLINED_COMPREHENSION)
             sym = self._symbols[name] = Symbol(name, flags, namespaces,
-                                               module_scope=module_scope,
-                                               inlined_comprehension=inlined)
+                                               module_scope=module_scope)
         return sym
 
     def get_symbols(self):
@@ -178,10 +165,6 @@ class SymbolTable:
                 for st in self._table.children]
 
 
-def _get_scope(flags):  # like _PyST_GetScope()
-    return (flags >> SCOPE_OFF) & SCOPE_MASK
-
-
 class Function(SymbolTable):
 
     # Default values for instance variables
@@ -190,7 +173,6 @@ class Function(SymbolTable):
     __frees = None
     __globals = None
     __nonlocals = None
-    __cells = None
 
     def __idents_matching(self, test_func):
         return tuple(ident for ident in self.get_identifiers()
@@ -208,7 +190,7 @@ class Function(SymbolTable):
         """
         if self.__locals is None:
             locs = (LOCAL, CELL)
-            test = lambda x: _get_scope(x) in locs
+            test = lambda x: ((x >> SCOPE_OFF) & SCOPE_MASK) in locs
             self.__locals = self.__idents_matching(test)
         return self.__locals
 
@@ -217,7 +199,7 @@ class Function(SymbolTable):
         """
         if self.__globals is None:
             glob = (GLOBAL_IMPLICIT, GLOBAL_EXPLICIT)
-            test = lambda x: _get_scope(x) in glob
+            test = lambda x:((x >> SCOPE_OFF) & SCOPE_MASK) in glob
             self.__globals = self.__idents_matching(test)
         return self.__globals
 
@@ -232,33 +214,63 @@ class Function(SymbolTable):
         """Return a tuple of free variables in the function.
         """
         if self.__frees is None:
-            is_free = lambda x: _get_scope(x) == FREE
+            is_free = lambda x:((x >> SCOPE_OFF) & SCOPE_MASK) == FREE
             self.__frees = self.__idents_matching(is_free)
         return self.__frees
 
-    def get_cells(self):
-        """Return a tuple of cell variables in the function.
-        """
-        if self.__cells is None:
-            is_cell = lambda x: _get_scope(x) == CELL
-            self.__cells = self.__idents_matching(is_cell)
-        return self.__cells
-
 
 class Class(SymbolTable):
-    pass
+
+    __methods = None
+
+    def get_methods(self):
+        """Return a tuple of methods declared in the class.
+        """
+        if self.__methods is None:
+            d = {}
+
+            def is_local_symbol(ident):
+                flags = self._table.symbols.get(ident, 0)
+                return ((flags >> SCOPE_OFF) & SCOPE_MASK) == LOCAL
+
+            for st in self._table.children:
+                # pick the function-like symbols that are local identifiers
+                if is_local_symbol(st.name):
+                    match st.type:
+                        case _symtable.TYPE_FUNCTION:
+                            # generators are of type TYPE_FUNCTION with a ".0"
+                            # parameter as a first parameter (which makes them
+                            # distinguishable from a function named 'genexpr')
+                            if st.name == 'genexpr' and '.0' in st.varnames:
+                                continue
+                            d[st.name] = 1
+                        case _symtable.TYPE_TYPE_PARAMETERS:
+                            # Get the function-def block in the annotation
+                            # scope 'st' with the same identifier, if any.
+                            scope_name = st.name
+                            for c in st.children:
+                                if c.name == scope_name and c.type == _symtable.TYPE_FUNCTION:
+                                    # A generic generator of type TYPE_FUNCTION
+                                    # cannot be a direct child of 'st' (but it
+                                    # can be a descendant), e.g.:
+                                    #
+                                    # class A:
+                                    #   type genexpr[genexpr] = (x for x in [])
+                                    assert scope_name != 'genexpr' or '.0' not in c.varnames
+                                    d[scope_name] = 1
+                                    break
+            self.__methods = tuple(d)
+        return self.__methods
 
 
 class Symbol:
 
-    def __init__(self, name, flags, namespaces=None, *, module_scope=False,
-                 inlined_comprehension=False):
+    def __init__(self, name, flags, namespaces=None, *, module_scope=False):
         self.__name = name
         self.__flags = flags
-        self.__scope = _get_scope(flags)
+        self.__scope = (flags >> SCOPE_OFF) & SCOPE_MASK # like PyST_GetScope()
         self.__namespaces = namespaces or ()
         self.__module_scope = module_scope
-        self.__inlined_comprehension = inlined_comprehension
 
     def __repr__(self):
         flags_str = '|'.join(self._flags_str())
@@ -281,17 +293,12 @@ class Symbol:
         """Return *True* if the symbol is used in
         its block.
         """
-        return bool(self.__flags & USE)
+        return bool(self.__flags & _symtable.USE)
 
     def is_parameter(self):
         """Return *True* if the symbol is a parameter.
         """
         return bool(self.__flags & DEF_PARAM)
-
-    def is_type_parameter(self):
-        """Return *True* if the symbol is a type parameter.
-        """
-        return bool(self.__flags & DEF_TYPE_PARAM)
 
     def is_global(self):
         """Return *True* if the symbol is global.
@@ -325,15 +332,6 @@ class Symbol:
         """
         return bool(self.__scope == FREE)
 
-    def is_cell(self):
-        """Return *True* if the symbol is a cell variable."""
-        return bool(self.__scope == CELL)
-
-    def is_free_class(self):
-        """Return *True* if a class-scoped symbol is free from
-        the perspective of a method."""
-        return bool(self.__flags & DEF_FREE_CLASS)
-
     def is_imported(self):
         """Return *True* if the symbol is created from
         an import statement.
@@ -343,16 +341,6 @@ class Symbol:
     def is_assigned(self):
         """Return *True* if a symbol is assigned to."""
         return bool(self.__flags & DEF_LOCAL)
-
-    def is_comp_iter(self):
-        """Return *True* if the symbol is a comprehension iteration variable.
-        """
-        return bool(self.__flags & DEF_COMP_ITER)
-
-    def is_comp_cell(self):
-        """Return *True* if the symbol is a cell in an inlined comprehension.
-        """
-        return self.is_cell() and self.__inlined_comprehension
 
     def is_namespace(self):
         """Returns *True* if name binding introduces new namespace.
@@ -388,7 +376,7 @@ class Symbol:
 _flags = [('USE', USE)]
 _flags.extend(kv for kv in globals().items() if kv[0].startswith('DEF_'))
 _scopes_names = ('FREE', 'LOCAL', 'GLOBAL_IMPLICIT', 'GLOBAL_EXPLICIT', 'CELL')
-_scopes_value_to_name = frozendict({globals()[n]: n for n in _scopes_names})
+_scopes_value_to_name = {globals()[n]: n for n in _scopes_names}
 
 
 def main(args):

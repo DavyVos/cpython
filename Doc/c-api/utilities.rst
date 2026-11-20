@@ -22,4 +22,3 @@ and parsing function arguments and constructing Python values from C values.
    codec.rst
    time.rst
    perfmaps.rst
-   pyexpat.rst

@@ -4,6 +4,9 @@
 .. module:: shutil
    :synopsis: High-level file operations, including copying.
 
+.. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
+.. partly based on the docstrings
+
 **Source code:** :source:`Lib/shutil.py`
 
 .. index::
@@ -12,7 +15,7 @@
 
 --------------
 
-The :mod:`!shutil` module offers a number of high-level operations on files and
+The :mod:`shutil` module offers a number of high-level operations on files and
 collections of files.  In particular, functions are provided  which support file
 copying and removal. For operations on individual files, see also the
 :mod:`os` module.
@@ -44,13 +47,6 @@ Directory and files operations
    0, only the contents from the current file position to the end of the file will
    be copied.
 
-   :func:`copyfileobj` will *not* guarantee that the destination stream has
-   been flushed on completion of the copy. If you want to read from the
-   destination at the completion of the copy operation (for example, reading
-   the contents of a temporary file that has been copied from a HTTP stream),
-   you must ensure that you have called :func:`~io.IOBase.flush` or
-   :func:`~io.IOBase.close` on the file-like object before attempting to read
-   the destination file.
 
 .. function:: copyfile(src, dst, *, follow_symlinks=True)
 
@@ -64,8 +60,8 @@ Directory and files operations
 
    The destination location must be writable; otherwise, an :exc:`OSError`
    exception will be raised. If *dst* already exists, it will be replaced.
-   Special files such as character or block devices, pipes, and sockets cannot
-   be copied with this function.
+   Special files such as character or block devices and pipes cannot be
+   copied with this function.
 
    If *follow_symlinks* is false and *src* is a symbolic link,
    a new symbolic link will be created instead of copying the
@@ -87,13 +83,10 @@ Directory and files operations
       copy the file more efficiently. See
       :ref:`shutil-platform-dependent-efficient-copy-operations` section.
 
-   .. versionchanged:: 3.15
-      :exc:`SpecialFileError` is now also raised for sockets and device files.
-
 .. exception:: SpecialFileError
 
    This exception is raised when :func:`copyfile` or :func:`copytree` attempt
-   to copy a named pipe, socket, or device file.
+   to copy a named pipe.
 
    .. versionadded:: 2.7
 
@@ -242,7 +235,7 @@ Directory and files operations
 
 .. function:: copytree(src, dst, symlinks=False, ignore=None, \
               copy_function=copy2, ignore_dangling_symlinks=False, \
-              dirs_exist_ok=False, *, copy_dir_stat=True)
+              dirs_exist_ok=False)
 
    Recursively copy an entire directory tree rooted at *src* to a directory
    named *dst* and return the destination directory.  All intermediate
@@ -250,12 +243,6 @@ Directory and files operations
 
    Permissions and times of directories are copied with :func:`copystat`,
    individual files are copied using :func:`~shutil.copy2`.
-
-   If *copy_dir_stat* is false, directory metadata is not copied with
-   :func:`copystat`, e.g. to copy a read-only tree into a writable one.
-   It defaults to true.  Note that file metadata is always handled by
-   *copy_function*: use e.g. ``copy_function=shutil.copyfile`` to skip
-   that as well.
 
    If *symlinks* is true, symbolic links in the source tree are represented as
    symbolic links in the new tree and the metadata of the original links will
@@ -312,9 +299,6 @@ Directory and files operations
    .. versionchanged:: 3.8
       Added the *dirs_exist_ok* parameter.
 
-   .. versionchanged:: 3.16
-      Added the *copy_dir_stat* parameter.
-
 .. function:: rmtree(path, ignore_errors=False, onerror=None, *, onexc=None, dir_fd=None)
 
    .. index:: single: directory; deleting
@@ -324,12 +308,6 @@ Directory and files operations
    from failed removals will be ignored; if false or omitted, such errors are
    handled by calling a handler specified by *onexc* or *onerror* or, if both
    are omitted, exceptions are propagated to the caller.
-
-   If *path* is a symbolic link to a directory followed by a trailing path
-   separator, such as ``'link/'``, the operating system resolves the link, so
-   :func:`!rmtree` deletes the contents of the directory it points to and then
-   fails to remove *path* itself.  :class:`pathlib.Path` strips trailing
-   separators, so ``rmtree(Path('link/'))`` refuses the link as usual.
 
    This function can support :ref:`paths relative to directory descriptors
    <dir_fd>`.
@@ -532,12 +510,9 @@ Directory and files operations
       or ends with an extension that is in ``PATHEXT``; and filenames that
       have no extension can now be found.
 
-   .. versionchanged:: next
-      Accepts a :term:`path-like object` for *cmd*.
-
 .. exception:: Error
 
-   Subclass of :exc:`OSError` collecting exceptions raised during a multi-file
+   This exception collects exceptions that are raised during a multi-file
    operation. For :func:`copytree`, the exception argument is a list of 3-tuples
    (*srcname*, *dstname*, *exception*).
 
@@ -556,28 +531,17 @@ the use of userspace buffers in Python as in "``outfd.write(infd.read())``".
 
 On macOS `fcopyfile`_ is used to copy the file content (not metadata).
 
-On Linux :func:`os.copy_file_range` or :func:`os.sendfile` is used.
-
-On Solaris :func:`os.sendfile` is used.
+On Linux :func:`os.sendfile` is used.
 
 On Windows :func:`shutil.copyfile` uses a bigger default buffer size (1 MiB
 instead of 64 KiB) and a :func:`memoryview`-based variant of
-:func:`shutil.copyfileobj` is used, which still reads and writes in a loop.
-:func:`shutil.copy2` uses the native ``CopyFile2`` call on Windows, which is the most
-efficient method, supports copy-on-write, and preserves metadata.
+:func:`shutil.copyfileobj` is used.
 
 If the fast-copy operation fails and no data was written in the destination
 file then shutil will silently fall back to less efficient
 :func:`copyfileobj` function internally.
 
 .. versionchanged:: 3.8
-
-.. versionchanged:: 3.14
-    Solaris now uses :func:`os.sendfile`.
-
-.. versionchanged:: 3.14
-   Copy-on-write or server-side copy may be used internally via
-   :func:`os.copy_file_range` on supported Linux filesystems.
 
 .. _shutil-copytree-example:
 
@@ -643,23 +607,21 @@ provided.  They rely on the :mod:`zipfile` and :mod:`tarfile` modules.
 
    Create an archive file (such as zip or tar) and return its name.
 
-   *base_name* is a string or :term:`path-like object` specifying the name of
-   the file to create, including the path, minus any format-specific extension.
+   *base_name* is the name of the file to create, including the path, minus
+   any format-specific extension.
 
    *format* is the archive format: one of
    "zip" (if the :mod:`zlib` module is available), "tar", "gztar" (if the
    :mod:`zlib` module is available), "bztar" (if the :mod:`bz2` module is
-   available), "xztar" (if the :mod:`lzma` module is available), or "zstdtar"
-   (if the :mod:`compression.zstd` module is available).
+   available), or "xztar" (if the :mod:`lzma` module is available).
 
-   *root_dir* is a string or :term:`path-like object` specifying a directory
-   that will be the root directory of the archive, all paths in the archive
-   will be relative to it; for example, we typically chdir into *root_dir*
-   before creating the archive.
+   *root_dir* is a directory that will be the root directory of the
+   archive, all paths in the archive will be relative to it; for example,
+   we typically chdir into *root_dir* before creating the archive.
 
-   *base_dir* is a string or :term:`path-like object` specifying a directory
-   where we start archiving from; i.e. *base_dir* will be the common prefix of
-   all files and directories in the archive.  *base_dir* must be given relative
+   *base_dir* is the directory where we start archiving from;
+   i.e. *base_dir* will be the common prefix of all files and
+   directories in the archive.  *base_dir* must be given relative
    to *root_dir*.  See :ref:`shutil-archiving-example-with-basedir` for how to
    use *base_dir* and *root_dir* together.
 
@@ -694,24 +656,18 @@ provided.  They rely on the :mod:`zipfile` and :mod:`tarfile` modules.
       This function is now made thread-safe during creation of standard
       ``.zip`` and tar archives.
 
-   .. versionchanged:: 3.15
-      Accepts a :term:`path-like object` for *base_name*, *root_dir* and
-      *base_dir*.
-
 .. function:: get_archive_formats()
 
    Return a list of supported formats for archiving.
    Each element of the returned sequence is a tuple ``(name, description)``.
 
-   By default :mod:`!shutil` provides these formats:
+   By default :mod:`shutil` provides these formats:
 
    - *zip*: ZIP file (if the :mod:`zlib` module is available).
    - *tar*: Uncompressed tar file. Uses POSIX.1-2001 pax format for new archives.
    - *gztar*: gzip'ed tar-file (if the :mod:`zlib` module is available).
    - *bztar*: bzip2'ed tar-file (if the :mod:`bz2` module is available).
    - *xztar*: xz'ed tar-file (if the :mod:`lzma` module is available).
-   - *zstdtar*: Zstandard compressed tar-file (if the :mod:`compression.zstd`
-     module is available).
 
    You can register new formats or provide your own archiver for any existing
    formats, by using :func:`register_archive_format`.
@@ -755,8 +711,8 @@ provided.  They rely on the :mod:`zipfile` and :mod:`tarfile` modules.
    *extract_dir* is the name of the target directory where the archive is
    unpacked. If not provided, the current working directory is used.
 
-   *format* is the archive format: one of "zip", "tar", "gztar", "bztar",
-   "xztar", "zstdtar", or "whl".  Or any other format registered with
+   *format* is the archive format: one of "zip", "tar", "gztar", "bztar", or
+   "xztar".  Or any other format registered with
    :func:`register_unpack_format`.  If not provided, :func:`unpack_archive`
    will use the archive file name extension and see if an unpacker was
    registered for that extension.  In case none is found,
@@ -764,9 +720,11 @@ provided.  They rely on the :mod:`zipfile` and :mod:`tarfile` modules.
 
    The keyword-only *filter* argument is passed to the underlying unpacking
    function. For zip files, *filter* is not accepted.
-   For tar files, it is recommended to use ``'data'`` (default since Python
-   3.14), unless using features specific to tar and UNIX-like filesystems.
+   For tar files, it is recommended to set it to ``'data'``,
+   unless using features specific to tar and UNIX-like filesystems.
    (See :ref:`tarfile-extraction-filter` for details.)
+   The ``'data'`` filter will become the default for tar files
+   in Python 3.14.
 
    .. audit-event:: shutil.unpack_archive filename,extract_dir,format shutil.unpack_archive
 
@@ -777,20 +735,11 @@ provided.  They rely on the :mod:`zipfile` and :mod:`tarfile` modules.
       the *extract_dir* argument, for example, members that have absolute filenames
       or filenames with ".." components.
 
-      Since Python 3.14, the defaults for both built-in formats (zip and tar
-      files) will prevent the most dangerous of such security issues,
-      but will not prevent *all* unintended behavior.
-      Read the :ref:`tarfile-further-verification`
-      section for tar-specific details.
-
    .. versionchanged:: 3.7
       Accepts a :term:`path-like object` for *filename* and *extract_dir*.
 
    .. versionchanged:: 3.12
       Added the *filter* argument.
-
-   .. versionchanged:: 3.16
-      Added the "whl" format.
 
 .. function:: register_unpack_format(name, extensions, function[, extra_args[, description]])
 
@@ -823,7 +772,7 @@ provided.  They rely on the :mod:`zipfile` and :mod:`tarfile` modules.
    Each element of the returned sequence is a tuple
    ``(name, extensions, description)``.
 
-   By default :mod:`!shutil` provides these formats:
+   By default :mod:`shutil` provides these formats:
 
    - *zip*: ZIP file (unpacking compressed files works only if the corresponding
      module is available).
@@ -831,17 +780,9 @@ provided.  They rely on the :mod:`zipfile` and :mod:`tarfile` modules.
    - *gztar*: gzip'ed tar-file (if the :mod:`zlib` module is available).
    - *bztar*: bzip2'ed tar-file (if the :mod:`bz2` module is available).
    - *xztar*: xz'ed tar-file (if the :mod:`lzma` module is available).
-   - *zstdtar*: Zstandard compressed tar-file (if the :mod:`compression.zstd`
-     module is available).
-   - *whl*: `wheel file <https://packaging.python.org/en/latest/discussions/package-formats/#what-is-a-wheel>`__
-     (unpacking compressed files works only if the corresponding module is
-     available).
 
    You can register new formats or provide your own unpacker for any existing
    formats, by using :func:`register_unpack_format`.
-
-   .. versionchanged:: 3.16
-      Added the *whl* format.
 
 
 .. _shutil-archiving-example:

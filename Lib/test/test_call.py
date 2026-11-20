@@ -1,9 +1,6 @@
 import unittest
 from test.support import (cpython_only, is_wasi, requires_limited_api, Py_DEBUG,
-                          set_recursion_limit, skip_on_s390x,
-                          skip_emscripten_stack_overflow,
-                          skip_wasi_stack_overflow, skip_if_sanitizer,
-                          skip_if_huge_c_stack, import_helper)
+                          set_recursion_limit, skip_on_s390x, import_helper)
 try:
     import _testcapi
 except ImportError:
@@ -12,15 +9,12 @@ try:
     import _testlimitedcapi
 except ImportError:
     _testlimitedcapi = None
-try:
-    import _testinternalcapi
-except ImportError:
-    _testinternalcapi = None
 import struct
 import collections
 import itertools
 import gc
 import contextlib
+import sys
 import types
 
 
@@ -208,7 +202,7 @@ class CFunctionCallsErrorMessages(unittest.TestCase):
                                itertools.product, 0, repeat=1, foo=2)
 
     def test_varargs15_kw(self):
-        msg = r"^ImportError\(\) got an unexpected keyword argument 'foo'$"
+        msg = r"^ImportError\(\) takes at most 3 keyword arguments \(4 given\)$"
         self.assertRaisesRegex(TypeError, msg,
                                ImportError, 0, name=1, path=2, name_from=3, foo=3)
 
@@ -223,7 +217,7 @@ class CFunctionCallsErrorMessages(unittest.TestCase):
                                print, 0, sep=1, end=2, file=3, flush=4, foo=5)
 
     def test_varargs18_kw(self):
-        # _PyArg_UnpackKeywords() with varpos
+        # _PyArg_UnpackKeywordsWithVararg()
         msg = r"invalid keyword argument for print\(\)$"
         with self.assertRaisesRegex(TypeError, msg):
             print(0, 1, **{BadStr('foo'): ','})
@@ -671,6 +665,9 @@ def testfunction_kw(self, *, kw):
     return self
 
 
+ADAPTIVE_WARMUP_DELAY = 2
+
+
 @unittest.skipIf(_testcapi is None, "requires _testcapi")
 class TestPEP590(unittest.TestCase):
 
@@ -747,8 +744,8 @@ class TestPEP590(unittest.TestCase):
         UnaffectedType2 = _testcapi.make_vectorcall_class(SuperType)
 
         # Aside: Quickly check that the C helper actually made derived types
-        self.assertIsSubclass(UnaffectedType1, DerivedType)
-        self.assertIsSubclass(UnaffectedType2, SuperType)
+        self.assertTrue(issubclass(UnaffectedType1, DerivedType))
+        self.assertTrue(issubclass(UnaffectedType2, SuperType))
 
         # Initial state: tp_call
         self.assertEqual(instance(), "tp_call")
@@ -854,18 +851,17 @@ class TestPEP590(unittest.TestCase):
 
     def test_setvectorcall(self):
         from _testcapi import function_setvectorcall
-        _testinternalcapi = import_helper.import_module("_testinternalcapi")
         def f(num): return num + 1
         assert_equal = self.assertEqual
         num = 10
         assert_equal(11, f(num))
         function_setvectorcall(f)
-        for _ in range(_testinternalcapi.SPECIALIZATION_THRESHOLD):
+        # make sure specializer is triggered by running > 50 times
+        for _ in range(10 * ADAPTIVE_WARMUP_DELAY):
             assert_equal("overridden", f(num))
 
     def test_setvectorcall_load_attr_specialization_skip(self):
         from _testcapi import function_setvectorcall
-        _testinternalcapi = import_helper.import_module("_testinternalcapi")
 
         class X:
             def __getattribute__(self, attr):
@@ -877,12 +873,11 @@ class TestPEP590(unittest.TestCase):
         function_setvectorcall(X.__getattribute__)
         # make sure specialization doesn't trigger
         # when vectorcall is overridden
-        for _ in range(_testinternalcapi.SPECIALIZATION_THRESHOLD):
+        for _ in range(ADAPTIVE_WARMUP_DELAY):
             assert_equal("overridden", x.a)
 
     def test_setvectorcall_load_attr_specialization_deopt(self):
         from _testcapi import function_setvectorcall
-        _testinternalcapi = import_helper.import_module("_testinternalcapi")
 
         class X:
             def __getattribute__(self, attr):
@@ -894,24 +889,19 @@ class TestPEP590(unittest.TestCase):
         assert_equal = self.assertEqual
         x = X()
         # trigger LOAD_ATTR_GETATTRIBUTE_OVERRIDDEN specialization
-        for _ in range(_testinternalcapi.SPECIALIZATION_THRESHOLD):
+        for _ in range(ADAPTIVE_WARMUP_DELAY):
             assert_equal("a", get_a(x))
         function_setvectorcall(X.__getattribute__)
         # make sure specialized LOAD_ATTR_GETATTRIBUTE_OVERRIDDEN
         # gets deopted due to overridden vectorcall
-        for _ in range(_testinternalcapi.SPECIALIZATION_THRESHOLD):
+        for _ in range(ADAPTIVE_WARMUP_DELAY):
             assert_equal("overridden", get_a(x))
 
     @requires_limited_api
     def test_vectorcall_limited_incoming(self):
         from _testcapi import pyobject_vectorcall
-        for cls in (_testlimitedcapi.LimitedVectorCallClass,
-                    _testlimitedcapi.LimitedRelativeVectorCallClass):
-            with self.subTest(cls=cls):
-                obj = cls()
-                self.assertEqual(
-                    pyobject_vectorcall(obj, (), ()),
-                    "vectorcall called")
+        obj = _testlimitedcapi.LimitedVectorCallClass()
+        self.assertEqual(pyobject_vectorcall(obj, (), ()), "vectorcall called")
 
     @requires_limited_api
     def test_vectorcall_limited_outgoing(self):
@@ -947,17 +937,7 @@ class TestPEP590(unittest.TestCase):
         self.assertEqual(kwargs_captured, [{"baz": "bar"}])
 
 class A:
-    def method_two_args(arg1=None, arg2=None):
-        pass
-
-    def method_one_arg(arg1):
-        pass
-
-    def method_zero_arg():
-        pass
-
-    @classmethod
-    def classmethod_one_arg(arg1):
+    def method_two_args(self, x, y):
         pass
 
     @staticmethod
@@ -965,152 +945,42 @@ class A:
         pass
 
     @staticmethod
-    def static_positional_only_one_arg(arg1, /):
+    def positional_only(arg, /):
         pass
-
-    @staticmethod
-    def static_one_arg(arg1):
-        pass
-
-    def method_one_arg_named_self(self):
-        pass
-
-    def method_one_arg_named_cls(cls):
-        pass
-
-    def method_two_arg_second_param_self(arg1, self):
-        pass
-
-
-class AMeta(type):
-
-    def method_one_arg(arg1):
-        pass
-
-    def method_two_arg(arg1, arg2):
-        pass
-
-    @classmethod
-    def classmethod_one_arg(arg1):
-        pass
-
-    @staticmethod
-    def static_one_arg(arg1):
-        pass
-
-class AClassWithMetaclass(metaclass=AMeta):
-    pass
 
 @cpython_only
-class TestIncorrectNumberOfPositionalArgs(unittest.TestCase):
-    def test_too_many_positional_with_defaults_suggests_missing_self(self):
-        msg = r"\.method_two_args\(\) takes from 0 to 2 positional arguments but 3 were given\. Did you forget the 'self' parameter in the function definition\?"
-        with self.assertRaisesRegex(TypeError, msg):
-            A().method_two_args("woof", "loud")
+class TestErrorMessagesUseQualifiedName(unittest.TestCase):
 
-    def test_too_many_positional_but_missing_self_no_args(self):
-        msg = r"takes 0 positional arguments but 1 was given\. Did you forget the 'self' parameter in the function definition\?"
-        with self.assertRaisesRegex(TypeError, msg):
-            A().method_zero_arg()
+    @contextlib.contextmanager
+    def check_raises_type_error(self, message):
+        with self.assertRaises(TypeError) as cm:
+            yield
+        self.assertEqual(str(cm.exception), message)
 
-    def test_too_many_positional_but_missing_self(self):
-        msg = r"\.method_one_arg\(\) takes 1 positional argument but 2 were given\. Did you forget the 'self' parameter in the function definition\?"
-        with self.assertRaisesRegex(TypeError, msg):
-            A().method_one_arg("quiet")
+    def test_missing_arguments(self):
+        msg = "A.method_two_args() missing 1 required positional argument: 'y'"
+        with self.check_raises_type_error(msg):
+            A().method_two_args("x")
 
     def test_too_many_positional(self):
-        msg = r"takes 0 positional arguments but 1 was given"
-        with self.assertRaisesRegex(TypeError, msg):
+        msg = "A.static_no_args() takes 0 positional arguments but 1 was given"
+        with self.check_raises_type_error(msg):
             A.static_no_args("oops it's an arg")
 
     def test_positional_only_passed_as_keyword(self):
-        msg = r"\.static_positional_only_one_arg\(\) got some positional-only arguments passed as keyword arguments: 'arg1'"
-        with self.assertRaisesRegex(TypeError, msg):
-            A.static_positional_only_one_arg(arg1="ball")
+        msg = "A.positional_only() got some positional-only arguments passed as keyword arguments: 'arg'"
+        with self.check_raises_type_error(msg):
+            A.positional_only(arg="x")
 
     def test_unexpected_keyword(self):
-        msg = r"method_two_args\(\) got an unexpected keyword argument 'bad'"
-        with self.assertRaisesRegex(TypeError, msg):
+        msg = "A.method_two_args() got an unexpected keyword argument 'bad'"
+        with self.check_raises_type_error(msg):
             A().method_two_args(bad="x")
 
     def test_multiple_values(self):
-        msg = r"\.method_two_args\(\) got multiple values for argument 'arg1'"
-        with self.assertRaisesRegex(TypeError, msg):
-            A().method_two_args("quiet", "low", arg1="oops")
-
-    def test_unbound_method_with_self_keeps_missing_argument_error(self):
-        msg = r"\.method_one_arg\(\) missing 1 required positional argument: 'arg1'"
-        with self.assertRaisesRegex(TypeError, msg):
-            A.method_one_arg()
-
-    def test_classmethod_missing_cls_does_not_suggest_missing_self(self):
-        msg = r"\.classmethod_one_arg\(\) takes 1 positional argument but 2 were given"
-        with self.assertRaisesRegex(TypeError, msg) as cm:
-            A.classmethod_one_arg("arg1")
-        self.assertNotIn("Did you forget", str(cm.exception))
-
-    def test_classmethod_missing_cls_via_instance_does_not_suggest_missing_self(self):
-        msg = r"\.classmethod_one_arg\(\) takes 1 positional argument but 2 were given"
-        with self.assertRaisesRegex(TypeError, msg) as cm:
-            A().classmethod_one_arg("poodle")
-        self.assertNotIn("Did you forget", str(cm.exception))
-
-    def test_staticmethod_too_many_args_does_not_suggest_missing_self(self):
-        msg = r"\.static_one_arg\(\) takes 1 positional argument but 2 were given"
-        with self.assertRaisesRegex(TypeError, msg) as cm:
-            A.static_one_arg(1, 2)
-        self.assertNotIn("Did you forget", str(cm.exception))
-
-    def test_staticmethod_too_many_args_via_instance_does_not_suggest_missing_self(self):
-        msg = r"\.static_one_arg\(\) takes 1 positional argument but 2 were given"
-        with self.assertRaisesRegex(TypeError, msg) as cm:
-            A().static_one_arg(1, 2)
-        self.assertNotIn("Did you forget", str(cm.exception))
-
-    def test_metaclass_missing_receiver_does_not_suggest_missing_self(self):
-        msg = r"AMeta\.method_one_arg\(\) takes 1 positional argument but 2 were given"
-        with self.assertRaisesRegex(TypeError, msg) as cm:
-            AClassWithMetaclass.method_one_arg("standard")
-        self.assertNotIn("Did you forget", str(cm.exception))
-
-    def test_metaclass_method_too_many_args_does_not_suggest_missing_self(self):
-        msg = r"AMeta\.method_two_arg\(\) takes 2 positional arguments but 3 were given"
-        with self.assertRaisesRegex(TypeError, msg) as cm:
-            AClassWithMetaclass.method_two_arg("trail", "river")
-        self.assertNotIn("Did you forget", str(cm.exception))
-
-    def test_metaclass_classmethod_does_not_suggest_missing_self(self):
-        msg = r"AMeta\.classmethod_one_arg\(\) takes 1 positional argument but 2 were given"
-        with self.assertRaisesRegex(TypeError, msg) as cm:
-            AClassWithMetaclass.classmethod_one_arg("standard")
-        self.assertNotIn("Did you forget", str(cm.exception))
-
-    def test_metaclass_staticmethod_does_not_suggest_missing_self(self):
-        msg = r"AMeta\.static_one_arg\(\) takes 1 positional argument but 2 were given"
-        with self.assertRaisesRegex(TypeError, msg) as cm:
-            AClassWithMetaclass.static_one_arg("show", "working")
-        self.assertNotIn("Did you forget", str(cm.exception))
-
-    def test_more_than_two_surplus_args_does_not_suggest(self):
-        with self.assertRaises(TypeError) as cm:
-            A().method_one_arg("arg1", "arg2", "arg3")
-        self.assertNotIn("Did you forget", str(cm.exception))
-
-    def test_when_arg_named_self_does_not_suggest(self):
-        with self.assertRaises(TypeError) as cm:
-            A().method_one_arg_named_self("arg1")
-        self.assertNotIn("Did you forget", str(cm.exception))
-
-    def test_when_arg_named_cls_does_not_suggest(self):
-        with self.assertRaises(TypeError) as cm:
-            A().method_one_arg_named_cls("arg1")
-        self.assertNotIn("Did you forget", str(cm.exception))
-
-    def test_when_second_param_is_self(self):
-        with self.assertRaises(TypeError) as cm:
-            A().method_two_arg_second_param_self()
-        self.assertNotIn("Did you forget", str(cm.exception))
-
+        msg = "A.method_two_args() got multiple values for argument 'x'"
+        with self.check_raises_type_error(msg):
+            A().method_two_args("x", "y", x="oops")
 
 @cpython_only
 class TestErrorMessagesSuggestions(unittest.TestCase):
@@ -1209,30 +1079,9 @@ class TestErrorMessagesSuggestions(unittest.TestCase):
 @cpython_only
 class TestRecursion(unittest.TestCase):
 
-    def test_margin_is_sufficient(self):
-
-        def get_sp():
-            return _testinternalcapi.get_stack_pointer()
-
-        this_sp = _testinternalcapi.get_stack_pointer()
-        lower_sp = _testcapi.pyobject_vectorcall(get_sp, (), ())
-        if _testcapi._Py_STACK_GROWS_DOWN:
-            self.assertLess(lower_sp, this_sp)
-            safe_margin = this_sp - lower_sp
-        else:
-            self.assertGreater(lower_sp, this_sp)
-            safe_margin = lower_sp - this_sp
-        # Add an (arbitrary) extra 25% for safety
-        safe_margin = safe_margin * 5 / 4
-        self.assertLess(safe_margin, _testinternalcapi.get_stack_margin())
-
     @skip_on_s390x
     @unittest.skipIf(is_wasi and Py_DEBUG, "requires deep stack")
-    @skip_if_sanitizer("requires deep stack", thread=True)
     @unittest.skipIf(_testcapi is None, "requires _testcapi")
-    @skip_if_huge_c_stack(90_000)
-    @skip_emscripten_stack_overflow()
-    @skip_wasi_stack_overflow()
     def test_super_deep(self):
 
         def recurse(n):
@@ -1257,20 +1106,12 @@ class TestRecursion(unittest.TestCase):
             recurse(90_000)
             with self.assertRaises(RecursionError):
                 recurse(101_000)
-            c_recurse(50)
+            c_recurse(100)
             with self.assertRaises(RecursionError):
                 c_recurse(90_000)
-            c_py_recurse(50)
+            c_py_recurse(90)
             with self.assertRaises(RecursionError):
                 c_py_recurse(100_000)
-
-    def test_recursion_with_kwargs(self):
-        # GH-137883: The interpreter forgot to check the recursion limit when
-        # calling with keywords.
-        def recurse_kw(a=0):
-            recurse_kw(a=0)
-        with self.assertRaises(RecursionError):
-            recurse_kw()
 
 
 class TestFunctionWithManyArgs(unittest.TestCase):

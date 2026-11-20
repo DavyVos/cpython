@@ -1,5 +1,6 @@
 import sys
 import builtins as bltns
+from functools import partial
 from types import MappingProxyType, DynamicClassAttribute
 
 
@@ -10,15 +11,14 @@ __all__ = [
         'FlagBoundary', 'STRICT', 'CONFORM', 'EJECT', 'KEEP',
         'global_flag_repr', 'global_enum_repr', 'global_str', 'global_enum',
         'EnumCheck', 'CONTINUOUS', 'NAMED_FLAGS', 'UNIQUE',
-        'pickle_by_global_name', 'pickle_by_enum_name', 'show_flag_values',
-        'bin',
+        'pickle_by_global_name', 'pickle_by_enum_name',
         ]
 
 
 # Dummy value for Enum and Flag as there are explicit checks for them
 # before they have been created.
 # This is also why there are checks in EnumType like `if Enum is not None`
-Enum = Flag = EJECT = ReprEnum = None
+Enum = Flag = EJECT = _stdlib_enums = ReprEnum = None
 
 class nonmember(object):
     """
@@ -34,21 +34,11 @@ class member(object):
     def __init__(self, value):
         self.value = value
 
-def _hashable(obj):
-    """
-    Returns True if obj is hashable, False otherwise.
-    """
-    try:
-        hash(obj)
-        return True
-    except TypeError:
-        return False
-
 def _is_descriptor(obj):
     """
     Returns True if obj is a descriptor, False otherwise.
     """
-    return (
+    return not isinstance(obj, partial) and (
             hasattr(obj, '__get__') or
             hasattr(obj, '__set__') or
             hasattr(obj, '__delete__')
@@ -162,6 +152,18 @@ def bin(num, max_bits=None):
             digits = (sign[-1] * max_bits + digits)[-max_bits:]
     return "%s %s" % (sign, digits)
 
+def _dedent(text):
+    """
+    Like textwrap.dedent.  Rewritten because we cannot import textwrap.
+    """
+    lines = text.split('\n')
+    for i, ch in enumerate(lines[0]):
+        if ch != ' ':
+            break
+    for j, l in enumerate(lines):
+        lines[j] = l[i:]
+    return '\n'.join(lines)
+
 class _not_given:
     def __repr__(self):
         return('<not given>')
@@ -207,7 +209,7 @@ class property(DynamicClassAttribute):
             # use previous enum.property
             return self.fget(instance)
         elif self._attr_type == 'attr':
-            # look up previous attribute
+            # look up previous attibute
             return getattr(self._cls_type, self.name)
         elif self._attr_type == 'desc':
             # use previous descriptor
@@ -323,13 +325,14 @@ class _proto_member:
 
         enum_class._add_member_(member_name, enum_member)
         try:
-            # This may fail if value is not hashable.
+            # This may fail if value is not hashable. We can't add the value
+            # to the map, and by-value lookups for this value will be
+            # linear.
             enum_class._value2member_map_.setdefault(value, enum_member)
-            enum_class._hashable_values_.add(value)
+            if value not in enum_class._hashable_values_:
+                enum_class._hashable_values_.append(value)
         except TypeError:
-            # We can't add the value to the map; by-value lookups for this
-            # value will be linear.  keep track of the value in a list so
-            # containment checks are quicker
+            # keep track of the value in a list so containment checks are quick
             enum_class._unhashable_values_.append(value)
             enum_class._unhashable_values_map_.setdefault(member_name, []).append(value)
 
@@ -404,6 +407,12 @@ class EnumDict(dict):
         elif isinstance(value, nonmember):
             # unwrap value here; it won't be processed by the below `else`
             value = value.value
+        elif isinstance(value, partial):
+            import warnings
+            warnings.warn('functools.partial will be a method descriptor '
+                          'in future Python versions; wrap it in '
+                          'enum.member() if you want to preserve the '
+                          'old behavior', FutureWarning, stacklevel=2)
         elif _is_descriptor(value):
             pass
         elif self._cls_name is not None and _is_internal_class(self._cls_name, value):
@@ -539,14 +548,14 @@ class EnumType(type):
         classdict['_member_names_'] = []
         classdict['_member_map_'] = {}
         classdict['_value2member_map_'] = {}
-        classdict['_hashable_values_'] = set()      # for comparing with non-hashable types
+        classdict['_hashable_values_'] = []          # for comparing with non-hashable types
         classdict['_unhashable_values_'] = []       # e.g. frozenset() with set()
         classdict['_unhashable_values_map_'] = {}
         classdict['_member_type_'] = member_type
         # now set the __repr__ for the value
         classdict['_value_repr_'] = metacls._find_data_repr_(cls, bases)
         #
-        # Flag structures (will be removed if final class is not a Flag)
+        # Flag structures (will be removed if final class is not a Flag
         classdict['_boundary_'] = (
                 boundary
                 or getattr(first_enum, '_boundary_', None)
@@ -555,29 +564,6 @@ class EnumType(type):
         classdict['_singles_mask_'] = 0
         classdict['_all_bits_'] = 0
         classdict['_inverted_'] = None
-        # check for negative flag values and invert if found (using _proto_members)
-        if Flag is not None and bases and issubclass(bases[-1], Flag):
-            bits = 0
-            inverted = []
-            for n in member_names:
-                p = classdict[n]
-                if isinstance(p.value, int):
-                    if p.value < 0:
-                        inverted.append(p)
-                    else:
-                        bits |= p.value
-                elif p.value is None:
-                    pass
-                elif isinstance(p.value, tuple) and p.value and isinstance(p.value[0], int):
-                    if p.value[0] < 0:
-                        inverted.append(p)
-                    else:
-                        bits |= p.value[0]
-            for p in inverted:
-                if isinstance(p.value, int):
-                    p.value = bits & p.value
-                else:
-                    p.value = (bits & p.value[0], ) + p.value[1:]
         try:
             classdict['_%s__in_progress' % cls] = True
             enum_class = super().__new__(metacls, cls, bases, classdict, **kwds)
@@ -633,13 +619,9 @@ class EnumType(type):
                     '__invert__'
                 ):
                 if name not in classdict:
-                    # check for mixin overrides before replacing
                     enum_method = getattr(Flag, name)
-                    found_method = getattr(enum_class, name)
-                    data_type_method = getattr(member_type, name, None)
-                    if found_method in (enum_method, data_type_method):
-                        setattr(enum_class, name, enum_method)
-                        classdict[name] = enum_method
+                    setattr(enum_class, name, enum_method)
+                    classdict[name] = enum_method
         #
         # replace any other __new__ with our own (as long as Enum is not None,
         # anyway) -- again, this is to support pickle
@@ -776,10 +758,10 @@ class EnumType(type):
                 return isinstance(result, cls)
             except ValueError:
                 pass
-        try:
-            return value in cls._hashable_values_                   # a set
-        except TypeError:
-            return value in cls._unhashable_values_                 # a list
+        return (
+                value in cls._unhashable_values_    # both structures are lists
+                or value in cls._hashable_values_
+                )
 
     def __delattr__(cls, attr):
         # nicer error message when someone tries to delete an attribute
@@ -789,18 +771,12 @@ class EnumType(type):
         super().__delattr__(attr)
 
     def __dir__(cls):
-        if issubclass(cls, Flag):
-            members = list(cls._member_map_.keys())
-        else:
-            members = cls._member_names_
         interesting = set([
                 '__class__', '__contains__', '__doc__', '__getitem__',
                 '__iter__', '__len__', '__members__', '__module__',
                 '__name__', '__qualname__',
-                # Supported sunder names of Enum class
-                '_generate_next_value_', '_missing_',
                 ]
-                + members
+                + cls._member_names_
                 )
         if cls._new_member_ is not object.__new__:
             interesting.add('__new__')
@@ -1129,21 +1105,6 @@ class EnumType(type):
         # now add to _member_map_ (even aliases)
         cls._member_map_[name] = member
 
-    @property
-    def __signature__(cls):
-        from inspect import Parameter, Signature
-        if cls._member_names_:
-            return Signature([Parameter('values', Parameter.VAR_POSITIONAL)])
-        else:
-            return Signature([Parameter('new_class_name', Parameter.POSITIONAL_ONLY),
-                              Parameter('names', Parameter.POSITIONAL_OR_KEYWORD),
-                              Parameter('module', Parameter.KEYWORD_ONLY, default=None),
-                              Parameter('qualname', Parameter.KEYWORD_ONLY, default=None),
-                              Parameter('type', Parameter.KEYWORD_ONLY, default=None),
-                              Parameter('start', Parameter.KEYWORD_ONLY, default=1),
-                              Parameter('boundary', Parameter.KEYWORD_ONLY, default=None)])
-
-
 EnumMeta = EnumType         # keep EnumMeta name for backwards compatibility
 
 
@@ -1186,6 +1147,13 @@ class Enum(metaclass=EnumType):
     Methods can be added to enumerations, and members can have their own
     attributes -- see the documentation for details.
     """
+
+    @classmethod
+    def __signature__(cls):
+        if cls._member_names_:
+            return '(*values)'
+        else:
+            return '(new_class_name, /, names, *, module=None, qualname=None, type=None, start=1, boundary=None)'
 
     def __new__(cls, value):
         # all enum instances are actually created during class construction
@@ -1248,6 +1216,9 @@ class Enum(metaclass=EnumType):
             exc = None
             ve_exc = None
 
+    def __init__(self, *args, **kwds):
+        pass
+
     def _add_alias_(self, name):
         self.__class__._add_member_(name, self)
 
@@ -1270,7 +1241,7 @@ class Enum(metaclass=EnumType):
             # to the map, and by-value lookups for this value will be
             # linear.
             cls._value2member_map_.setdefault(value, self)
-            cls._hashable_values_.add(value)
+            cls._hashable_values_.append(value)
         except TypeError:
             # keep track of the value in a list so containment checks are quick
             cls._unhashable_values_.append(value)
@@ -1312,8 +1283,7 @@ class Enum(metaclass=EnumType):
         """
         Returns public methods and other interesting attributes.
         """
-        # Initialize with supported sunder names
-        interesting = set(('_generate_next_value_', '_missing_', '_add_alias_', '_add_value_alias_'))
+        interesting = set()
         if self.__class__._member_type_ is not object:
             interesting = set(object.__dir__(self))
         for name in getattr(self, '__dict__', []):
@@ -1533,10 +1503,7 @@ class Flag(Enum, boundary=STRICT):
                         )
         if value < 0:
             neg_value = value
-            if cls._boundary_ in (EJECT, KEEP):
-                value = all_bits + 1 + value
-            else:
-                value = singles_mask & value
+            value = all_bits + 1 + value
         # get members and unknown
         unknown = value & ~flag_mask
         aliases = value & ~singles_mask
@@ -1633,14 +1600,10 @@ class Flag(Enum, boundary=STRICT):
         if other_value is NotImplemented:
             return NotImplemented
 
+        for flag in self, other:
+            if self._get_value(flag) is None:
+                raise TypeError(f"'{flag}' cannot be combined with other flags with |")
         value = self._value_
-        # _get_value(self) is self._value_ and _get_value(other) is
-        # other_value, so only walk the operands (to raise on the offending
-        # flag) when one of those values is actually None.
-        if value is None or other_value is None:
-            for flag in self, other:
-                if self._get_value(flag) is None:
-                    raise TypeError(f"'{flag}' cannot be combined with other flags with |")
         return self.__class__(value | other_value)
 
     def __and__(self, other):
@@ -1648,11 +1611,10 @@ class Flag(Enum, boundary=STRICT):
         if other_value is NotImplemented:
             return NotImplemented
 
+        for flag in self, other:
+            if self._get_value(flag) is None:
+                raise TypeError(f"'{flag}' cannot be combined with other flags with &")
         value = self._value_
-        if value is None or other_value is None:
-            for flag in self, other:
-                if self._get_value(flag) is None:
-                    raise TypeError(f"'{flag}' cannot be combined with other flags with &")
         return self.__class__(value & other_value)
 
     def __xor__(self, other):
@@ -1660,11 +1622,10 @@ class Flag(Enum, boundary=STRICT):
         if other_value is NotImplemented:
             return NotImplemented
 
+        for flag in self, other:
+            if self._get_value(flag) is None:
+                raise TypeError(f"'{flag}' cannot be combined with other flags with ^")
         value = self._value_
-        if value is None or other_value is None:
-            for flag in self, other:
-                if self._get_value(flag) is None:
-                    raise TypeError(f"'{flag}' cannot be combined with other flags with ^")
         return self.__class__(value ^ other_value)
 
     def __invert__(self):
@@ -1811,7 +1772,7 @@ def _simple_enum(etype=Enum, *, boundary=None, use_args=None):
         body['_member_names_'] = member_names = []
         body['_member_map_'] = member_map = {}
         body['_value2member_map_'] = value2member_map = {}
-        body['_hashable_values_'] = hashable_values = set()
+        body['_hashable_values_'] = hashable_values = []
         body['_unhashable_values_'] = unhashable_values = []
         body['_unhashable_values_map_'] = {}
         body['_member_type_'] = member_type = etype._member_type_
@@ -1875,7 +1836,7 @@ def _simple_enum(etype=Enum, *, boundary=None, use_args=None):
                     contained = value2member_map.get(member._value_)
                 except TypeError:
                     contained = None
-                    if member._value_ in hashable_values or member.value in unhashable_values:
+                    if member._value_ in unhashable_values or member.value in hashable_values:
                         for m in enum_class:
                             if m._value_ == member._value_:
                                 contained = m
@@ -1895,7 +1856,7 @@ def _simple_enum(etype=Enum, *, boundary=None, use_args=None):
                     else:
                         enum_class._add_member_(name, member)
                     value2member_map[value] = member
-                    hashable_values.add(value)
+                    hashable_values.append(value)
                     if _is_single_bit(value):
                         # not a multi-bit alias, record in _member_names_ and _flag_mask_
                         member_names.append(name)
@@ -1932,9 +1893,7 @@ def _simple_enum(etype=Enum, *, boundary=None, use_args=None):
                     contained = value2member_map.get(member._value_)
                 except TypeError:
                     contained = None
-                    if (_hashable(member._value_) and member._value_ in hashable_values
-                        or member._value_ in unhashable_values
-                        ):
+                    if member._value_ in unhashable_values or member._value_ in hashable_values:
                         for m in enum_class:
                             if m._value_ == member._value_:
                                 contained = m
@@ -1960,7 +1919,8 @@ def _simple_enum(etype=Enum, *, boundary=None, use_args=None):
                         # to the map, and by-value lookups for this value will be
                         # linear.
                         enum_class._value2member_map_.setdefault(value, member)
-                        hashable_values.add(value)
+                        if value not in hashable_values:
+                            hashable_values.append(value)
                     except TypeError:
                         # keep track of the value in a list so containment checks are quick
                         enum_class._unhashable_values_.append(value)
@@ -2219,3 +2179,5 @@ def _old_convert_(etype, name, module, filter, source=None, *, boundary=None):
         members.sort(key=lambda t: t[0])
     cls = etype(name, members, module=module, boundary=boundary or KEEP)
     return cls
+
+_stdlib_enums = IntEnum, StrEnum, IntFlag

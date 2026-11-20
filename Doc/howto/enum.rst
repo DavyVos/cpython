@@ -371,7 +371,7 @@ Equality comparisons are defined though::
     >>> Color.BLUE == Color.BLUE
     True
 
-Equality comparisons against non-enumeration values will always return ``False``
+Comparisons against non-enumeration values will always compare not equal
 (again, :class:`IntEnum` was explicitly designed to behave differently, see
 below)::
 
@@ -913,7 +913,7 @@ Some rules:
    :class:`~dataclasses.dataclass`
 6. %-style formatting:  ``%s`` and ``%r`` call the :class:`Enum` class's
    :meth:`~object.__str__` and :meth:`~object.__repr__` respectively; other codes (such as
-   ``%i`` or ``%x`` for IntEnum) treat the enum member as its mixed-in type.
+   ``%i`` or ``%h`` for IntEnum) treat the enum member as its mixed-in type.
 7. :ref:`Formatted string literals <f-strings>`, :meth:`str.format`,
    and :func:`format` will use the enum's :meth:`~object.__str__` method.
 

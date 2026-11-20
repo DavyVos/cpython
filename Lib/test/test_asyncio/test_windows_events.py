@@ -1,7 +1,6 @@
 import os
 import signal
 import socket
-import struct
 import sys
 import time
 import threading
@@ -20,12 +19,11 @@ from asyncio import windows_events
 from asyncio import windows_utils
 from test import support
 from test.support import os_helper
-from test.support import socket_helper
 from test.test_asyncio import utils as test_utils
 
 
 def tearDownModule():
-    asyncio.set_event_loop(None)
+    asyncio.set_event_loop_policy(None)
 
 
 class UpperProto(asyncio.Protocol):
@@ -116,38 +114,6 @@ class ProactorTests(WindowsEventsTestCase):
         self.loop.run_until_complete(f)
         self.assertEqual(f.result(), b'')
         b.close()
-
-    def test_accept_connection_reset(self):
-        # gh-93821: a connection reset while it waits in the listen queue
-        # makes AcceptEx fail with ERROR_NETNAME_DELETED.  The server must
-        # keep accepting.
-        async def handle(reader, writer):
-            writer.close()
-
-        async def main():
-            server = await asyncio.start_server(handle, socket_helper.HOSTv4, 0)
-            port = server.sockets[0].getsockname()[1]
-            # Both connects complete while the loop is blocked here: the
-            # first is taken by the pending AcceptEx, the second waits in
-            # the listen queue and is reset there.
-            first = socket.create_connection((socket_helper.HOSTv4, port))
-            second = socket.create_connection((socket_helper.HOSTv4, port))
-            second.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
-                              struct.pack('HH', 1, 0))
-            second.close()
-            try:
-                await asyncio.sleep(0.5)
-                reader, writer = await asyncio.wait_for(
-                    asyncio.open_connection(socket_helper.HOSTv4, port),
-                    support.SHORT_TIMEOUT)
-                writer.close()
-                await writer.wait_closed()
-            finally:
-                first.close()
-                server.close()
-                await server.wait_closed()
-
-        self.loop.run_until_complete(main())
 
     def test_double_bind(self):
         ADDRESS = r'\\.\pipe\test_double_bind-%s' % os.getpid()
@@ -361,27 +327,36 @@ class ProactorTests(WindowsEventsTestCase):
         stop.set()
         thr.join()
 
-    def test_custom_poll_integration(self):
-        # gh-154971: a caller can wait on the completion port and process statuses itself
-        proactor = self.loop._proactor
 
-        a, b = socket.socketpair()
-        self.addCleanup(a.close)
-        self.addCleanup(b.close)
+class WinPolicyTests(WindowsEventsTestCase):
 
-        fut = proactor.recv(a, 100)
-        self.assertFalse(fut.done())
+    def test_selector_win_policy(self):
+        async def main():
+            self.assertIsInstance(
+                asyncio.get_running_loop(),
+                asyncio.SelectorEventLoop)
 
-        b.send(b'data')
+        old_policy = asyncio.get_event_loop_policy()
+        try:
+            asyncio.set_event_loop_policy(
+                asyncio.WindowsSelectorEventLoopPolicy())
+            asyncio.run(main())
+        finally:
+            asyncio.set_event_loop_policy(old_policy)
 
-        deadline = time.monotonic() + support.SHORT_TIMEOUT
-        while not fut.done() and time.monotonic() < deadline:
-            status = _overlapped.GetQueuedCompletionStatus(proactor._iocp, 100)
-            if status is not None:
-                proactor._process_completion_status(status)
+    def test_proactor_win_policy(self):
+        async def main():
+            self.assertIsInstance(
+                asyncio.get_running_loop(),
+                asyncio.ProactorEventLoop)
 
-        self.assertTrue(fut.done())
-        self.assertEqual(fut.result(), b'data')
+        old_policy = asyncio.get_event_loop_policy()
+        try:
+            asyncio.set_event_loop_policy(
+                asyncio.WindowsProactorEventLoopPolicy())
+            asyncio.run(main())
+        finally:
+            asyncio.set_event_loop_policy(old_policy)
 
 
 class ProactorPipeObjectSupportTests(unittest.TestCase):

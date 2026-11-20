@@ -314,10 +314,6 @@ Standard names are defined for the following types:
 
    .. versionadded:: 3.10
 
-   .. versionchanged:: 3.14
-
-      This is now an alias for :class:`typing.Union`.
-
 .. class:: TracebackType(tb_next, tb_frame, tb_lasti, tb_lineno)
 
    The type of traceback objects such as found in ``sys.exception().__traceback__``.
@@ -331,32 +327,6 @@ Standard names are defined for the following types:
 
    The type of :ref:`frame objects <frame-objects>` such as found in
    :attr:`tb.tb_frame <traceback.tb_frame>` if ``tb`` is a traceback object.
-
-
-.. class:: FrameLocalsProxyType
-
-   The type of frame locals proxy objects, as found on the
-   :attr:`frame.f_locals` attribute.
-
-   .. versionadded:: 3.15
-
-   .. seealso:: :pep:`667`
-
-
-.. class:: LazyImportType
-
-   The type of lazy import proxy objects. These objects are created when a
-   module is lazily imported and serve as placeholders until the module is
-   actually accessed. This type can be used to detect lazy imports
-   programmatically.
-
-   .. versionadded:: 3.15
-
-   .. seealso:: :pep:`810`
-
-   .. method:: resolve()
-
-      Reify the lazy import and return the "real" object being imported.
 
 
 .. class:: GetSetDescriptorType
@@ -515,14 +485,14 @@ Additional Utility Classes and Functions
    .. versionchanged:: 3.13
       Added support for an optional positional argument.
 
-.. class:: DynamicClassAttribute(fget=None, fset=None, fdel=None, doc=None)
+.. function:: DynamicClassAttribute(fget=None, fset=None, fdel=None, doc=None)
 
-   Route attribute access on a class to :meth:`~object.__getattr__`.
+   Route attribute access on a class to __getattr__.
 
    This is a descriptor, used to define attributes that act differently when
    accessed through an instance and through a class.  Instance access remains
    normal, but access to an attribute through a class will be routed to the
-   class's ``__getattr__`` method; this is done by raising :exc:`AttributeError`.
+   class's __getattr__ method; this is done by raising AttributeError.
 
    This allows one to have properties active on an instance, and have virtual
    attributes on the class with the same name (see :class:`enum.Enum` for an example).

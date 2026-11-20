@@ -1,4 +1,4 @@
-# Copyright (C) 2001 Python Software Foundation
+# Copyright (C) 2001-2010 Python Software Foundation
 # Contact: email-sig@python.org
 # email package unit tests
 
@@ -41,7 +41,6 @@ from email import utils
 
 from test import support
 from test.support import threading_helper
-from test.support import warnings_helper
 from test.support.os_helper import unlink
 from test.test_email import openfile, TestEmailBase
 
@@ -767,31 +766,6 @@ class TestMessageAPI(TestEmailBase):
         self.assertEqual(
             "attachment; filename*=utf-8''Fu%C3%9Fballer%20%5Bfilename%5D.ppt",
             msg['Content-Disposition'])
-
-    def test_invalid_header_names(self):
-        invalid_headers = [
-            ('Invalid Header', 'contains space'),
-            ('Tab\tHeader', 'contains tab'),
-            ('Colon:Header', 'contains colon'),
-            ('', 'Empty name'),
-            (' LeadingSpace', 'starts with space'),
-            ('TrailingSpace ', 'ends with space'),
-            ('Header\x7F', 'Non-ASCII character'),
-            ('Header\x80', 'Extended ASCII'),
-        ]
-        for policy in (email.policy.default, email.policy.compat32):
-            for setter in (Message.__setitem__, Message.add_header):
-                for name, value in invalid_headers:
-                    self.do_test_invalid_header_names(
-                        policy, setter,name, value)
-
-    def do_test_invalid_header_names(self, policy, setter, name, value):
-        with self.subTest(policy=policy, setter=setter, name=name, value=value):
-            message = Message(policy=policy)
-            pattern = r'(?i)(?=.*invalid)(?=.*header)(?=.*name)'
-            with self.assertRaisesRegex(ValueError, pattern) as cm:
-                 setter(message, name, value)
-            self.assertIn(f"{name!r}", str(cm.exception))
 
     def test_binary_quopri_payload(self):
         for charset in ('latin-1', 'ascii'):
@@ -3277,28 +3251,6 @@ class TestMiscellaneous(TestEmailBase):
         self.assertRaises(UnicodeError, utils.formataddr, (None, addr))
         self.assertRaises(UnicodeError, utils.formataddr, ("Name", addr))
 
-    def test_crlf_in_parts_raises_error(self):
-        # formataddr() must reject CR and LF in either part so that the
-        # returned header value cannot be used to inject extra headers,
-        # matching email.headerregistry.Address.
-        for name, addr in [
-            ('Real\rName', 'person@dom.ain'),
-            ('Real\nName', 'person@dom.ain'),
-            ('Real Name', 'person@dom.ain\r\nBcc: victim@dom.ain'),
-            ('Real Name', 'person@dom.ain\nSubject: spoofed'),
-        ]:
-            with self.subTest(name=name, addr=addr):
-                self.assertRaises(ValueError, utils.formataddr, (name, addr))
-
-    def test_crlf_in_parts_allowed_when_not_strict(self):
-        # strict=False keeps the old behaviour and passes CR/LF through.
-        self.assertEqual(
-            utils.formataddr(('Real\rName', 'person@dom.ain'), strict=False),
-            'Real\rName <person@dom.ain>')
-        self.assertEqual(
-            utils.formataddr(('Real Name', 'person@dom.ain\nfoo'), strict=False),
-            'Real Name <person@dom.ain\nfoo>')
-
     def test_name_with_dot(self):
         x = 'John X. Doe <jxd@example.com>'
         y = '"John X. Doe" <jxd@example.com>'
@@ -4835,14 +4787,6 @@ class TestQuopri(unittest.TestCase):
     def test_decode_two_lines_trailing_spaces(self):
         self._test_decode('hello    \r\nworld   \r\n', 'hello\nworld\n')
 
-    def test_decode_keep_trailing_spaces(self):
-        # strip_ws=False keeps trailing whitespace (the default strips it).
-        self.assertEqual(quoprimime.decode('hello    \r\n', strip_ws=False),
-                         'hello    \n')
-        self.assertEqual(quoprimime.decode('hello    \r\nworld   \r\n',
-                                           strip_ws=False),
-                         'hello    \nworld   \n')
-
     def test_decode_quoted_word(self):
         self._test_decode('=22quoted=20words=22', '"quoted words"')
 
@@ -5000,128 +4944,6 @@ class TestCharset(unittest.TestCase):
         except KeyError:
             pass
 
-    def test_attributes(self):
-        from email import charset
-        c = Charset()
-        self.assertEqual(c.input_charset, 'us-ascii')
-        self.assertEqual(c.header_encoding, None)
-        self.assertEqual(c.body_encoding, None)
-        self.assertEqual(c.output_charset, 'us-ascii')
-        self.assertEqual(c.input_codec, None)
-        self.assertEqual(c.output_codec, None)
-
-        c = Charset('us-ascii')
-        self.assertEqual(c.input_charset, 'us-ascii')
-        self.assertEqual(c.header_encoding, None)
-        self.assertEqual(c.body_encoding, None)
-        self.assertEqual(c.output_charset, 'us-ascii')
-        self.assertEqual(c.input_codec, None)
-        self.assertEqual(c.output_codec, None)
-
-        c = Charset('utf8')
-        self.assertEqual(c.input_charset, 'utf-8')
-        self.assertEqual(c.header_encoding, charset.SHORTEST)
-        self.assertEqual(c.body_encoding, charset.BASE64)
-        self.assertEqual(c.output_charset, 'utf-8')
-        self.assertEqual(c.input_codec, 'utf-8')
-        self.assertEqual(c.output_codec, 'utf-8')
-
-        c = Charset('latin1')
-        self.assertEqual(c.input_charset, 'iso-8859-1')
-        self.assertEqual(c.header_encoding, charset.QP)
-        self.assertEqual(c.body_encoding, charset.QP)
-        self.assertEqual(c.output_charset, 'iso-8859-1')
-        self.assertEqual(c.input_codec, 'iso-8859-1')
-        self.assertEqual(c.output_codec, 'iso-8859-1')
-
-        c = Charset('latin9')
-        self.assertEqual(c.input_charset, 'iso-8859-15')
-        self.assertEqual(c.header_encoding, charset.QP)
-        self.assertEqual(c.body_encoding, charset.QP)
-        self.assertEqual(c.output_charset, 'iso-8859-15')
-        self.assertEqual(c.input_codec, 'iso-8859-15')
-        self.assertEqual(c.output_codec, 'iso-8859-15')
-
-        c = Charset('cyrillic')
-        self.assertEqual(c.input_charset, 'iso-8859-5')
-        self.assertEqual(c.header_encoding, charset.SHORTEST)
-        self.assertEqual(c.body_encoding, charset.BASE64)
-        self.assertEqual(c.output_charset, 'iso-8859-5')
-        self.assertEqual(c.input_codec, 'iso-8859-5')
-        self.assertEqual(c.output_codec, 'iso-8859-5')
-
-        c = Charset('cp1251')
-        self.assertEqual(c.input_charset, 'windows-1251')
-        self.assertEqual(c.header_encoding, charset.SHORTEST)
-        self.assertEqual(c.body_encoding, charset.BASE64)
-        self.assertEqual(c.output_charset, 'windows-1251')
-        self.assertEqual(c.input_codec, 'windows-1251')
-        self.assertEqual(c.output_codec, 'windows-1251')
-
-        c = Charset('cp1252')
-        self.assertEqual(c.input_charset, 'windows-1252')
-        self.assertEqual(c.header_encoding, charset.QP)
-        self.assertEqual(c.body_encoding, charset.QP)
-        self.assertEqual(c.output_charset, 'windows-1252')
-        self.assertEqual(c.input_codec, 'windows-1252')
-        self.assertEqual(c.output_codec, 'windows-1252')
-
-        c = Charset('eucjp')
-        self.assertEqual(c.input_charset, 'euc-jp')
-        self.assertEqual(c.header_encoding, charset.BASE64)
-        self.assertEqual(c.body_encoding, None)
-        self.assertEqual(c.output_charset, 'iso-2022-jp')
-        self.assertEqual(c.input_codec, 'euc-jp')
-        self.assertEqual(c.output_codec, 'iso-2022-jp')
-
-        c = Charset('cp949')
-        self.assertEqual(c.input_charset, 'ks_c_5601-1987')
-        self.assertEqual(c.header_encoding, charset.SHORTEST)
-        self.assertEqual(c.body_encoding, charset.BASE64)
-        self.assertEqual(c.output_charset, 'ks_c_5601-1987')
-        self.assertEqual(c.input_codec, 'ks_c_5601-1987')
-        self.assertEqual(c.output_codec, 'ks_c_5601-1987')
-
-        c = Charset('gb2312')
-        self.assertEqual(c.input_charset, 'gb2312')
-        self.assertEqual(c.header_encoding, charset.BASE64)
-        self.assertEqual(c.body_encoding, charset.BASE64)
-        self.assertEqual(c.output_charset, 'gb2312')
-        self.assertEqual(c.input_codec, 'gb2312')
-        self.assertEqual(c.output_codec, 'gb2312')
-
-        c = Charset('big5')
-        self.assertEqual(c.input_charset, 'big5')
-        self.assertEqual(c.header_encoding, charset.BASE64)
-        self.assertEqual(c.body_encoding, charset.BASE64)
-        self.assertEqual(c.output_charset, 'big5')
-        self.assertEqual(c.input_codec, 'big5')
-        self.assertEqual(c.output_codec, 'big5')
-
-    def test_user_charsets(self):
-        from email import charset
-        c = Charset('fake0')
-        self.assertEqual(c.input_charset, 'fake0')
-        self.assertEqual(c.header_encoding, charset.SHORTEST)
-        self.assertEqual(c.body_encoding, charset.BASE64)
-        self.assertEqual(c.output_charset, 'fake0')
-        self.assertEqual(c.input_codec, 'fake0')
-        self.assertEqual(c.output_codec, 'fake0')
-
-        charset.add_alias('fake1', 'mime-fake')
-        charset.add_alias('output-mime-fake', 'output-mime-fake-alias')
-        charset.add_codec('mime-fake', 'fakecodec')
-        charset.add_codec('output-mime-fake-alias', 'outputfakecodec')
-        charset.add_charset('mime-fake', charset.QP, None, 'output-mime-fake')
-
-        c = Charset('fake1')
-        self.assertEqual(c.input_charset, 'mime-fake')
-        self.assertEqual(c.header_encoding, charset.QP)
-        self.assertEqual(c.body_encoding, None)
-        self.assertEqual(c.output_charset, 'output-mime-fake-alias')
-        self.assertEqual(c.input_codec, 'fakecodec')
-        self.assertEqual(c.output_codec, 'outputfakecodec')
-
     def test_codec_encodeable(self):
         eq = self.assertEqual
         # Make sure us-ascii = no Unicode conversion
@@ -5161,11 +4983,6 @@ class TestCharset(unittest.TestCase):
         charset = Charset('us-ascii')
         self.assertEqual(str(charset), 'us-ascii')
         self.assertRaises(errors.CharsetError, Charset, 'asc\xffii')
-
-    def test_bytes_charset_name(self):
-        charset = Charset(b'us-ascii')
-        self.assertEqual(str(charset), 'us-ascii')
-        self.assertRaises(errors.CharsetError, Charset, b'asc\xffii')
 
 
 
@@ -5810,8 +5627,7 @@ Content-Disposition: inline; filename*=utf-8\udce2\udc80\udc9d''myfile.txt
 
 """
         msg = email.message_from_string(m)
-        with warnings_helper.check_warnings(('', DeprecationWarning)):
-            self.assertEqual(msg.get_filename(), 'myfile.txt')
+        self.assertEqual(msg.get_filename(), 'myfile.txt')
 
     def test_rfc2231_single_tick_in_filename_extended(self):
         eq = self.assertEqual

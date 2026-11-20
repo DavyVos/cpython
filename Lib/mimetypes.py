@@ -23,7 +23,10 @@ init([files]) -- parse a list of files, default knownfiles (on Windows, the
 read_mime_types(file) -- parse one file, return a dictionary or None
 """
 
+import os
 import sys
+import posixpath
+import urllib.parse
 
 try:
     from _winapi import _mimetypes_read_windows_registry
@@ -94,18 +97,10 @@ class MimeTypes:
         is already known the extension will be added
         to the list of known extensions.
 
-        Registered lower-case extensions are matched
-        case-insensitively.
-
         If strict is true, information will be added to
         list of standard types, else to the list of non-standard
         types.
-
-        Valid extensions are empty or start with a '.'.
         """
-        if ext and not ext.startswith('.'):
-            raise ValueError(f"Extension {ext!r} must start with '.'")
-
         if not type:
             return
         self.types_map[strict][ext] = type
@@ -129,13 +124,9 @@ class MimeTypes:
         mapped to '.tar.gz'.  (This is table-driven too, using the
         dictionary suffix_map.)
 
-        Optional 'strict' argument when False adds a bunch of commonly found,
+        Optional `strict' argument when False adds a bunch of commonly found,
         but non-standard types.
         """
-        # Lazy import to improve module import time
-        import os
-        import urllib.parse
-
         # TODO: Deprecate accepting file paths (in particular path-like objects).
         url = os.fspath(url)
         p = urllib.parse.urlparse(url)
@@ -163,53 +154,36 @@ class MimeTypes:
             if '=' in type or '/' not in type:
                 type = 'text/plain'
             return type, None           # never compressed, so encoding is None
-
-        # Lazy import to improve module import time
-        import posixpath
-
         return self._guess_file_type(url, strict, posixpath.splitext)
 
     def guess_file_type(self, path, *, strict=True):
         """Guess the type of a file based on its path.
 
-        Similar to guess_type(), but takes file path instead of URL.
+        Similar to guess_type(), but takes file path istead of URL.
         """
-        # Lazy import to improve module import time
-        import os
-
         path = os.fsdecode(path)
         path = os.path.splitdrive(path)[1]
         return self._guess_file_type(path, strict, os.path.splitext)
 
     def _guess_file_type(self, path, strict, splitext):
         base, ext = splitext(path)
-        while True:
-            if ext in self.suffix_map:
-                suffix = self.suffix_map[ext]
-            elif (ext_lower := ext.lower()) in self.suffix_map:
-                suffix = self.suffix_map[ext_lower]
-            else:
-                break
-            base, ext = splitext(base + suffix)
+        while (ext_lower := ext.lower()) in self.suffix_map:
+            base, ext = splitext(base + self.suffix_map[ext_lower])
         # encodings_map is case sensitive
         if ext in self.encodings_map:
             encoding = self.encodings_map[ext]
             base, ext = splitext(base)
         else:
             encoding = None
-        ext_lower = ext.lower()
+        ext = ext.lower()
         types_map = self.types_map[True]
         if ext in types_map:
             return types_map[ext], encoding
-        if ext_lower in types_map:
-            return types_map[ext_lower], encoding
         elif strict:
             return None, encoding
         types_map = self.types_map[False]
         if ext in types_map:
             return types_map[ext], encoding
-        if ext_lower in types_map:
-            return types_map[ext_lower], encoding
         else:
             return None, encoding
 
@@ -219,9 +193,9 @@ class MimeTypes:
         Return value is a list of strings giving the possible filename
         extensions, including the leading dot ('.').  The extension is not
         guaranteed to have been associated with any particular data stream,
-        but would be mapped to the MIME type 'type' by guess_type().
+        but would be mapped to the MIME type `type' by guess_type().
 
-        Optional 'strict' argument when false adds a bunch of commonly found,
+        Optional `strict' argument when false adds a bunch of commonly found,
         but non-standard types.
         """
         type = type.lower()
@@ -238,11 +212,11 @@ class MimeTypes:
         Return value is a string giving a filename extension,
         including the leading dot ('.').  The extension is not
         guaranteed to have been associated with any particular data
-        stream, but would be mapped to the MIME type 'type' by
-        guess_type().  If no extension can be guessed for 'type', None
+        stream, but would be mapped to the MIME type `type' by
+        guess_type().  If no extension can be guessed for `type', None
         is returned.
 
-        Optional 'strict' argument when false adds a bunch of commonly found,
+        Optional `strict' argument when false adds a bunch of commonly found,
         but non-standard types.
         """
         extensions = self.guess_all_extensions(type, strict)
@@ -348,7 +322,7 @@ def guess_type(url, strict=True):
     to ".tar.gz".  (This is table-driven too, using the dictionary
     suffix_map).
 
-    Optional 'strict' argument when false adds a bunch of commonly found, but
+    Optional `strict' argument when false adds a bunch of commonly found, but
     non-standard types.
     """
     if _db is None:
@@ -359,7 +333,7 @@ def guess_type(url, strict=True):
 def guess_file_type(path, *, strict=True):
     """Guess the type of a file based on its path.
 
-    Similar to guess_type(), but takes file path instead of URL.
+    Similar to guess_type(), but takes file path istead of URL.
     """
     if _db is None:
         init()
@@ -372,11 +346,11 @@ def guess_all_extensions(type, strict=True):
     Return value is a list of strings giving the possible filename
     extensions, including the leading dot ('.').  The extension is not
     guaranteed to have been associated with any particular data
-    stream, but would be mapped to the MIME type 'type' by
-    guess_type().  If no extension can be guessed for 'type', None
+    stream, but would be mapped to the MIME type `type' by
+    guess_type().  If no extension can be guessed for `type', None
     is returned.
 
-    Optional 'strict' argument when false adds a bunch of commonly found,
+    Optional `strict' argument when false adds a bunch of commonly found,
     but non-standard types.
     """
     if _db is None:
@@ -389,10 +363,10 @@ def guess_extension(type, strict=True):
     Return value is a string giving a filename extension, including the
     leading dot ('.').  The extension is not guaranteed to have been
     associated with any particular data stream, but would be mapped to the
-    MIME type 'type' by guess_type().  If no extension can be guessed for
-    'type', None is returned.
+    MIME type `type' by guess_type().  If no extension can be guessed for
+    `type', None is returned.
 
-    Optional 'strict' argument when false adds a bunch of commonly found,
+    Optional `strict' argument when false adds a bunch of commonly found,
     but non-standard types.
     """
     if _db is None:
@@ -406,9 +380,6 @@ def add_type(type, ext, strict=True):
     type will replace the old one. When the type
     is already known the extension will be added
     to the list of known extensions.
-
-    Registered lower-case extensions are matched
-    case-insensitively.
 
     If strict is true, information will be added to
     list of standard types, else to the list of non-standard
@@ -435,9 +406,6 @@ def init(files=None):
             files = knownfiles + list(files)
     else:
         db = _db
-
-    # Lazy import to improve module import time
-    import os
 
     for file in files:
         if os.path.isfile(file):
@@ -485,7 +453,7 @@ def _default_mime_types():
         }
 
     # Before adding new types, make sure they are either registered with IANA,
-    # at https://www.iana.org/assignments/media-types/media-types.xhtml
+    # at http://www.iana.org/assignments/media-types
     # or extensions, i.e. using the x- prefix
 
     # If you add to these, please keep them sorted by mime type.
@@ -494,10 +462,6 @@ def _default_mime_types():
     types_map = _types_map_default = {
         '.js'     : 'text/javascript',
         '.mjs'    : 'text/javascript',
-        '.dcm'    : 'application/dicom',
-        '.efi'    : 'application/efi',
-        '.epub'   : 'application/epub+zip',
-        '.gz'     : 'application/gzip',
         '.json'   : 'application/json',
         '.webmanifest': 'application/manifest+json',
         '.doc'    : 'application/msword',
@@ -505,56 +469,33 @@ def _default_mime_types():
         '.wiz'    : 'application/msword',
         '.nq'     : 'application/n-quads',
         '.nt'     : 'application/n-triples',
-        '.cjs'    : 'application/node',
         '.bin'    : 'application/octet-stream',
         '.a'      : 'application/octet-stream',
+        '.dll'    : 'application/octet-stream',
+        '.exe'    : 'application/octet-stream',
         '.o'      : 'application/octet-stream',
         '.obj'    : 'application/octet-stream',
         '.so'     : 'application/octet-stream',
         '.oda'    : 'application/oda',
-        '.ogx'    : 'application/ogg',
         '.pdf'    : 'application/pdf',
-        '.ai'     : 'application/pdf',
         '.p7c'    : 'application/pkcs7-mime',
         '.ps'     : 'application/postscript',
+        '.ai'     : 'application/postscript',
         '.eps'    : 'application/postscript',
-        '.rtf'    : 'application/rtf',
-        '.sql'    : 'application/sql',
-        '.texi'   : 'application/texinfo',
-        '.texinfo': 'application/texinfo',
-        '.toml'   : 'application/toml',
         '.trig'   : 'application/trig',
         '.m3u'    : 'application/vnd.apple.mpegurl',
         '.m3u8'   : 'application/vnd.apple.mpegurl',
-        '.dll'    : 'application/vnd.microsoft.portable-executable',
-        '.exe'    : 'application/vnd.microsoft.portable-executable',
-        '.cab'    : 'application/vnd.ms-cab-compressed',
         '.xls'    : 'application/vnd.ms-excel',
         '.xlb'    : 'application/vnd.ms-excel',
-        '.eot'    : 'application/vnd.ms-fontobject',
-        '.chm'    : 'application/vnd.ms-htmlhelp',
-        '.thmx'   : 'application/vnd.ms-officetheme',
         '.ppt'    : 'application/vnd.ms-powerpoint',
         '.pot'    : 'application/vnd.ms-powerpoint',
         '.ppa'    : 'application/vnd.ms-powerpoint',
         '.pps'    : 'application/vnd.ms-powerpoint',
         '.pwz'    : 'application/vnd.ms-powerpoint',
-        '.odg'    : 'application/vnd.oasis.opendocument.graphics',
-        '.odp'    : 'application/vnd.oasis.opendocument.presentation',
-        '.ods'    : 'application/vnd.oasis.opendocument.spreadsheet',
-        '.odt'    : 'application/vnd.oasis.opendocument.text',
-        '.pptx'   : 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        '.xlsx'   : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        '.docx'   : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        '.rar'    : 'application/vnd.rar',
-        '.sqlite3': 'application/vnd.sqlite3',
-        '.sqlite' : 'application/vnd.sqlite3',
         '.wasm'   : 'application/wasm',
-        '.7z'     : 'application/x-7z-compressed',
         '.bcpio'  : 'application/x-bcpio',
         '.cpio'   : 'application/x-cpio',
         '.csh'    : 'application/x-csh',
-        '.deb'    : 'application/x-debian-package',
         '.dvi'    : 'application/x-dvi',
         '.gtar'   : 'application/x-gtar',
         '.hdf'    : 'application/x-hdf',
@@ -564,12 +505,10 @@ def _default_mime_types():
         '.cdf'    : 'application/x-netcdf',
         '.nc'     : 'application/x-netcdf',
         '.p12'    : 'application/x-pkcs12',
-        '.php'    : 'application/x-httpd-php',
         '.pfx'    : 'application/x-pkcs12',
         '.ram'    : 'application/x-pn-realaudio',
         '.pyc'    : 'application/x-python-code',
         '.pyo'    : 'application/x-python-code',
-        '.rpm'    : 'application/x-rpm',
         '.sh'     : 'application/x-sh',
         '.shar'   : 'application/x-shar',
         '.swf'    : 'application/x-shockwave-flash',
@@ -578,6 +517,8 @@ def _default_mime_types():
         '.tar'    : 'application/x-tar',
         '.tcl'    : 'application/x-tcl',
         '.tex'    : 'application/x-tex',
+        '.texi'   : 'application/x-texinfo',
+        '.texinfo': 'application/x-texinfo',
         '.roff'   : 'application/x-troff',
         '.t'      : 'application/x-troff',
         '.tr'     : 'application/x-troff',
@@ -590,8 +531,6 @@ def _default_mime_types():
         '.rdf'    : 'application/xml',
         '.wsdl'   : 'application/xml',
         '.xpdl'   : 'application/xml',
-        '.yaml'   : 'application/yaml',
-        '.yml'    : 'application/yaml',
         '.zip'    : 'application/zip',
         '.3gp'    : 'audio/3gpp',
         '.3gpp'   : 'audio/3gpp',
@@ -603,52 +542,29 @@ def _default_mime_types():
         '.ass'    : 'audio/aac',
         '.au'     : 'audio/basic',
         '.snd'    : 'audio/basic',
-        '.flac'   : 'audio/flac',
-        '.mka'    : 'audio/matroska',
-        '.m4a'    : 'audio/mp4',
         '.mp3'    : 'audio/mpeg',
         '.mp2'    : 'audio/mpeg',
-        '.ogg'    : 'audio/ogg',
         '.opus'   : 'audio/opus',
         '.aif'    : 'audio/x-aiff',
         '.aifc'   : 'audio/x-aiff',
         '.aiff'   : 'audio/x-aiff',
         '.ra'     : 'audio/x-pn-realaudio',
-        '.wav'    : 'audio/vnd.wave',
-        '.weba'   : 'audio/webm',
-        '.ttc'    : 'font/collection',
-        '.otf'    : 'font/otf',
-        '.ttf'    : 'font/ttf',
-        '.woff'   : 'font/woff',
-        '.woff2'  : 'font/woff2',
-        '.hjif'   : 'haptics/hjif',
-        '.hmpg'   : 'haptics/hmpg',
-        '.ivs'    : 'haptics/ivs',
+        '.wav'    : 'audio/x-wav',
         '.avif'   : 'image/avif',
         '.bmp'    : 'image/bmp',
-        '.emf'    : 'image/emf',
-        '.fits'   : 'image/fits',
-        '.g3'     : 'image/g3fax',
         '.gif'    : 'image/gif',
         '.ief'    : 'image/ief',
-        '.jp2'    : 'image/jp2',
         '.jpg'    : 'image/jpeg',
         '.jpe'    : 'image/jpeg',
         '.jpeg'   : 'image/jpeg',
-        '.jpm'    : 'image/jpm',
-        '.jpx'    : 'image/jpx',
-        '.jxl'    : 'image/jxl',
         '.heic'   : 'image/heic',
         '.heif'   : 'image/heif',
         '.png'    : 'image/png',
         '.svg'    : 'image/svg+xml',
-        '.t38'    : 'image/t38',
         '.tiff'   : 'image/tiff',
         '.tif'    : 'image/tiff',
-        '.tfx'    : 'image/tiff-fx',
         '.ico'    : 'image/vnd.microsoft.icon',
         '.webp'   : 'image/webp',
-        '.wmf'    : 'image/wmf',
         '.ras'    : 'image/x-cmu-raster',
         '.pnm'    : 'image/x-portable-anymap',
         '.pbm'    : 'image/x-portable-bitmap',
@@ -662,9 +578,6 @@ def _default_mime_types():
         '.mht'    : 'message/rfc822',
         '.mhtml'  : 'message/rfc822',
         '.nws'    : 'message/rfc822',
-        '.gltf'   : 'model/gltf+json',
-        '.glb'    : 'model/gltf-binary',
-        '.stl'    : 'model/stl',
         '.css'    : 'text/css',
         '.csv'    : 'text/csv',
         '.html'   : 'text/html',
@@ -680,6 +593,7 @@ def _default_mime_types():
         '.pl'     : 'text/plain',
         '.srt'    : 'text/plain',
         '.rtx'    : 'text/richtext',
+        '.rtf'    : 'text/rtf',
         '.tsv'    : 'text/tab-separated-values',
         '.vtt'    : 'text/vtt',
         '.py'     : 'text/x-python',
@@ -689,21 +603,16 @@ def _default_mime_types():
         '.sgml'   : 'text/x-sgml',
         '.vcf'    : 'text/x-vcard',
         '.xml'    : 'text/xml',
-        '.mkv'    : 'video/matroska',
-        '.mk3d'   : 'video/matroska-3d',
         '.mp4'    : 'video/mp4',
         '.mpeg'   : 'video/mpeg',
         '.m1v'    : 'video/mpeg',
         '.mpa'    : 'video/mpeg',
         '.mpe'    : 'video/mpeg',
         '.mpg'    : 'video/mpeg',
-        '.ogv'    : 'video/ogg',
         '.mov'    : 'video/quicktime',
         '.qt'     : 'video/quicktime',
         '.webm'   : 'video/webm',
-        '.avi'    : 'video/vnd.avi',
-        '.m4v'    : 'video/x-m4v',
-        '.wmv'    : 'video/x-ms-wmv',
+        '.avi'    : 'video/x-msvideo',
         '.movie'  : 'video/x-sgi-movie',
         }
 
@@ -712,9 +621,10 @@ def _default_mime_types():
 
     # Please sort these too
     common_types = _common_types_default = {
-        '.apk' : 'application/vnd.android.package-archive',
+        '.rtf' : 'application/rtf',
         '.midi': 'audio/midi',
         '.mid' : 'audio/midi',
+        '.jpg' : 'image/jpg',
         '.pict': 'image/pict',
         '.pct' : 'image/pict',
         '.pic' : 'image/pict',
@@ -725,53 +635,51 @@ def _default_mime_types():
 _default_mime_types()
 
 
-def _parse_args(args):
-    from argparse import ArgumentParser
+def _main():
+    import getopt
 
-    parser = ArgumentParser(
-        description='map filename extensions to MIME types',
-    )
-    parser.add_argument(
-        '-e', '--extension',
-        action='store_true',
-        help='guess extension instead of type'
-    )
-    parser.add_argument(
-        '-l', '--lenient',
-        action='store_true',
-        help='additionally search for common but non-standard types'
-    )
-    parser.add_argument('type', nargs='+', help='a type to search')
-    args = parser.parse_args(args)
-    return args, parser.format_help()
+    USAGE = """\
+Usage: mimetypes.py [options] type
 
+Options:
+    --help / -h       -- print this message and exit
+    --lenient / -l    -- additionally search of some common, but non-standard
+                         types.
+    --extension / -e  -- guess extension instead of type
 
-def _main(args=None):
-    """Run the mimetypes command-line interface and return a text to print."""
-    args, help_text = _parse_args(args)
+More than one type argument may be given.
+"""
 
-    results = []
-    if args.extension:
-        for gtype in args.type:
-            guess = guess_extension(gtype, not args.lenient)
-            if guess:
-                results.append(str(guess))
-            else:
-                results.append(f"error: unknown type {gtype}")
-        return results
-    else:
-        for gtype in args.type:
-            guess, encoding = guess_type(gtype, not args.lenient)
-            if guess:
-                results.append(f"type: {guess} encoding: {encoding}")
-            else:
-                results.append(f"error: media type unknown for {gtype}")
-        return results
+    def usage(code, msg=''):
+        print(USAGE)
+        if msg: print(msg)
+        sys.exit(code)
+
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], 'hle',
+                                   ['help', 'lenient', 'extension'])
+    except getopt.error as msg:
+        usage(1, msg)
+
+    strict = 1
+    extension = 0
+    for opt, arg in opts:
+        if opt in ('-h', '--help'):
+            usage(0)
+        elif opt in ('-l', '--lenient'):
+            strict = 0
+        elif opt in ('-e', '--extension'):
+            extension = 1
+    for gtype in args:
+        if extension:
+            guess = guess_extension(gtype, strict)
+            if not guess: print("I don't know anything about type", gtype)
+            else: print(guess)
+        else:
+            guess, encoding = guess_type(gtype, strict)
+            if not guess: print("I don't know anything about type", gtype)
+            else: print('type:', guess, 'encoding:', encoding)
 
 
 if __name__ == '__main__':
-    import sys
-
-    results = _main()
-    print("\n".join(results))
-    sys.exit(any(result.startswith("error: ") for result in results))
+    _main()

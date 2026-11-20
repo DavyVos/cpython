@@ -1,4 +1,4 @@
-import ctypes.util
+import ctypes
 import gc
 import sys
 import unittest
@@ -9,7 +9,8 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Windows-specific test")
 
 
-from ctypes import COMError, CopyComPointer, HRESULT
+from _ctypes import COMError, CopyComPointer
+from ctypes import HRESULT
 
 
 COINIT_APARTMENTTHREADED = 0x2
@@ -20,13 +21,14 @@ TRUE = 1
 E_NOINTERFACE = -2147467262
 
 
-@ctypes.util.struct
-class GUID:
+class GUID(ctypes.Structure):
     # https://learn.microsoft.com/en-us/windows/win32/api/guiddef/ns-guiddef-guid
-    Data1: DWORD
-    Data2: WORD
-    Data3: WORD
-    Data4: BYTE * 8
+    _fields_ = [
+        ("Data1", DWORD),
+        ("Data2", WORD),
+        ("Data3", WORD),
+        ("Data4", BYTE * 8),
+    ]
 
 
 def create_proto_com_method(name, index, restype, *argtypes):

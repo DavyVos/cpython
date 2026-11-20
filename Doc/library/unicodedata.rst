@@ -4,6 +4,10 @@
 .. module:: unicodedata
    :synopsis: Access the Unicode Database.
 
+.. moduleauthor:: Marc-André Lemburg <mal@lemburg.com>
+.. sectionauthor:: Marc-André Lemburg <mal@lemburg.com>
+.. sectionauthor:: Martin v. Löwis <martin@v.loewis.de>
+
 .. index::
    single: Unicode
    single: character
@@ -13,12 +17,13 @@
 
 This module provides access to the Unicode Character Database (UCD) which
 defines character properties for all Unicode characters. The data contained in
-this database is compiled from the `UCD version 18.0.0
-<https://www.unicode.org/Public/18.0.0/ucd>`_.
+this database is compiled from the `UCD version 15.1.0
+<https://www.unicode.org/Public/15.1.0/ucd>`_.
 
 The module uses the same names and symbols as defined by Unicode
 Standard Annex #44, `"Unicode Character Database"
-<https://www.unicode.org/reports/tr44/>`_.
+<https://www.unicode.org/reports/tr44/>`_.  It defines the
+following functions:
 
 .. seealso::
 
@@ -26,46 +31,7 @@ Standard Annex #44, `"Unicode Character Database"
    this module.
 
 
-============================================================  ===========================================================
-**Lookup**
--------------------------------------------------------------------------------------------------------------------------
-:func:`lookup(name) <lookup>`                                 Look up character by name
-:func:`name(chr) <name>`                                      Return the name assigned to a character
-
-**Numeric values**
--------------------------------------------------------------------------------------------------------------------------
-:func:`decimal(chr) <unicodedata.decimal>`                    Decimal value of a
-                                                              character
-:func:`digit(chr) <digit>`                                    Digit value of a character
-:func:`numeric(chr) <numeric>`                                Numeric value of a character
-
-**Properties**
--------------------------------------------------------------------------------------------------------------------------
-:func:`bidirectional(chr) <bidirectional>`                    Bidirectional class of a character
-:func:`block(chr) <block>`                                    Unicode block of a character
-:func:`category(chr) <category>`                              General category of a character
-:func:`combining(chr) <combining>`                            Canonical combining class of a character
-:func:`decomposition(chr) <decomposition>`                    Character decomposition mapping
-:func:`east_asian_width(chr) <east_asian_width>`              East Asian width of a character
-:func:`extended_pictographic(chr) <extended_pictographic>`    Check if a character has the Extended_Pictographic property
-:func:`grapheme_cluster_break(chr) <grapheme_cluster_break>`  Grapheme_Cluster_Break property of a character
-:func:`indic_conjunct_break(chr) <indic_conjunct_break>`      Indic_Conjunct_Break property of a character
-:func:`isxidcontinue(chr) <isxidcontinue>`                    Check if a character is a valid identifier continuation
-:func:`isxidstart(chr) <isxidstart>`                          Check if a character is a valid identifier start
-:func:`mirrored(chr) <mirrored>`                              Mirrored property of a character
-
-**Normalization**
--------------------------------------------------------------------------------------------------------------------------
-:func:`normalize(form, unistr) <normalize>`                   Return the normalized form of a string
-:func:`is_normalized(form, unistr) <is_normalized>`           Check if a Unicode string is normalized
-
-**Text segmentation**
--------------------------------------------------------------------------------------------------------------------------
-:func:`iter_graphemes(unistr) <iter_graphemes>`               Iterate over grapheme clusters in a string
-============================================================  ===========================================================
-
-
-.. function:: lookup(name, /)
+.. function:: lookup(name)
 
    Look up character by name.  If a character with the given name is found, return
    the corresponding character.  If not found, :exc:`KeyError` is raised.
@@ -128,59 +94,47 @@ Standard Annex #44, `"Unicode Character Database"
       0.5
 
 
-.. function:: category(chr, /)
+.. function:: category(chr)
 
    Returns the general category assigned to the character *chr* as
    string. General category names consist of two letters.
    See the `General Category Values section of the Unicode Character
-   Database documentation <https://www.unicode.org/reports/tr44/#General_Category_Values>`_
+   Database documentation <https://www.unicode.org/reports/tr44/tr44-30.html#General_Category_Values>`_
    for a list of category codes. For example::
 
       >>> unicodedata.category('A')  # 'L'etter, 'u'ppercase
       'Lu'
 
 
-.. function:: bidirectional(chr, /)
+.. function:: bidirectional(chr)
 
    Returns the bidirectional class assigned to the character *chr* as
    string. If no such value is defined, an empty string is returned.
    See the `Bidirectional Class Values section of the Unicode Character
-   Database <https://www.unicode.org/reports/tr44/#Bidi_Class_Values>`_
+   Database <https://www.unicode.org/reports/tr44/tr44-30.html#Bidi_Class_Values>`_
    documentation for a list of bidirectional codes. For example::
 
       >>> unicodedata.bidirectional('\N{ARABIC-INDIC DIGIT SEVEN}') # 'A'rabic, 'N'umber
       'AN'
 
 
-.. function:: combining(chr, /)
+.. function:: combining(chr)
 
    Returns the canonical combining class assigned to the character *chr*
    as integer. Returns ``0`` if no combining class is defined.
    See the `Canonical Combining Class Values section of the Unicode Character
-   Database <https://www.unicode.org/reports/tr44/#Canonical_Combining_Class_Values>`_
+   Database <https://www.unicode.org/reports/tr44/tr44-30.html#Canonical_Combining_Class_Values>`_
    for more information.
 
 
-.. function:: east_asian_width(chr, /)
+.. function:: east_asian_width(chr)
 
    Returns the east asian width assigned to the character *chr* as
    string. For a list of widths and or more information, see the
-   `Unicode Standard Annex #11 <https://www.unicode.org/reports/tr11/>`_.
+   `Unicode Standard Annex #11 <https://www.unicode.org/reports/tr11/tr11-41.html>`_.
 
 
-.. function:: block(chr, /)
-
-   Returns the `block
-   <https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/#G64189>`_
-   assigned to the character *chr*. For example::
-
-      >>> unicodedata.block('S')
-      'Basic Latin'
-
-   .. versionadded:: 3.15
-
-
-.. function:: mirrored(chr, /)
+.. function:: mirrored(chr)
 
    Returns the mirrored property assigned to the character *chr* as
    integer. Returns ``1`` if the character has been identified as a "mirrored"
@@ -190,37 +144,7 @@ Standard Annex #44, `"Unicode Character Database"
       1
 
 
-.. function:: isxidstart(chr, /)
-
-   Return ``True`` if *chr* is a valid identifier start per the
-   `Unicode Standard Annex #31 <https://www.unicode.org/reports/tr31/>`_,
-   that is, it has the ``XID_Start`` property. Return ``False`` otherwise.
-   For example::
-
-      >>> unicodedata.isxidstart('S')
-      True
-      >>> unicodedata.isxidstart('0')
-      False
-
-   .. versionadded:: 3.15
-
-
-.. function:: isxidcontinue(chr, /)
-
-   Return ``True`` if *chr* is a valid identifier character per the
-   `Unicode Standard Annex #31 <https://www.unicode.org/reports/tr31/>`_,
-   that is, it has the ``XID_Continue`` property. Return ``False`` otherwise.
-   For example::
-
-      >>> unicodedata.isxidcontinue('S')
-      True
-      >>> unicodedata.isxidcontinue(' ')
-      False
-
-   .. versionadded:: 3.15
-
-
-.. function:: decomposition(chr, /)
+.. function:: decomposition(chr)
 
    Returns the character decomposition mapping assigned to the character
    *chr* as string. An empty string is returned in case no such mapping is
@@ -230,29 +154,7 @@ Standard Annex #44, `"Unicode Character Database"
       '0041 0303'
 
 
-.. function:: grapheme_cluster_break(chr, /)
-
-   Returns the Grapheme_Cluster_Break property assigned to the character.
-
-   .. versionadded:: 3.15
-
-
-.. function:: indic_conjunct_break(chr, /)
-
-   Returns the Indic_Conjunct_Break property assigned to the character.
-
-   .. versionadded:: 3.15
-
-
-.. function:: extended_pictographic(chr, /)
-
-   Returns ``True`` if the character has the Extended_Pictographic property,
-   ``False`` otherwise.
-
-   .. versionadded:: 3.15
-
-
-.. function:: normalize(form, unistr, /)
+.. function:: normalize(form, unistr)
 
    Return the normal form *form* for the Unicode string *unistr*. Valid values for
    *form* are 'NFC', 'NFKC', 'NFD', and 'NFKD'.
@@ -285,7 +187,7 @@ Standard Annex #44, `"Unicode Character Database"
    doesn't, they may not compare equal.
 
 
-.. function:: is_normalized(form, unistr, /)
+.. function:: is_normalized(form, unistr)
 
    Return whether the Unicode string *unistr* is in the normal form *form*. Valid
    values for *form* are 'NFC', 'NFKC', 'NFD', and 'NFKD'.
@@ -293,25 +195,7 @@ Standard Annex #44, `"Unicode Character Database"
    .. versionadded:: 3.8
 
 
-.. function:: iter_graphemes(unistr, start=0, end=sys.maxsize, /)
-
-   Returns an iterator to iterate over grapheme clusters.
-   With optional *start*, iteration begins at that position.
-   With optional *end*, iteration stops at that position.
-
-   Converting an emitted item to string returns a substring corresponding to
-   the grapheme cluster.
-   Its ``start`` and ``end`` attributes denote the start and end of
-   the grapheme cluster.
-
-   It uses extended grapheme cluster rules defined by Unicode
-   Standard Annex #29, `"Unicode Text Segmentation"
-   <https://www.unicode.org/reports/tr29/>`_.
-
-   .. versionadded:: 3.15
-
-
-In addition, the module exposes the following constants:
+In addition, the module exposes the following constant:
 
 .. data:: unidata_version
 
@@ -320,13 +204,13 @@ In addition, the module exposes the following constants:
 
 .. data:: ucd_3_2_0
 
-   This is an object that has most of the methods of the entire module, but uses the
+   This is an object that has the same methods as the entire module, but uses the
    Unicode database version 3.2 instead, for applications that require this
    specific version of the Unicode database (such as IDNA).
 
 
 .. rubric:: Footnotes
 
-.. [#] https://www.unicode.org/Public/18.0.0/ucd/NameAliases.txt
+.. [#] https://www.unicode.org/Public/15.1.0/ucd/NameAliases.txt
 
-.. [#] https://www.unicode.org/Public/18.0.0/ucd/NamedSequences.txt
+.. [#] https://www.unicode.org/Public/15.1.0/ucd/NamedSequences.txt

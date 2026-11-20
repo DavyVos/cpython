@@ -371,16 +371,21 @@ of what happens during the loading portion of import::
     if spec.loader is None:
         # unsupported
         raise ImportError
-
-    sys.modules[spec.name] = module
-    try:
-        spec.loader.exec_module(module)
-    except BaseException:
+    if spec.origin is None and spec.submodule_search_locations is not None:
+        # namespace package
+        sys.modules[spec.name] = module
+    elif not hasattr(spec.loader, 'exec_module'):
+        module = spec.loader.load_module(spec.name)
+    else:
+        sys.modules[spec.name] = module
         try:
-            del sys.modules[spec.name]
-        except KeyError:
-            pass
-        raise
+            spec.loader.exec_module(module)
+        except BaseException:
+            try:
+                del sys.modules[spec.name]
+            except KeyError:
+                pass
+            raise
     return sys.modules[spec.name]
 
 Note the following details:
@@ -415,10 +420,7 @@ Note the following details:
 .. versionchanged:: 3.4
    The import system has taken over the boilerplate responsibilities of
    loaders.  These were previously performed by the
-   ``importlib.abc.Loader.load_module`` method.
-
-.. versionchanged:: 3.15
-    The ``load_module`` method is no longer used.
+   :meth:`importlib.abc.Loader.load_module` method.
 
 Loaders
 -------
@@ -453,7 +455,7 @@ import machinery will create the new module itself.
    The :meth:`~importlib.abc.Loader.create_module` method of loaders.
 
 .. versionchanged:: 3.4
-   The ``importlib.abc.Loader.load_module`` method was replaced by
+   The :meth:`~importlib.abc.Loader.load_module` method was replaced by
    :meth:`~importlib.abc.Loader.exec_module` and the import
    machinery assumed all the boilerplate responsibilities of loading.
 
@@ -665,15 +667,6 @@ shared libraries (e.g. ``.so`` files). When supported by the :mod:`zipimport`
 module in the standard library, the default path entry finders also handle
 loading all of these file types (other than shared libraries) from zipfiles.
 
-Within a single :term:`path entry`, the default path entry finders check for a
-:term:`regular package` first, then for extension modules, then for source
-files, and finally for bytecode files. For example, if the same directory
-contains both ``spam/__init__.py`` and ``spam.py``, ``import spam`` will
-import the package from ``spam/__init__.py``. A directory without an
-``__init__.py`` file is treated as a :term:`namespace package` portion only if
-no matching module is found. Note that this does not override the order of the
-:term:`import path`.
-
 Path entries need not be limited to file system locations.  They can refer to
 URLs, database queries, or any other location that can be specified as a
 string.
@@ -783,10 +776,10 @@ module.
 
 The current working directory -- denoted by an empty string -- is handled
 slightly differently from other entries on :data:`sys.path`. First, if the
-current working directory cannot be determined or is found not to exist, no
-value is stored in :data:`sys.path_importer_cache`. Second, the value for the
-current working directory is looked up fresh for each module lookup. Third,
-the path used for :data:`sys.path_importer_cache` and returned by
+current working directory is found to not exist, no value is stored in
+:data:`sys.path_importer_cache`. Second, the value for the current working
+directory is looked up fresh for each module lookup. Third, the path used for
+:data:`sys.path_importer_cache` and returned by
 :meth:`importlib.machinery.PathFinder.find_spec` will be the actual current
 working directory and not the empty string.
 

@@ -49,6 +49,25 @@ support.
    this function to raise an exception (in line with :func:`os.path.isdir`
    behavior).
 
+.. function:: find_loader(fullname)
+
+   Retrieve a module :term:`loader` for the given *fullname*.
+
+   This is a backwards compatibility wrapper around
+   :func:`importlib.util.find_spec` that converts most failures to
+   :exc:`ImportError` and only returns the loader rather than the full
+   :class:`importlib.machinery.ModuleSpec`.
+
+   .. versionchanged:: 3.3
+      Updated to be based directly on :mod:`importlib` rather than relying
+      on the package internal :pep:`302` import emulation.
+
+   .. versionchanged:: 3.4
+      Updated to be based on :pep:`451`
+
+   .. deprecated-removed:: 3.12 3.14
+      Use :func:`importlib.util.find_spec` instead.
+
 
 .. function:: get_importer(path_item)
 
@@ -63,6 +82,27 @@ support.
    .. versionchanged:: 3.3
       Updated to be based directly on :mod:`importlib` rather than relying
       on the package internal :pep:`302` import emulation.
+
+
+.. function:: get_loader(module_or_name)
+
+   Get a :term:`loader` object for *module_or_name*.
+
+   If the module or package is accessible via the normal import mechanism, a
+   wrapper around the relevant part of that machinery is returned.  Returns
+   ``None`` if the module cannot be found or imported.  If the named module is
+   not already imported, its containing package (if any) is imported, in order
+   to establish the package ``__path__``.
+
+   .. versionchanged:: 3.3
+      Updated to be based directly on :mod:`importlib` rather than relying
+      on the package internal :pep:`302` import emulation.
+
+   .. versionchanged:: 3.4
+      Updated to be based on :pep:`451`
+
+   .. deprecated-removed:: 3.12 3.14
+      Use :func:`importlib.util.find_spec` instead.
 
 
 .. function:: iter_importers(fullname='')
@@ -194,7 +234,7 @@ support.
       The :mod:`importlib.resources` module provides structured access to
       module resources.
 
-.. function:: resolve_name(name, *, strict=False)
+.. function:: resolve_name(name)
 
    Resolve a name to an object.
 
@@ -208,7 +248,6 @@ support.
 
    * ``W(.W)*``
    * ``W(.W)*:(W(.W)*)?``
-   * ``W(.W)*:(W(.W)*)``
 
    The first form is intended for backward compatibility only. It assumes that
    some part of the dotted name is a package, and the rest is an object
@@ -223,11 +262,6 @@ support.
    hierarchy within that package. Only one import is needed in this form. If
    it ends with the colon, then a module object is returned.
 
-   The first two forms are accepted when ``strict=False`` (the default).
-
-   The third form requires both the module name and callable, separated by
-   a colon. Only this form is accepted when ``strict=True``.
-
    The function will return an object (which might be a module), or raise one
    of the following exceptions:
 
@@ -239,7 +273,3 @@ support.
    hierarchy within the imported package to get to the desired object.
 
    .. versionadded:: 3.9
-
-   .. versionchanged:: 3.15
-
-      The optional keyword-only ``strict`` flag was added.

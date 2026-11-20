@@ -30,10 +30,8 @@ void *foo(void)
 """
 
 
-@unittest.skipIf(not sys.platform.startswith('linux')
-                 or platform.machine().startswith('parisc'),
-                 'test requires GNU IFUNC support')
-@unittest.skipIf(test.support.linked_to_musl(), "Requires glibc")
+@unittest.skipUnless(sys.platform.startswith('linux'),
+                     'test requires GNU IFUNC support')
 class TestNullDlsym(unittest.TestCase):
     """GH-126554: Ensure that we catch NULL dlsym return values
 
@@ -122,7 +120,7 @@ class TestNullDlsym(unittest.TestCase):
             # Assert that the IFUNC was called
             self.assertEqual(os.read(pipe_r, 2), b'OK')
 
-@test.support.thread_unsafe('setlocale is not thread-safe')
+
 @unittest.skipUnless(os.name != 'nt', 'test requires dlerror() calls')
 class TestLocalization(unittest.TestCase):
 

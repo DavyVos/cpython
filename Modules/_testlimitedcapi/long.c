@@ -1,9 +1,7 @@
 #include "pyconfig.h"   // Py_GIL_DISABLED
-#ifdef Py_GIL_DISABLED
-#  define Py_TARGET_ABI3T 0x030f0000
-#else
-   // Need limited C API 3.14 to test PyLong_AsInt64()
-#  define Py_LIMITED_API 0x030e0000
+#ifndef Py_GIL_DISABLED
+   // Need limited C API 3.13 to test PyLong_AsInt()
+#  define Py_LIMITED_API 0x030d0000
 #endif
 
 #include "parts.h"
@@ -760,56 +758,6 @@ pylong_aspid(PyObject *module, PyObject *arg)
 }
 
 
-static PyObject *
-pylong_asint32(PyObject *module, PyObject *arg)
-{
-    NULLABLE(arg);
-    int32_t value = UNINITIALIZED_INT;
-    if (PyLong_AsInt32(arg, &value) < 0) {
-        assert(value == UNINITIALIZED_INT);
-        return NULL;
-    }
-    return PyLong_FromInt32(value);
-}
-
-static PyObject *
-pylong_asuint32(PyObject *module, PyObject *arg)
-{
-    NULLABLE(arg);
-    uint32_t value = UNINITIALIZED_INT;
-    if (PyLong_AsUInt32(arg, &value) < 0) {
-        assert(value == UNINITIALIZED_INT);
-        return NULL;
-    }
-    return PyLong_FromUInt32(value);
-}
-
-
-static PyObject *
-pylong_asint64(PyObject *module, PyObject *arg)
-{
-    NULLABLE(arg);
-    int64_t value = UNINITIALIZED_INT;
-    if (PyLong_AsInt64(arg, &value) < 0) {
-        assert(value == UNINITIALIZED_INT);
-        return NULL;
-    }
-    return PyLong_FromInt64(value);
-}
-
-static PyObject *
-pylong_asuint64(PyObject *module, PyObject *arg)
-{
-    NULLABLE(arg);
-    uint64_t value = UNINITIALIZED_INT;
-    if (PyLong_AsUInt64(arg, &value) < 0) {
-        assert(value == UNINITIALIZED_INT);
-        return NULL;
-    }
-    return PyLong_FromUInt64(value);
-}
-
-
 static PyMethodDef test_methods[] = {
     _TESTLIMITEDCAPI_TEST_LONG_AND_OVERFLOW_METHODDEF
     _TESTLIMITEDCAPI_TEST_LONG_API_METHODDEF
@@ -837,10 +785,6 @@ static PyMethodDef test_methods[] = {
     {"pylong_asdouble",             pylong_asdouble,            METH_O},
     {"pylong_asvoidptr",            pylong_asvoidptr,           METH_O},
     {"pylong_aspid",                pylong_aspid,               METH_O},
-    {"pylong_asint32",              pylong_asint32,             METH_O},
-    {"pylong_asuint32",             pylong_asuint32,            METH_O},
-    {"pylong_asint64",              pylong_asint64,             METH_O},
-    {"pylong_asuint64",             pylong_asuint64,            METH_O},
     {NULL},
 };
 

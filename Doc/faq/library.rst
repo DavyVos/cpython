@@ -7,7 +7,6 @@ Library and Extension FAQ
 .. only:: html
 
    .. contents::
-      :local:
 
 General Library Questions
 =========================
@@ -242,6 +241,51 @@ The :mod:`threading` module builds convenient abstractions on top of the
 low-level primitives provided by the :mod:`_thread` module.
 
 
+None of my threads seem to run: why?
+------------------------------------
+
+As soon as the main thread exits, all threads are killed.  Your main thread is
+running too quickly, giving the threads no time to do any work.
+
+A simple fix is to add a sleep to the end of the program that's long enough for
+all the threads to finish::
+
+   import threading, time
+
+   def thread_task(name, n):
+       for i in range(n):
+           print(name, i)
+
+   for i in range(10):
+       T = threading.Thread(target=thread_task, args=(str(i), i))
+       T.start()
+
+   time.sleep(10)  # <---------------------------!
+
+But now (on many platforms) the threads don't run in parallel, but appear to run
+sequentially, one at a time!  The reason is that the OS thread scheduler doesn't
+start a new thread until the previous thread is blocked.
+
+A simple fix is to add a tiny sleep to the start of the run function::
+
+   def thread_task(name, n):
+       time.sleep(0.001)  # <--------------------!
+       for i in range(n):
+           print(name, i)
+
+   for i in range(10):
+       T = threading.Thread(target=thread_task, args=(str(i), i))
+       T.start()
+
+   time.sleep(10)
+
+Instead of trying to guess a good delay value for :func:`time.sleep`,
+it's better to use some kind of semaphore mechanism.  One idea is to use the
+:mod:`queue` module to create a queue object, let each thread append a token to
+the queue when it finishes, and let the main thread read as many tokens from the
+queue as there are threads.
+
+
 How do I parcel out work among a bunch of worker threads?
 ---------------------------------------------------------
 
@@ -366,17 +410,35 @@ deployment on high-end multiprocessor server machines, because a multi-threaded
 Python program effectively only uses one CPU, due to the insistence that
 (almost) all Python code can only run while the GIL is held.
 
-Since Python 3.13, CPython provides an optional free-threaded build that can run
-with the GIL disabled, allowing Python threads to run in parallel on multiple
-CPU cores (see :pep:`703`).  Free-threaded Python is officially supported as of
-Python 3.14 (see :pep:`779`), but is not the default build.  See
-:doc:`/howto/free-threading-python` for details.
+With the approval of :pep:`703` work is now underway to remove the GIL from the
+CPython implementation of Python.  Initially it will be implemented as an
+optional compiler flag when building the interpreter, and so separate
+builds will be available with and without the GIL.  Long-term, the hope is
+to settle on a single build, once the performance implications of removing the
+GIL are fully understood.  Python 3.13 is likely to be the first release
+containing this work, although it may not be completely functional in this
+release.
+
+The current work to remove the GIL is based on a
+`fork of Python 3.9 with the GIL removed <https://github.com/colesbury/nogil>`_
+by Sam Gross.
+Prior to that,
+in the days of Python 1.5, Greg Stein actually implemented a comprehensive
+patch set (the "free threading" patches) that removed the GIL and replaced it
+with fine-grained locking.  Adam Olsen did a similar experiment
+in his `python-safethread <https://code.google.com/archive/p/python-safethread>`_
+project.  Unfortunately, both of these earlier experiments exhibited a sharp
+drop in single-thread
+performance (at least 30% slower), due to the amount of fine-grained locking
+necessary to compensate for the removal of the GIL.  The Python 3.9 fork
+is the first attempt at removing the GIL with an acceptable performance
+impact.
 
 The presence of the GIL in current Python releases
 doesn't mean that you can't make good use of Python on multi-CPU machines!
 You just have to be creative with dividing the work up between multiple
 *processes* rather than multiple *threads*.  The
-:class:`~concurrent.futures.ProcessPoolExecutor` class in the
+:class:`~concurrent.futures.ProcessPoolExecutor` class in the new
 :mod:`concurrent.futures` module provides an easy way of doing so; the
 :mod:`multiprocessing` module provides a lower-level API in case you want
 more control over dispatching of tasks.
@@ -390,9 +452,7 @@ already do this.
 An alternative approach to reducing the impact of the GIL is
 to make the GIL a per-interpreter-state lock rather than truly global.
 This was :ref:`first implemented in Python 3.12 <whatsnew312-pep684>` and is
-available in the C API. Python interfaces were added in Python 3.14 through the
-:mod:`concurrent.interpreters` module and the
-:class:`~concurrent.futures.InterpreterPoolExecutor` class.
+available in the C API. A Python interface to it is expected in Python 3.13.
 The main limitation to it at the moment is likely to be 3rd party extension
 modules, since these must be written with multiple interpreters in mind in
 order to be usable, so many older extension modules will not be usable.
@@ -479,6 +539,84 @@ integer representing the opened file.  :func:`os.popen` creates a high-level
 file object, the same type returned by the built-in :func:`open` function.
 Thus, to read *n* bytes from a pipe *p* created with :func:`os.popen`, you need to
 use ``p.read(n)``.
+
+
+.. XXX update to use subprocess. See the :ref:`subprocess-replacements` section.
+
+   How do I run a subprocess with pipes connected to both input and output?
+   ------------------------------------------------------------------------
+
+   Use the :mod:`popen2` module.  For example::
+
+      import popen2
+      fromchild, tochild = popen2.popen2("command")
+      tochild.write("input\n")
+      tochild.flush()
+      output = fromchild.readline()
+
+   Warning: in general it is unwise to do this because you can easily cause a
+   deadlock where your process is blocked waiting for output from the child
+   while the child is blocked waiting for input from you.  This can be caused
+   by the parent expecting the child to output more text than it does or
+   by data being stuck in stdio buffers due to lack of flushing.
+   The Python parent can of course explicitly flush the data it sends to the
+   child before it reads any output, but if the child is a naive C program it
+   may have been written to never explicitly flush its output, even if it is
+   interactive, since flushing is normally automatic.
+
+   Note that a deadlock is also possible if you use :func:`popen3` to read
+   stdout and stderr. If one of the two is too large for the internal buffer
+   (increasing the buffer size does not help) and you ``read()`` the other one
+   first, there is a deadlock, too.
+
+   Note on a bug in popen2: unless your program calls ``wait()`` or
+   ``waitpid()``, finished child processes are never removed, and eventually
+   calls to popen2 will fail because of a limit on the number of child
+   processes.  Calling :func:`os.waitpid` with the :const:`os.WNOHANG` option can
+   prevent this; a good place to insert such a call would be before calling
+   ``popen2`` again.
+
+   In many cases, all you really need is to run some data through a command and
+   get the result back.  Unless the amount of data is very large, the easiest
+   way to do this is to write it to a temporary file and run the command with
+   that temporary file as input.  The standard module :mod:`tempfile` exports a
+   :func:`~tempfile.mktemp` function to generate unique temporary file names. ::
+
+      import tempfile
+      import os
+
+      class Popen3:
+          """
+          This is a deadlock-safe version of popen that returns
+          an object with errorlevel, out (a string) and err (a string).
+          (capturestderr may not work under windows.)
+          Example: print(Popen3('grep spam','\n\nhere spam\n\n').out)
+          """
+          def __init__(self,command,input=None,capturestderr=None):
+              outfile=tempfile.mktemp()
+              command="( %s ) > %s" % (command,outfile)
+              if input:
+                  infile=tempfile.mktemp()
+                  open(infile,"w").write(input)
+                  command=command+" <"+infile
+              if capturestderr:
+                  errfile=tempfile.mktemp()
+                  command=command+" 2>"+errfile
+              self.errorlevel=os.system(command) >> 8
+              self.out=open(outfile,"r").read()
+              os.remove(outfile)
+              if input:
+                  os.remove(infile)
+              if capturestderr:
+                  self.err=open(errfile,"r").read()
+                  os.remove(errfile)
+
+   Note that many interactive programs (e.g. vi) don't work well with pipes
+   substituted for standard input and output.  You will have to use pseudo ttys
+   ("ptys") instead of pipes. Or you can use a Python interface to Don Libes'
+   "expect" library.  A Python extension that interfaces to expect is called
+   "expy" and available from https://expectpy.sourceforge.net.  A pure Python
+   solution that works like expect is :pypi:`pexpect`.
 
 
 How do I access the serial (RS232) port?

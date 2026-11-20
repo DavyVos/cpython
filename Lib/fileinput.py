@@ -281,9 +281,7 @@ class FileInput:
             finally:
                 backupfilename = self._backupfilename
                 self._backupfilename = None
-                # If the output file could not be created, the backup file
-                # is the only copy of the data: keep it.
-                if backupfilename and not self._backup and output:
+                if backupfilename and not self._backup:
                     try: os.unlink(backupfilename)
                     except OSError: pass
 
@@ -331,23 +329,21 @@ class FileInput:
             if self._inplace:
                 self._backupfilename = (
                     os.fspath(self._filename) + (self._backup or ".bak"))
-                # The next few lines may raise OSError.  An existing backup
-                # file is only replaced once there is a file to back up: it
-                # can be the only copy of the data after an earlier failure.
-                os.replace(self._filename, self._backupfilename)
+                try:
+                    os.unlink(self._backupfilename)
+                except OSError:
+                    pass
+                # The next few lines may raise OSError
+                os.rename(self._filename, self._backupfilename)
                 self._file = open(self._backupfilename, self._mode,
                                   encoding=encoding, errors=self._errors)
-                # The file has just been moved away, so nothing should exist
-                # under its name: create the output file exclusively rather
-                # than write through a file or symlink that has appeared there.
                 try:
                     perm = os.fstat(self._file.fileno()).st_mode
                 except OSError:
-                    self._output = open(self._filename,
-                                        self._write_mode.replace('w', 'x'),
+                    self._output = open(self._filename, self._write_mode,
                                         encoding=encoding, errors=self._errors)
                 else:
-                    mode = os.O_CREAT | os.O_WRONLY | os.O_EXCL
+                    mode = os.O_CREAT | os.O_WRONLY | os.O_TRUNC
                     if hasattr(os, 'O_BINARY'):
                         mode |= os.O_BINARY
 
@@ -355,10 +351,7 @@ class FileInput:
                     self._output = os.fdopen(fd, self._write_mode,
                                              encoding=encoding, errors=self._errors)
                     try:
-                        if os.chmod in os.supports_fd:
-                            os.chmod(fd, perm)
-                        else:
-                            os.chmod(self._filename, perm)
+                        os.chmod(self._filename, perm)
                     except OSError:
                         pass
                 self._savestdout = sys.stdout

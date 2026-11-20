@@ -17,7 +17,6 @@ static const char PyCursesVersion[] = "2.1";
 
 #include "Python.h"
 
-#define CURSES_PANEL_MODULE
 #include "py_curses.h"
 
 #if defined(HAVE_NCURSESW_PANEL_H)
@@ -29,7 +28,7 @@ static const char PyCursesVersion[] = "2.1";
 #endif
 
 typedef struct {
-    PyObject *error;
+    PyObject *PyCursesError;
     PyTypeObject *PyCursesPanel_Type;
 } _curses_panel_state;
 
@@ -66,7 +65,7 @@ static int
 _curses_panel_clear(PyObject *mod)
 {
     _curses_panel_state *state = get_curses_panel_state(mod);
-    Py_CLEAR(state->error);
+    Py_CLEAR(state->PyCursesError);
     Py_CLEAR(state->PyCursesPanel_Type);
     return 0;
 }
@@ -76,7 +75,7 @@ _curses_panel_traverse(PyObject *mod, visitproc visit, void *arg)
 {
     Py_VISIT(Py_TYPE(mod));
     _curses_panel_state *state = get_curses_panel_state(mod);
-    Py_VISIT(state->error);
+    Py_VISIT(state->PyCursesError);
     Py_VISIT(state->PyCursesPanel_Type);
     return 0;
 }
@@ -84,152 +83,31 @@ _curses_panel_traverse(PyObject *mod, visitproc visit, void *arg)
 static void
 _curses_panel_free(void *mod)
 {
-    (void)_curses_panel_clear((PyObject *)mod);
-}
-
-/* Utility Error Procedures
- *
- * The naming and implementations are identical to those in _cursesmodule.c.
- * Functions that are not yet needed (for instance, reporting an ERR value
- * from a module-wide function, namely curses_panel_set_error()) are
- * omitted and should only be added if needed.
- */
-
-static void
-_curses_panel_format_error(_curses_panel_state *state,
-                           const char *curses_funcname,
-                           const char *python_funcname,
-                           const char *return_value,
-                           const char *default_message)
-{
-    assert(!PyErr_Occurred());
-    if (python_funcname == NULL && curses_funcname == NULL) {
-        PyErr_SetString(state->error, default_message);
-    }
-    else if (python_funcname == NULL) {
-        (void)PyErr_Format(state->error, CURSES_ERROR_FORMAT,
-                           curses_funcname, return_value);
-    }
-    else {
-        assert(python_funcname != NULL);
-        (void)PyErr_Format(state->error, CURSES_ERROR_VERBOSE_FORMAT,
-                           curses_funcname, python_funcname, return_value);
-    }
-}
-
-/*
- * Format a curses error for a function that returned ERR.
- *
- * Specify a non-NULL 'python_funcname' when the latter differs from
- * 'curses_funcname'. If both names are NULL, uses the 'catchall_ERR'
- * message instead.
- */
-static void
-_curses_panel_set_error(_curses_panel_state *state,
-                        const char *curses_funcname,
-                        const char *python_funcname)
-{
-    _curses_panel_format_error(state, curses_funcname, python_funcname,
-                               "ERR", catchall_ERR);
-}
-
-/*
- * Format a curses error for a function that returned NULL.
- *
- * Specify a non-NULL 'python_funcname' when the latter differs from
- * 'curses_funcname'. If both names are NULL, uses the 'catchall_NULL'
- * message instead.
- */
-static void
-_curses_panel_set_null_error(_curses_panel_state *state,
-                             const char *curses_funcname,
-                             const char *python_funcname)
-{
-    _curses_panel_format_error(state, curses_funcname, python_funcname,
-                               "NULL", catchall_NULL);
-}
-
-/* Same as _curses_panel_set_null_error() for a module object. */
-static void
-curses_panel_set_null_error(PyObject *module,
-                            const char *curses_funcname,
-                            const char *python_funcname)
-{
-    _curses_panel_state *state = get_curses_panel_state(module);
-    _curses_panel_set_null_error(state, curses_funcname, python_funcname);
-}
-
-/* Same as _curses_panel_set_error() for a panel object. */
-static void
-curses_panel_panel_set_error(PyCursesPanelObject *panel,
-                             const char *curses_funcname,
-                             const char *python_funcname)
-{
-    _curses_panel_state *state = get_curses_panel_state_by_panel(panel);
-    _curses_panel_set_error(state, curses_funcname, python_funcname);
-}
-
-/* Same as _curses_panel_set_null_error() for a panel object. */
-static void
-curses_panel_panel_set_null_error(PyCursesPanelObject *panel,
-                                  const char *curses_funcname,
-                                  const char *python_funcname)
-{
-    _curses_panel_state *state = get_curses_panel_state_by_panel(panel);
-    _curses_panel_set_null_error(state, curses_funcname, python_funcname);
-}
-
-/*
- * Indicate that a panel object couldn't be found.
- *
- * Use it for the following constructions:
- *
- * PROC caller_funcname:
- *  pan = called_funcname()
- *  find_po(panel)
- *
- * PROC caller_funcname:
- *  find_po(self->pan)
-*/
-static void
-curses_panel_notfound_error(const char *called_funcname,
-                            const char *caller_funcname)
-{
-    assert(!(called_funcname == NULL && caller_funcname == NULL));
-    if (caller_funcname == NULL) {
-        (void)PyErr_Format(PyExc_RuntimeError,
-                           "%s(): cannot find panel object",
-                           called_funcname);
-    }
-    else {
-        (void)PyErr_Format(PyExc_RuntimeError,
-                           "%s() (called by %s()): cannot find panel object",
-                           called_funcname, caller_funcname);
-    }
+    _curses_panel_clear((PyObject *) mod);
 }
 
 /* Utility Functions */
 
 /*
- * Check the return code from a curses function, returning None
- * on success and setting an exception on error.
+ * Check the return code from a curses function and return None
+ * or raise an exception as appropriate.
  */
 
-/*
- * Return None if 'code' is different from ERR (implementation-defined).
- * Otherwise, set an exception using curses_panel_panel_set_error() and
- * the remaining arguments, and return NULL.
- */
 static PyObject *
-curses_panel_panel_check_err(PyCursesPanelObject *panel, int code,
-                             const char *curses_funcname,
-                             const char *python_funcname)
+PyCursesCheckERR(_curses_panel_state *state, int code, const char *fname)
 {
     if (code != ERR) {
         Py_RETURN_NONE;
     }
-    curses_panel_panel_set_error(panel, curses_funcname, python_funcname);
-    return NULL;
+    else {
+        if (fname == NULL) {
+            PyErr_SetString(state->PyCursesError, catchall_ERR);
+        }
+        else {
+            PyErr_Format(state->PyCursesError, "%s() returned ERR", fname);
+        }
+        return NULL;
+    }
 }
 
 /*****************************************************************************
@@ -287,11 +165,8 @@ insert_lop(PyCursesPanelObject *po)
     return 0;
 }
 
-/* Remove the panel object from lop.
- *
- * Return -1 on error but do NOT set an exception; otherwise return 0.
- */
-static int
+/* Remove the panel object from lop */
+static void
 remove_lop(PyCursesPanelObject *po)
 {
     list_of_panels *temp, *n;
@@ -300,39 +175,30 @@ remove_lop(PyCursesPanelObject *po)
     if (temp->po == po) {
         lop = temp->next;
         PyMem_Free(temp);
-        return 0;
+        return;
     }
     while (temp->next == NULL || temp->next->po != po) {
         if (temp->next == NULL) {
-            return -1;
+            PyErr_SetString(PyExc_RuntimeError,
+                            "remove_lop: can't find Panel Object");
+            return;
         }
         temp = temp->next;
     }
     n = temp->next->next;
     PyMem_Free(temp->next);
     temp->next = n;
-    return 0;
+    return;
 }
 
 /* Return the panel object that corresponds to pan */
 static PyCursesPanelObject *
-find_po_impl(PANEL *pan)
+find_po(PANEL *pan)
 {
     list_of_panels *temp;
     for (temp = lop; temp->po->pan != pan; temp = temp->next)
         if (temp->next == NULL) return NULL;    /* not found!? */
     return temp->po;
-}
-
-/* Same as find_po_impl() but with caller context information. */
-static PyCursesPanelObject *
-find_po(PANEL *pan, const char *called_funcname, const char *caller_funcname)
-{
-    PyCursesPanelObject *res = find_po_impl(pan);
-    if (res == NULL) {
-        curses_panel_notfound_error(called_funcname, caller_funcname);
-    }
-    return res;
 }
 
 /*[clinic input]
@@ -348,19 +214,23 @@ class _curses_panel.panel "PyCursesPanelObject *" "&PyCursesPanel_Type"
 /*[clinic input]
 _curses_panel.panel.bottom
 
+    cls: defining_class
+
 Push the panel to the bottom of the stack.
 [clinic start generated code]*/
 
 static PyObject *
-_curses_panel_panel_bottom_impl(PyCursesPanelObject *self)
-/*[clinic end generated code: output=7aa7d14d7e1d1ce6 input=b6c920c071b61e2e]*/
+_curses_panel_panel_bottom_impl(PyCursesPanelObject *self, PyTypeObject *cls)
+/*[clinic end generated code: output=8ec7fbbc08554021 input=6b7d2c0578b5a1c4]*/
 {
-    int rtn = bottom_panel(self->pan);
-    return curses_panel_panel_check_err(self, rtn, "bottom_panel", "bottom");
+    _curses_panel_state *state = PyType_GetModuleState(cls);
+    return PyCursesCheckERR(state, bottom_panel(self->pan), "bottom");
 }
 
 /*[clinic input]
 _curses_panel.panel.hide
+
+    cls: defining_class
 
 Hide the panel.
 
@@ -369,15 +239,17 @@ invisible.
 [clinic start generated code]*/
 
 static PyObject *
-_curses_panel_panel_hide_impl(PyCursesPanelObject *self)
-/*[clinic end generated code: output=a7bbbd523e1eab49 input=9456aca9b264dde1]*/
+_curses_panel_panel_hide_impl(PyCursesPanelObject *self, PyTypeObject *cls)
+/*[clinic end generated code: output=cc6ab7203cdc1450 input=805065e45e6fc1cd]*/
 {
-    int rtn = hide_panel(self->pan);
-    return curses_panel_panel_check_err(self, rtn, "hide_panel", "hide");
+    _curses_panel_state *state = PyType_GetModuleState(cls);
+    return PyCursesCheckERR(state, hide_panel(self->pan), "hide");
 }
 
 /*[clinic input]
 _curses_panel.panel.show
+
+    cls: defining_class
 
 Display the panel (which might have been hidden).
 
@@ -385,25 +257,27 @@ The panel is placed on top of the panel stack.
 [clinic start generated code]*/
 
 static PyObject *
-_curses_panel_panel_show_impl(PyCursesPanelObject *self)
-/*[clinic end generated code: output=6b4553ab45c97769 input=9997cf364ca71422]*/
+_curses_panel_panel_show_impl(PyCursesPanelObject *self, PyTypeObject *cls)
+/*[clinic end generated code: output=dc3421de375f0409 input=59375ba57303320d]*/
 {
-    int rtn = show_panel(self->pan);
-    return curses_panel_panel_check_err(self, rtn, "show_panel", "show");
+    _curses_panel_state *state = PyType_GetModuleState(cls);
+    return PyCursesCheckERR(state, show_panel(self->pan), "show");
 }
 
 /*[clinic input]
 _curses_panel.panel.top
 
+    cls: defining_class
+
 Push panel to the top of the stack.
 [clinic start generated code]*/
 
 static PyObject *
-_curses_panel_panel_top_impl(PyCursesPanelObject *self)
-/*[clinic end generated code: output=0f5f2f8cdd2d1777 input=be33975ec3ca0e9a]*/
+_curses_panel_panel_top_impl(PyCursesPanelObject *self, PyTypeObject *cls)
+/*[clinic end generated code: output=10a072e511e873f7 input=1f372d597dda3379]*/
 {
-    int rtn = top_panel(self->pan);
-    return curses_panel_panel_check_err(self, rtn, "top_panel", "top");
+    _curses_panel_state *state = PyType_GetModuleState(cls);
+    return PyCursesCheckERR(state, top_panel(self->pan), "top");
 }
 
 /* Allocation and deallocation of Panel Objects */
@@ -438,7 +312,9 @@ PyCursesPanel_Clear(PyObject *op)
     PyObject *extra = (PyObject *)panel_userptr(self->pan);
     if (extra != NULL) {
         if (set_panel_userptr(self->pan, NULL) == ERR) {
-            curses_panel_panel_set_error(self, "set_panel_userptr", NULL);
+            _curses_panel_state *state = get_curses_panel_state_by_panel(self);
+            PyErr_SetString(state->PyCursesError,
+                            "set_panel_userptr() returned ERR");
             return -1;
         }
         Py_DECREF(extra);
@@ -456,15 +332,20 @@ PyCursesPanel_Dealloc(PyObject *self)
     PyCursesPanelObject *po = _PyCursesPanelObject_CAST(self);
     PyObject *extra = (PyObject *)panel_userptr(po->pan);
     if (extra != NULL && set_panel_userptr(po->pan, NULL) == ERR) {
-        curses_panel_panel_set_error(po, "set_panel_userptr", "__del__");
+        _curses_panel_state *state = get_curses_panel_state_by_panel(po);
+        PyErr_SetString(state->PyCursesError,
+                        "set_panel_userptr() returned ERR");
         PyErr_FormatUnraisable("Exception ignored in PyCursesPanel_Dealloc()");
     }
-    if (po->wo != NULL && remove_lop(po) < 0) {
-        PyErr_SetString(PyExc_RuntimeError, "__del__: no panel object to delete");
-        PyErr_FormatUnraisable("Exception ignored in PyCursesPanel_Dealloc()");
+    if (po->wo != NULL) {
+        remove_lop(po);
+        if (PyErr_Occurred()) {
+            PyErr_FormatUnraisable("Exception ignored in PyCursesPanel_Dealloc()");
+        }
     }
     if (del_panel(po->pan) == ERR && !PyErr_Occurred()) {
-        curses_panel_panel_set_error(po, "del_panel", "__del__");
+        _curses_panel_state *state = get_curses_panel_state_by_panel(po);
+        PyErr_SetString(state->PyCursesError, "del_panel() returned ERR");
         PyErr_FormatUnraisable("Exception ignored in PyCursesPanel_Dealloc()");
     }
     Py_XDECREF(extra);
@@ -499,11 +380,18 @@ _curses_panel_panel_above_impl(PyCursesPanelObject *self)
     PyCursesPanelObject *po;
 
     pan = panel_above(self->pan);
-    if (pan == NULL) {  /* valid output: it means no panel exists yet */
+
+    if (pan == NULL) {          /* valid output, it means the calling panel
+                                   is on top of the stack */
         Py_RETURN_NONE;
     }
-    po = find_po(pan, "panel_above", "above");
-    return Py_XNewRef(po);
+    po = find_po(pan);
+    if (po == NULL) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "panel_above: can't find Panel Object");
+        return NULL;
+    }
+    return Py_NewRef(po);
 }
 
 /* panel_below(NULL) returns the top panel in the stack. To get
@@ -522,11 +410,18 @@ _curses_panel_panel_below_impl(PyCursesPanelObject *self)
     PyCursesPanelObject *po;
 
     pan = panel_below(self->pan);
-    if (pan == NULL) {  /* valid output: it means no panel exists yet */
+
+    if (pan == NULL) {          /* valid output, it means the calling panel
+                                   is on the bottom of the stack */
         Py_RETURN_NONE;
     }
-    po = find_po(pan, "panel_below", "below");
-    return Py_XNewRef(po);
+    po = find_po(pan);
+    if (po == NULL) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "panel_below: can't find Panel Object");
+        return NULL;
+    }
+    return Py_NewRef(po);
 }
 
 /*[clinic input]
@@ -548,6 +443,7 @@ _curses_panel_panel_hidden_impl(PyCursesPanelObject *self)
 /*[clinic input]
 _curses_panel.panel.move
 
+    cls: defining_class
     y: int
     x: int
     /
@@ -556,11 +452,12 @@ Move the panel to the screen coordinates (y, x).
 [clinic start generated code]*/
 
 static PyObject *
-_curses_panel_panel_move_impl(PyCursesPanelObject *self, int y, int x)
-/*[clinic end generated code: output=d867535a89777415 input=e0b36b78acc03fba]*/
+_curses_panel_panel_move_impl(PyCursesPanelObject *self, PyTypeObject *cls,
+                              int y, int x)
+/*[clinic end generated code: output=ce546c93e56867da input=60a0e7912ff99849]*/
 {
-    int rtn = move_panel(self->pan, y, x);
-    return curses_panel_panel_check_err(self, rtn, "move_panel", "move");
+    _curses_panel_state *state = PyType_GetModuleState(cls);
+    return PyCursesCheckERR(state, move_panel(self->pan, y, x), "move_panel");
 }
 
 /*[clinic input]
@@ -579,6 +476,7 @@ _curses_panel_panel_window_impl(PyCursesPanelObject *self)
 /*[clinic input]
 _curses_panel.panel.replace
 
+    cls: defining_class
     win: object(type="PyCursesWindowObject *", subclass_of="&PyCursesWindow_Type")
     /
 
@@ -587,23 +485,22 @@ Change the window associated with the panel to the window win.
 
 static PyObject *
 _curses_panel_panel_replace_impl(PyCursesPanelObject *self,
+                                 PyTypeObject *cls,
                                  PyCursesWindowObject *win)
-/*[clinic end generated code: output=2253a95f7b287255 input=4b1c4283987d9dfa]*/
+/*[clinic end generated code: output=c71f95c212d58ae7 input=dbec7180ece41ff5]*/
 {
-    PyCursesPanelObject *po = find_po(self->pan, "replace", NULL);
-    if (po == NULL) {
-        return NULL;
-    }
+    _curses_panel_state *state = PyType_GetModuleState(cls);
 
-    if (win->win == NULL) {
-        _curses_panel_state *state = get_curses_panel_state_by_panel(self);
-        PyErr_SetString(state->error, "the window has been detached");
+    PyCursesPanelObject *po = find_po(self->pan);
+    if (po == NULL) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "replace_panel: can't find Panel Object");
         return NULL;
     }
 
     int rtn = replace_panel(self->pan, win->win);
     if (rtn == ERR) {
-        curses_panel_panel_set_error(self, "replace_panel", "replace");
+        PyErr_SetString(state->PyCursesError, "replace_panel() returned ERR");
         return NULL;
     }
     Py_SETREF(po->wo, (PyCursesWindowObject*)Py_NewRef(win));
@@ -613,6 +510,7 @@ _curses_panel_panel_replace_impl(PyCursesPanelObject *self,
 /*[clinic input]
 _curses_panel.panel.set_userptr
 
+    cls: defining_class
     obj: object
     /
 
@@ -621,8 +519,8 @@ Set the panel's user pointer to obj.
 
 static PyObject *
 _curses_panel_panel_set_userptr_impl(PyCursesPanelObject *self,
-                                     PyObject *obj)
-/*[clinic end generated code: output=7fa1fd23f69db71e input=d2c6a9dbefabbf39]*/
+                                     PyTypeObject *cls, PyObject *obj)
+/*[clinic end generated code: output=db74f3db07b28080 input=e3fee2ff7b1b8e48]*/
 {
     PyCursesInitialised;
     Py_INCREF(obj);
@@ -631,27 +529,34 @@ _curses_panel_panel_set_userptr_impl(PyCursesPanelObject *self,
     if (rc == ERR) {
         /* In case of an ncurses error, decref the new object again */
         Py_DECREF(obj);
-        curses_panel_panel_set_error(self, "set_panel_userptr", "set_userptr");
-        return NULL;
     }
-    Py_XDECREF(oldobj);
-    Py_RETURN_NONE;
+    else {
+        Py_XDECREF(oldobj);
+    }
+
+    _curses_panel_state *state = PyType_GetModuleState(cls);
+    return PyCursesCheckERR(state, rc, "set_panel_userptr");
 }
 
 /*[clinic input]
 _curses_panel.panel.userptr
 
+    cls: defining_class
+
 Return the user pointer for the panel.
 [clinic start generated code]*/
 
 static PyObject *
-_curses_panel_panel_userptr_impl(PyCursesPanelObject *self)
-/*[clinic end generated code: output=e849c307b5dc9237 input=f78b7a47aef0fd50]*/
+_curses_panel_panel_userptr_impl(PyCursesPanelObject *self,
+                                 PyTypeObject *cls)
+/*[clinic end generated code: output=eea6e6f39ffc0179 input=f22ca4f115e30a80]*/
 {
+    _curses_panel_state *state = PyType_GetModuleState(cls);
+
     PyCursesInitialised;
     PyObject *obj = (PyObject *) panel_userptr(self->pan);
     if (obj == NULL) {
-        curses_panel_panel_set_null_error(self, "panel_userptr", "userptr");
+        PyErr_SetString(state->PyCursesError, "no userptr set");
         return NULL;
     }
 
@@ -679,13 +584,7 @@ static PyMethodDef PyCursesPanel_Methods[] = {
 
 /* -------------------------------------------------------*/
 
-PyDoc_STRVAR(PyCursesPanel_Type_doc,
-"A curses panel.\n"
-"\n"
-"Panel objects are returned by new_panel().");
-
 static PyType_Slot PyCursesPanel_Type_slots[] = {
-    {Py_tp_doc, (void *)PyCursesPanel_Type_doc},
     {Py_tp_clear, PyCursesPanel_Clear},
     {Py_tp_dealloc, PyCursesPanel_Dealloc},
     {Py_tp_traverse, PyCursesPanel_Traverse},
@@ -694,12 +593,11 @@ static PyType_Slot PyCursesPanel_Type_slots[] = {
 };
 
 static PyType_Spec PyCursesPanel_Type_spec = {
-    .name = "curses.panel.panel",
+    .name = "_curses_panel.panel",
     .basicsize = sizeof(PyCursesPanelObject),
     .flags = (
         Py_TPFLAGS_DEFAULT
         | Py_TPFLAGS_DISALLOW_INSTANTIATION
-        | Py_TPFLAGS_IMMUTABLETYPE
         | Py_TPFLAGS_HAVE_GC
     ),
     .slots = PyCursesPanel_Type_slots
@@ -725,11 +623,18 @@ _curses_panel_bottom_panel_impl(PyObject *module)
     PyCursesInitialised;
 
     pan = panel_above(NULL);
-    if (pan == NULL) {  /* valid output: it means no panel exists yet */
+
+    if (pan == NULL) {          /* valid output, it means
+                                   there's no panel at all */
         Py_RETURN_NONE;
     }
-    po = find_po(pan, "panel_above", "bottom_panel");
-    return Py_XNewRef(po);
+    po = find_po(pan);
+    if (po == NULL) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "panel_above: can't find Panel Object");
+        return NULL;
+    }
+    return Py_NewRef(po);
 }
 
 /*[clinic input]
@@ -747,13 +652,14 @@ static PyObject *
 _curses_panel_new_panel_impl(PyObject *module, PyCursesWindowObject *win)
 /*[clinic end generated code: output=45e948e0176a9bd2 input=3b6fea647b808fd7]*/
 {
+    _curses_panel_state *state = get_curses_panel_state(module);
+
     PANEL *pan = new_panel(win->win);
     if (pan == NULL) {
-        curses_panel_set_null_error(module, "new_panel", NULL);
+        PyErr_SetString(state->PyCursesError, catchall_NULL);
         return NULL;
     }
-    _curses_panel_state *state = get_curses_panel_state(module);
-    return PyCursesPanel_New(state, pan, win);
+    return (PyObject *)PyCursesPanel_New(state, pan, win);
 }
 
 
@@ -777,11 +683,18 @@ _curses_panel_top_panel_impl(PyObject *module)
     PyCursesInitialised;
 
     pan = panel_below(NULL);
-    if (pan == NULL) {  /* valid output: it means no panel exists yet */
+
+    if (pan == NULL) {          /* valid output, it means
+                                   there's no panel at all */
         Py_RETURN_NONE;
     }
-    po = find_po(pan, "panel_below", "top_panel");
-    return Py_XNewRef(po);
+    po = find_po(pan);
+    if (po == NULL) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "panel_below: can't find Panel Object");
+        return NULL;
+    }
+    return Py_NewRef(po);
 }
 
 /*[clinic input]
@@ -833,13 +746,11 @@ _curses_panel_exec(PyObject *mod)
         return -1;
     }
 
-    /* For exception curses.panel.error */
-    state->error = PyErr_NewExceptionWithDoc(
-        "curses.panel.error",
-        "Exception raised when a curses panel library function returns an error.",
-        NULL, NULL);
+    /* For exception _curses_panel.error */
+    state->PyCursesError = PyErr_NewException(
+        "_curses_panel.error", NULL, NULL);
 
-    if (PyModule_AddObjectRef(mod, "error", state->error) < 0) {
+    if (PyModule_AddObjectRef(mod, "error", state->PyCursesError) < 0) {
         return -1;
     }
 
@@ -865,7 +776,6 @@ _curses_panel_exec(PyObject *mod)
 }
 
 static PyModuleDef_Slot _curses_slots[] = {
-    _Py_ABI_SLOT,
     {Py_mod_exec, _curses_panel_exec},
     // XXX gh-103092: fix isolation.
     {Py_mod_multiple_interpreters, Py_MOD_MULTIPLE_INTERPRETERS_NOT_SUPPORTED},

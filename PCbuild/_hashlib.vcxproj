@@ -98,9 +98,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\Modules\_openssl_mem.h" />
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="..\Modules\_hashopenssl.c" />
   </ItemGroup>
   <ItemGroup>

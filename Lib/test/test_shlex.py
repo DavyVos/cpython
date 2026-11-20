@@ -6,8 +6,6 @@ import string
 import tempfile
 import unittest
 from unittest.mock import patch
-from test.support import cpython_only
-from test.support import import_helper
 
 
 # The original test data set was from shellwords, by Hartmut Goebel.
@@ -333,7 +331,6 @@ class ShlexTest(unittest.TestCase):
         unsafe = '"`$\\!' + unicode_sample
 
         self.assertEqual(shlex.quote(''), "''")
-        self.assertEqual(shlex.quote(None), "''")
         self.assertEqual(shlex.quote(safeunquoted), safeunquoted)
         self.assertEqual(shlex.quote('test file name'), "'test file name'")
         for u in unsafe:
@@ -342,16 +339,6 @@ class ShlexTest(unittest.TestCase):
         for u in unsafe:
             self.assertEqual(shlex.quote("test%s'name'" % u),
                              "'test%s'\"'\"'name'\"'\"''" % u)
-        self.assertRaises(TypeError, shlex.quote, 42)
-        self.assertRaises(TypeError, shlex.quote, b"abc")
-
-    def testForceQuote(self):
-        self.assertEqual(shlex.quote("spam"), "spam")
-        self.assertEqual(shlex.quote("spam", force=False), "spam")
-        self.assertEqual(shlex.quote("spam", force=True), "'spam'")
-        self.assertEqual(shlex.quote("spam eggs", force=False), "'spam eggs'")
-        self.assertEqual(shlex.quote("spam eggs", force=True), "'spam eggs'")
-        self.assertEqual(shlex.quote("two's-complement", force=False), "'two'\"'\"'s-complement'")
 
     def testJoin(self):
         for split_command, command in [
@@ -575,10 +562,6 @@ class ShlexTest(unittest.TestCase):
         with patch("builtins.print") as mock_print:
             list(s)
         mock_print.assert_any_call("shlex: in state ' ' I see character: 'a'")
-
-    @cpython_only
-    def test_lazy_imports(self):
-        import_helper.ensure_lazy_imports('shlex', {'collections', 're', 'os'})
 
 
 # Allow this test to be used with old shlex.py

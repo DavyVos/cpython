@@ -16,7 +16,7 @@ if socket_helper.tcp_blackhole():
 
 
 def tearDownModule():
-    asyncio.set_event_loop(None)
+    asyncio.set_event_loop_policy(None)
 
 
 class MyProto(asyncio.Protocol):
@@ -111,7 +111,7 @@ class BaseSockTestsMixin:
         self.loop.run_until_complete(
             self.loop.sock_recv(sock, 1024))
         sock.close()
-        self.assertStartsWith(data, b'HTTP/1.0 200 OK')
+        self.assertTrue(data.startswith(b'HTTP/1.0 200 OK'))
 
     def _basetest_sock_recv_into(self, httpd, sock):
         # same as _basetest_sock_client_ops, but using sock_recv_into
@@ -128,7 +128,7 @@ class BaseSockTestsMixin:
             self.loop.run_until_complete(
                 self.loop.sock_recv_into(sock, buf[nbytes:]))
         sock.close()
-        self.assertStartsWith(data, b'HTTP/1.0 200 OK')
+        self.assertTrue(data.startswith(b'HTTP/1.0 200 OK'))
 
     def test_sock_client_ops(self):
         with test_utils.run_test_server() as httpd:
@@ -151,7 +151,7 @@ class BaseSockTestsMixin:
         # consume data
         await self.loop.sock_recv(sock, 1024)
 
-        self.assertStartsWith(data, b'HTTP/1.0 200 OK')
+        self.assertTrue(data.startswith(b'HTTP/1.0 200 OK'))
 
     async def _basetest_sock_recv_into_racing(self, httpd, sock):
         sock.setblocking(False)
@@ -169,7 +169,7 @@ class BaseSockTestsMixin:
             nbytes = await self.loop.sock_recv_into(sock, buf[:1024])
             # consume data
             await self.loop.sock_recv_into(sock, buf[nbytes:])
-            self.assertStartsWith(data, b'HTTP/1.0 200 OK')
+            self.assertTrue(data.startswith(b'HTTP/1.0 200 OK'))
 
         await task
 
@@ -218,7 +218,7 @@ class BaseSockTestsMixin:
             sock.shutdown(socket.SHUT_WR)
             data = await task
             # ProactorEventLoop could deliver hello, so endswith is necessary
-            self.assertEndsWith(data, b'world')
+            self.assertTrue(data.endswith(b'world'))
 
     # After the first connect attempt before the listener is ready,
     # the socket needs time to "recover" to make the next connect call.
@@ -341,7 +341,7 @@ class BaseSockTestsMixin:
         data = await self.loop.sock_recv(sock, DATA_SIZE)
         # HTTP headers size is less than MTU,
         # they are sent by the first packet always
-        self.assertStartsWith(data, b'HTTP/1.0 200 OK')
+        self.assertTrue(data.startswith(b'HTTP/1.0 200 OK'))
         while data.find(b'\r\n\r\n') == -1:
             data += await self.loop.sock_recv(sock, DATA_SIZE)
         # Strip headers
@@ -394,7 +394,7 @@ class BaseSockTestsMixin:
         data = bytes(buf[:nbytes])
         # HTTP headers size is less than MTU,
         # they are sent by the first packet always
-        self.assertStartsWith(data, b'HTTP/1.0 200 OK')
+        self.assertTrue(data.startswith(b'HTTP/1.0 200 OK'))
         while data.find(b'\r\n\r\n') == -1:
             nbytes = await self.loop.sock_recv_into(sock, buf)
             data = bytes(buf[:nbytes])
@@ -613,10 +613,19 @@ class BaseSockTestsMixin:
 
 if sys.platform == 'win32':
 
-    class _DatagramSendToNonListeningAddressMixin:
-        # Shared by SelectEventLoopTests and ProactorEventLoopTests so that
-        # sock_recvfrom()/sock_recvfrom_into() behave identically on both
-        # event loop implementations.
+    class SelectEventLoopTests(BaseSockTestsMixin,
+                               test_utils.TestCase):
+
+        def create_event_loop(self):
+            return asyncio.SelectorEventLoop()
+
+
+    class ProactorEventLoopTests(BaseSockTestsMixin,
+                                 test_utils.TestCase):
+
+        def create_event_loop(self):
+            return asyncio.ProactorEventLoop()
+
 
         async def _basetest_datagram_send_to_non_listening_address(self,
                                                                    recvfrom):
@@ -625,9 +634,8 @@ if sys.platform == 'win32':
             #   https://github.com/python/cpython/issues/88906
             #   https://bugs.python.org/issue47071
             #   https://bugs.python.org/issue44743
-            # Sending a datagram to an address that isn't listening can
-            # surface as a ConnectionResetError on a later receive; the
-            # socket must still be usable afterwards.
+            # The Proactor event loop would fail to receive datagram messages
+            # after sending a message to an address that wasn't listening.
 
             def create_socket():
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -662,8 +670,7 @@ if sys.platform == 'win32':
 
             # this should send to an address that isn't listening
             await self.loop.sock_sendto(socket_1, b'c', addr_3)
-            with self.assertRaises(ConnectionResetError):
-                await socket_1_recv_task
+            self.assertEqual(await socket_1_recv_task, b'')
             socket_1_recv_task = self.loop.create_task(recvfrom(socket_1))
             await asyncio.sleep(0)
 
@@ -698,22 +705,6 @@ if sys.platform == 'win32':
             self.loop.run_until_complete(
                 self._basetest_datagram_send_to_non_listening_address(
                     recvfrom_into))
-
-
-    class SelectEventLoopTests(_DatagramSendToNonListeningAddressMixin,
-                               BaseSockTestsMixin,
-                               test_utils.TestCase):
-
-        def create_event_loop(self):
-            return asyncio.SelectorEventLoop()
-
-
-    class ProactorEventLoopTests(_DatagramSendToNonListeningAddressMixin,
-                                 BaseSockTestsMixin,
-                                 test_utils.TestCase):
-
-        def create_event_loop(self):
-            return asyncio.ProactorEventLoop()
 
 else:
     import selectors

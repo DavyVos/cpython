@@ -77,7 +77,7 @@ class Test_TestLoader(unittest.TestCase):
 
         loader = unittest.TestLoader()
         # This has to be false for the test to succeed
-        self.assertNotStartsWith('runTest', loader.testMethodPrefix)
+        self.assertFalse('runTest'.startswith(loader.testMethodPrefix))
 
         suite = loader.loadTestsFromTestCase(Foo)
         self.assertIsInstance(suite, loader.suiteClass)

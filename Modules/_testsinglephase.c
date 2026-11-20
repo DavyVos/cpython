@@ -244,8 +244,6 @@ static inline module_state *
 get_module_state(PyObject *module)
 {
     PyModuleDef *def = PyModule_GetDef(module);
-    assert(def);
-
     if (def->m_size == -1) {
         return &global_state.module;
     }
@@ -254,7 +252,6 @@ get_module_state(PyObject *module)
     }
     else {
         module_state *state = (module_state*)PyModule_GetState(module);
-        assert(state == PyModule_GetState_DuringGC(module));
         assert(state != NULL);
         return state;
     }

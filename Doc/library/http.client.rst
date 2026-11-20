@@ -34,7 +34,7 @@ The module provides the following classes:
 
 
 .. class:: HTTPConnection(host, port=None[, timeout], source_address=None, \
-                          blocksize=8192, max_response_headers=None)
+                          blocksize=8192)
 
    An :class:`HTTPConnection` instance represents one transaction with an HTTP
    server.  It should be instantiated by passing it a host and optional port
@@ -46,9 +46,7 @@ The module provides the following classes:
    The optional *source_address* parameter may be a tuple of a (host, port)
    to use as the source address the HTTP connection is made from.
    The optional *blocksize* parameter sets the buffer size in bytes for
-   sending a file-like message body. The optional *max_response_headers*
-   parameter sets the maximum number of allowed response headers to help
-   prevent denial-of-service attacks, otherwise the default value (100) is used.
+   sending a file-like message body.
 
    For example, the following calls all create instances that connect to the server
    at the same host and port::
@@ -68,13 +66,10 @@ The module provides the following classes:
    .. versionchanged:: 3.7
       *blocksize* parameter was added.
 
-   .. versionchanged:: 3.15
-      *max_response_headers* parameter was added.
-
 
 .. class:: HTTPSConnection(host, port=None, *[, timeout], \
                            source_address=None, context=None, \
-                           blocksize=8192, max_response_headers=None)
+                           blocksize=8192)
 
    A subclass of :class:`HTTPConnection` that uses SSL for communication with
    secure servers.  Default port is ``443``.  If *context* is specified, it
@@ -113,9 +108,6 @@ The module provides the following classes:
    .. versionchanged:: 3.12
       The deprecated *key_file*, *cert_file* and *check_hostname* parameters
       have been removed.
-
-   .. versionchanged:: 3.15
-      *max_response_headers* parameter was added.
 
 
 .. class:: HTTPResponse(sock, debuglevel=0, method=None, url=None)
@@ -230,29 +222,6 @@ The following exceptions are raised as appropriate:
       Previously, :exc:`BadStatusLine`\ ``('')`` was raised.
 
 
-.. exception:: ProxyTunnelError
-
-   A subclass of :exc:`OSError`.  Raised when the proxy server answers the
-   CONNECT request sent for :meth:`HTTPConnection.set_tunnel` with a status
-   other than 200.
-
-   .. attribute:: code
-
-      The HTTP status code of the proxy's response, such as ``407``.
-
-   .. attribute:: reason
-
-      The reason phrase of the proxy's response.
-
-   .. attribute:: headers
-
-      The headers of the proxy's response, as an
-      :class:`http.client.HTTPMessage` instance.
-
-   .. versionadded:: next
-      Previously, :exc:`OSError` was raised.
-
-
 The constants defined in this module are:
 
 .. data:: HTTP_PORT
@@ -282,7 +251,7 @@ HTTPConnection Objects
 
 
 .. method:: HTTPConnection.request(method, url, body=None, headers={}, *, \
-            encode_chunked=False, continue_timeout=2.5)
+            encode_chunked=False)
 
    This will send a request to the server using the HTTP request
    method *method* and the request URI *url*. The provided *url* must be
@@ -300,7 +269,7 @@ HTTPConnection Objects
    instance of :class:`io.TextIOBase`, the data returned by the ``read()``
    method will be encoded as ISO-8859-1, otherwise the data returned by
    ``read()`` is sent as is.  If *body* is an iterable, the elements of the
-   iterable are sent as is until the iterable is :term:`exhausted`.
+   iterable are sent as is until the iterable is exhausted.
 
    The *headers* argument should be a mapping of extra HTTP headers to send
    with the request. A :rfc:`Host header <2616#section-14.23>`
@@ -312,7 +281,7 @@ HTTPConnection Objects
    but there is a request body, one of those
    header fields will be added automatically.  If
    *body* is ``None``, the Content-Length header is set to ``0`` for
-   methods that expect a body (``PUT``, ``POST``, ``PATCH``, and ``QUERY``).  If
+   methods that expect a body (``PUT``, ``POST``, and ``PATCH``).  If
    *body* is a string or a bytes-like object that is not also a
    :term:`file <file object>`, the Content-Length header is
    set to its length.  Any other type of *body* (files
@@ -358,35 +327,10 @@ HTTPConnection Objects
       No attempt is made to determine the Content-Length for file
       objects.
 
-   .. versionchanged:: next
-      The *continue_timeout* parameter was added.
-
-      If the headers include ``Expect: 100-Continue`` and *body* is set, the
-      body will not be sent until either a ``100 Continue`` response is
-      received from the server or *continue_timeout* seconds have elapsed; if a
-      response code other than 100 is received, the body will not be sent at all.
-
-      *continue_timeout* value must be greater than zero, otherwise
-      :exc:`ValueError` is raised.
-
-   .. versionchanged:: next
-      ``QUERY`` was added to the methods that expect a body.
-
-.. method:: HTTPConnection.getresponse(support_continue=False)
+.. method:: HTTPConnection.getresponse()
 
    Should be called after a request is sent to get the response from the server.
    Returns an :class:`HTTPResponse` instance.
-
-   By default, ``100 Continue`` responses are skipped and the method returns
-   the first response with a status other than 100.  If *support_continue*
-   is true, a ``100 Continue`` response is returned to the caller, which must
-   then send the request body and call :meth:`getresponse` again to obtain
-   the final response.
-
-   .. note::
-
-      The whole response must be read before a new request can be sent to
-      the server.
 
    .. versionchanged:: 3.5
       If a :exc:`ConnectionError` or subclass is raised, the
@@ -396,10 +340,6 @@ HTTPConnection Objects
       Note that this does not apply to :exc:`OSError`\s raised by the underlying
       socket. Instead the caller is responsible to call :meth:`close` on the
       existing connection.
-
-   .. versionchanged:: next
-      Added the *support_continue* parameter. (In prior versions
-      a ``Continue`` response was always ignored.)
 
 
 .. method:: HTTPConnection.set_debuglevel(level)
@@ -422,8 +362,7 @@ HTTPConnection Objects
    proxy server).
 
    The *headers* argument should be a mapping of extra HTTP headers to send with
-   the CONNECT request. Non-string header values are converted to strings via
-   :func:`str`.
+   the CONNECT request.
 
    As HTTP/1.1 is used for HTTP CONNECT tunnelling request, `as per the RFC
    <https://datatracker.ietf.org/doc/html/rfc7231#section-4.3.6>`_, a HTTP ``Host:``
@@ -449,9 +388,6 @@ HTTPConnection Objects
       protocol HTTP/1.0. ``Host:`` HTTP headers are mandatory for HTTP/1.1, so
       one will be automatically generated and transmitted if not provided in
       the headers argument.
-
-   .. versionchanged:: next
-      :exc:`ProxyTunnelError` is raised if the proxy rejects the CONNECT request.
 
 
 .. method:: HTTPConnection.get_proxy_response_headers()
@@ -485,22 +421,12 @@ HTTPConnection Objects
    .. versionadded:: 3.7
 
 
-.. attribute:: HTTPConnection.max_response_headers
-
-   The maximum number of allowed response headers to help prevent denial-of-service
-   attacks. By default, the maximum number of allowed headers is set to 100.
-   The same limit applies to the trailer section of a chunked response.
-
-   .. versionadded:: 3.15
-
-
 As an alternative to using the :meth:`~HTTPConnection.request` method described above, you can
 also send your request step by step, by using the four functions below.
 
 
 .. method:: HTTPConnection.putrequest(method, url, skip_host=False, \
-                                      skip_accept_encoding=False, \
-                                      continue_timeout=2.5)
+                                      skip_accept_encoding=False)
 
    This should be the first call after the connection to the server has been
    made. It sends a line to the server consisting of the *method* string,
@@ -508,14 +434,6 @@ also send your request step by step, by using the four functions below.
    sending of ``Host:`` or ``Accept-Encoding:`` headers (for example to accept
    additional content encodings), specify *skip_host* or *skip_accept_encoding*
    with non-False values.
-
-   If an ``Expect: 100-Continue`` header is sent, the optional
-   *continue_timeout* parameter sets how many seconds the client will wait for
-   a ``100 Continue`` response before sending the message body,    It must be
-   greater than zero, otherwise :exc:`ValueError` is raised.
-
-   .. versionchanged:: next
-      *continue_timeout* parameter was added.
 
 
 .. method:: HTTPConnection.putheader(header, argument[, ...])
@@ -530,12 +448,7 @@ also send your request step by step, by using the four functions below.
 
    Send a blank line to the server, signalling the end of the headers. The
    optional *message_body* argument can be used to pass a message body
-   associated with the request. If a body is provided and an
-   ``Expect: 100-Continue`` header has been sent, the body will not be sent
-   until a ``100 Continue`` response is received from the server; if another
-   response code is received, the body is not sent at all.  If no response
-   is received within the *continue_timeout* given to :meth:`putrequest`,
-   the body will be sent regardless.
+   associated with the request.
 
    If *encode_chunked* is ``True``, the result of each iteration of
    *message_body* will be chunk-encoded as specified in :rfc:`7230`,
@@ -555,12 +468,6 @@ also send your request step by step, by using the four functions below.
 
    .. versionchanged:: 3.6
       Added chunked encoding support and the *encode_chunked* parameter.
-
-   .. versionchanged:: next
-      If an ``Expect: 100-Continue`` header has been sent, the body will not be
-      sent until a ``100 Continue`` response is received from the server, or a
-      contine_timeout has elapsed. If the response code is not 100, the body
-      will not be sent at all.
 
 
 .. method:: HTTPConnection.send(data)
@@ -736,46 +643,6 @@ method attribute. Here is an example session that uses the ``PUT`` method::
     >>> BODY = "***filecontents***"
     >>> conn = http.client.HTTPConnection("localhost", 8080)
     >>> conn.request("PUT", "/file", BODY)
-    >>> response = conn.getresponse()
-    >>> print(response.status, response.reason)
-    200 OK
-
-Conditional transmission of the body is supported when an ``Expect: 100-Continue``
-header is set. To use this in a simple case, just set the header, and
-optionally the time for which the client should wait for a ``100 Continue``
-response before sending the body regardless::
-
-    >>> import http.client
-    >>> BODY = "***filecontents***"
-    >>> conn = http.client.HTTPConnection("localhost", 8080)
-    >>> conn.request("PUT", "/file", BODY, headers={'Expect': '100-Continue'},
-    ...              continue_timeout=1.0)
-    >>> response = conn.getresponse()
-    >>> # You will not see the '100' response, as it is handled internally
-    >>> print(response.status, response.reason)
-    200, OK
-
-Here is a more complex example in which we manually check the response and
-decide whether to send the body. This may be useful if the body must be
-generated by some resource-intensive process which should be skipped if the
-server will not accept it.  *continue_timeout* does not apply here, so this
-should only be used with servers known to support ``Expect: 100-Continue``;
-otherwise :meth:`~HTTPConnection.getresponse` may block until the
-connection's *timeout* expires. ::
-
-    >>> import http.client
-    >>> conn = http.client.HTTPConnection("localhost", 8080)
-    >>> conn.putrequest("PUT", "/file")
-    >>> conn.putheader('Expect', '100-Continue')
-    >>> # Assuming you know in advance what the length will be
-    >>> # If not, you will need to encode it as chunked
-    >>> conn.putheader('Content-Length', '42')
-    >>> conn.endheaders()
-    >>> response = conn.getresponse(support_continue=True)
-    >>> print(response.status, response.reason)
-    100, Continue
-    >>> BODY = resource_intensive_calculation()
-    >>> conn.send(BODY)
     >>> response = conn.getresponse()
     >>> print(response.status, response.reason)
     200, OK

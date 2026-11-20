@@ -133,13 +133,13 @@ PyDoc_STRVAR(msvcrt_open_osfhandle__doc__,
     {"open_osfhandle", _PyCFunction_CAST(msvcrt_open_osfhandle), METH_FASTCALL, msvcrt_open_osfhandle__doc__},
 
 static long
-msvcrt_open_osfhandle_impl(PyObject *module, HANDLE handle, int flags);
+msvcrt_open_osfhandle_impl(PyObject *module, void *handle, int flags);
 
 static PyObject *
 msvcrt_open_osfhandle(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
-    HANDLE handle;
+    void *handle;
     int flags;
     long _return_value;
 
@@ -355,24 +355,10 @@ msvcrt_putch(PyObject *module, PyObject *arg)
     PyObject *return_value = NULL;
     char char_value;
 
-    if (PyBytes_Check(arg)) {
-        if (PyBytes_GET_SIZE(arg) != 1) {
-            PyErr_Format(PyExc_TypeError,
-                "putch(): argument must be a byte string of length 1, "
-                "not a bytes object of length %zd",
-                PyBytes_GET_SIZE(arg));
-            goto exit;
-        }
+    if (PyBytes_Check(arg) && PyBytes_GET_SIZE(arg) == 1) {
         char_value = PyBytes_AS_STRING(arg)[0];
     }
-    else if (PyByteArray_Check(arg)) {
-        if (PyByteArray_GET_SIZE(arg) != 1) {
-            PyErr_Format(PyExc_TypeError,
-                "putch(): argument must be a byte string of length 1, "
-                "not a bytearray object of length %zd",
-                PyByteArray_GET_SIZE(arg));
-            goto exit;
-        }
+    else if (PyByteArray_Check(arg) && PyByteArray_GET_SIZE(arg) == 1) {
         char_value = PyByteArray_AS_STRING(arg)[0];
     }
     else {
@@ -410,10 +396,7 @@ msvcrt_putwch(PyObject *module, PyObject *arg)
         goto exit;
     }
     if (PyUnicode_GET_LENGTH(arg) != 1) {
-        PyErr_Format(PyExc_TypeError,
-            "putwch(): argument must be a unicode character, "
-            "not a string of length %zd",
-            PyUnicode_GET_LENGTH(arg));
+        _PyArg_BadArgument("putwch", "argument", "a unicode character", arg);
         goto exit;
     }
     unicode_char = PyUnicode_READ_CHAR(arg, 0);
@@ -447,24 +430,10 @@ msvcrt_ungetch(PyObject *module, PyObject *arg)
     PyObject *return_value = NULL;
     char char_value;
 
-    if (PyBytes_Check(arg)) {
-        if (PyBytes_GET_SIZE(arg) != 1) {
-            PyErr_Format(PyExc_TypeError,
-                "ungetch(): argument must be a byte string of length 1, "
-                "not a bytes object of length %zd",
-                PyBytes_GET_SIZE(arg));
-            goto exit;
-        }
+    if (PyBytes_Check(arg) && PyBytes_GET_SIZE(arg) == 1) {
         char_value = PyBytes_AS_STRING(arg)[0];
     }
-    else if (PyByteArray_Check(arg)) {
-        if (PyByteArray_GET_SIZE(arg) != 1) {
-            PyErr_Format(PyExc_TypeError,
-                "ungetch(): argument must be a byte string of length 1, "
-                "not a bytearray object of length %zd",
-                PyByteArray_GET_SIZE(arg));
-            goto exit;
-        }
+    else if (PyByteArray_Check(arg) && PyByteArray_GET_SIZE(arg) == 1) {
         char_value = PyByteArray_AS_STRING(arg)[0];
     }
     else {
@@ -502,10 +471,7 @@ msvcrt_ungetwch(PyObject *module, PyObject *arg)
         goto exit;
     }
     if (PyUnicode_GET_LENGTH(arg) != 1) {
-        PyErr_Format(PyExc_TypeError,
-            "ungetwch(): argument must be a unicode character, "
-            "not a string of length %zd",
-            PyUnicode_GET_LENGTH(arg));
+        _PyArg_BadArgument("ungetwch", "argument", "a unicode character", arg);
         goto exit;
     }
     unicode_char = PyUnicode_READ_CHAR(arg, 0);
@@ -531,14 +497,14 @@ PyDoc_STRVAR(msvcrt_CrtSetReportFile__doc__,
     {"CrtSetReportFile", _PyCFunction_CAST(msvcrt_CrtSetReportFile), METH_FASTCALL, msvcrt_CrtSetReportFile__doc__},
 
 static void *
-msvcrt_CrtSetReportFile_impl(PyObject *module, int type, HANDLE file);
+msvcrt_CrtSetReportFile_impl(PyObject *module, int type, void *file);
 
 static PyObject *
 msvcrt_CrtSetReportFile(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
     int type;
-    HANDLE file;
+    void *file;
     void *_return_value;
 
     if (!_PyArg_CheckPositional("CrtSetReportFile", nargs, 2, 2)) {
@@ -690,21 +656,9 @@ msvcrt_SetErrorMode(PyObject *module, PyObject *arg)
     PyObject *return_value = NULL;
     unsigned int mode;
 
-    {
-        Py_ssize_t _bytes = PyLong_AsNativeBytes(arg, &mode, sizeof(unsigned int),
-                Py_ASNATIVEBYTES_NATIVE_ENDIAN |
-                Py_ASNATIVEBYTES_ALLOW_INDEX |
-                Py_ASNATIVEBYTES_UNSIGNED_BUFFER);
-        if (_bytes < 0) {
-            goto exit;
-        }
-        if ((size_t)_bytes > sizeof(unsigned int)) {
-            if (PyErr_WarnEx(PyExc_DeprecationWarning,
-                "integer value out of range", 1) < 0)
-            {
-                goto exit;
-            }
-        }
+    mode = (unsigned int)PyLong_AsUnsignedLongMask(arg);
+    if (mode == (unsigned int)-1 && PyErr_Occurred()) {
+        goto exit;
     }
     return_value = msvcrt_SetErrorMode_impl(module, mode);
 
@@ -743,4 +697,4 @@ exit:
 #ifndef MSVCRT_GETERRORMODE_METHODDEF
     #define MSVCRT_GETERRORMODE_METHODDEF
 #endif /* !defined(MSVCRT_GETERRORMODE_METHODDEF) */
-/*[clinic end generated code: output=58c1771c8b9a209b input=a9049054013a1b77]*/
+/*[clinic end generated code: output=de9687b46212c2ed input=a9049054013a1b77]*/

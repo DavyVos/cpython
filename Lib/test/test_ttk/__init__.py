@@ -19,13 +19,6 @@ from _tkinter import TclError
 from tkinter import ttk
 
 
-class TestModule(unittest.TestCase):
-    def test_deprecated_module_attributes(self):
-        support.check_deprecated_module_attributes(
-            self, ttk, "__version__", "__author__", remove=(3, 20),
-        )
-
-
 def setUpModule():
     wantobjects = support.get_resource_value('wantobjects')
     if wantobjects is not None:

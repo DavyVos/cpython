@@ -54,8 +54,8 @@ class Code:
     def __repr__(self) -> str:
         return f"Code(**{self.__dict__})"
 
-    co_localsplusnames: tuple[str, ...]
-    co_localspluskinds: tuple[int, ...]
+    co_localsplusnames: tuple[str]
+    co_localspluskinds: tuple[int]
 
     def get_localsplus_names(self, select_kind: int) -> tuple[str, ...]:
         varnames: list[str] = []

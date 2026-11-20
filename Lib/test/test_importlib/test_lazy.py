@@ -9,6 +9,7 @@ import unittest
 
 from test.support import threading_helper
 from test.test_importlib import util as test_util
+from test.support.testcase import ExtraAssertions
 
 
 class CollectInit:
@@ -58,7 +59,7 @@ class TestingImporter(abc.MetaPathFinder, abc.Loader):
         self.load_count += 1
 
 
-class LazyLoaderTests(unittest.TestCase):
+class LazyLoaderTests(unittest.TestCase, ExtraAssertions):
 
     def test_init(self):
         with self.assertRaises(TypeError):

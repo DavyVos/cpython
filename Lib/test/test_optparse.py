@@ -14,9 +14,8 @@ import unittest
 
 from io import StringIO
 from test import support
-from test.support import cpython_only, os_helper
+from test.support import os_helper
 from test.support.i18n_helper import TestTranslationsBase, update_translation_snapshots
-from test.support.import_helper import ensure_lazy_imports
 
 import optparse
 from optparse import make_option, Option, \
@@ -433,13 +432,6 @@ class TestOptionValues(BaseTest):
         self.assertNotEqual(values, {})
         self.assertNotEqual(values, "")
         self.assertNotEqual(values, [])
-
-    def test_replace(self):
-        values = Values(defaults={"foo": "bar", "baz": 42})
-        new = copy.replace(values, baz=43, spam="eggs")
-        self.assertIsInstance(new, Values)
-        self.assertEqual(vars(new), {"foo": "bar", "baz": 43, "spam": "eggs"})
-        self.assertEqual(vars(values), {"foo": "bar", "baz": 42})
 
 
 class TestTypeAliases(BaseTest):
@@ -1018,7 +1010,7 @@ class TestOptionGroup(BaseTest):
                                              description="Some more options")
         group.set_title("Bacon")
         group.add_option("--bacon", type="int")
-        self.assertIs(self.parser.get_option_group("--bacon"), group)
+        self.assertTrue(self.parser.get_option_group("--bacon"), group)
 
 # -- Test extending and parser.parse_args() ----------------------------
 
@@ -1663,21 +1655,10 @@ class MiscTestCase(unittest.TestCase):
         not_exported = {'check_builtin', 'AmbiguousOptionError', 'NO_DEFAULT'}
         support.check__all__(self, optparse, not_exported=not_exported)
 
-    @cpython_only
-    def test_lazy_import(self):
-        ensure_lazy_imports("optparse", {"textwrap"})
-
 
 class TestTranslations(TestTranslationsBase):
     def test_translations(self):
         self.assertMsgidsEqual(optparse)
-
-
-class TestModule(unittest.TestCase):
-    def test_deprecated_module_attributes(self):
-        support.check_deprecated_module_attributes(
-            self, optparse, "__version__", "__copyright__", remove=(3, 20),
-        )
 
 
 if __name__ == '__main__':

@@ -1,5 +1,5 @@
 ***********************
-Debugging and profiling
+Debugging and Profiling
 ***********************
 
 These libraries help you with Python development: the debugger enables you to
@@ -15,8 +15,7 @@ intrusive debugging or patching.
    bdb.rst
    faulthandler.rst
    pdb.rst
-   profiling.rst
-   pstats.rst
+   profile.rst
    timeit.rst
    trace.rst
    tracemalloc.rst

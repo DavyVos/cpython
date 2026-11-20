@@ -23,14 +23,20 @@ the CPython prompt as closely as possible, with the exception of
 allowing multiline input and multiline history entries.
 """
 
+from __future__ import annotations
+
 import _sitebuiltins
 import functools
 import os
 import sys
 import code
-import warnings
 
-from .readline import _get_reader, multiline_input, append_history_file
+from .readline import _get_reader, multiline_input
+
+TYPE_CHECKING = False
+
+if TYPE_CHECKING:
+    from typing import Any
 
 
 _error: tuple[type[Exception], ...] | type[Exception]
@@ -66,7 +72,6 @@ def _clear_screen():
     reader.scheduled_commands.append("clear_screen")
 
 
-# Keep this in sync with _pyrepl.utils.COMMANDS
 REPL_COMMANDS = {
     "exit": _sitebuiltins.Quitter('exit', ''),
     "quit": _sitebuiltins.Quitter('quit' ,''),
@@ -123,25 +128,20 @@ def run_multiline_interactive_console(
         command = REPL_COMMANDS[statement]
         if callable(command):
             # Make sure that history does not change because of commands
-            with reader.suspend_history(), reader.suspend_colorization():
+            with reader.suspend_history():
                 command()
             return True
         return False
 
-    while True:
+    while 1:
         try:
             try:
                 sys.stdout.flush()
             except Exception:
                 pass
-            try:
-                ps1 = str(getattr(sys, "ps1", ">>> "))
-            except Exception:
-                ps1 = ">>> "
-            try:
-                ps2 = str(getattr(sys, "ps2", "... "))
-            except Exception:
-                ps2 = "... "
+
+            ps1 = getattr(sys, "ps1", ">>> ")
+            ps2 = getattr(sys, "ps2", "... ")
             try:
                 statement = multiline_input(more_lines, ps1, ps2)
             except EOFError:
@@ -153,11 +153,6 @@ def run_multiline_interactive_console(
             input_name = f"<python-input-{input_n}>"
             more = console.push(_strip_final_indent(statement), filename=input_name, _symbol="single")  # type: ignore[call-arg]
             assert not more
-            try:
-                append_history_file()
-            except (FileNotFoundError, PermissionError, OSError) as e:
-                warnings.warn(f"failed to open the history file for writing: {e}")
-
             input_n += 1
         except KeyboardInterrupt:
             r = _get_reader()
@@ -165,8 +160,9 @@ def run_multiline_interactive_console(
             if r.input_trans is r.isearch_trans:
                 r.do_cmd(("isearch-end", [""]))
             r.pos = len(r.get_unicode())
-            r.invalidate_full()
+            r.dirty = True
             r.refresh()
+            r.in_bracketed_paste = False
             console.write("\nKeyboardInterrupt\n")
             console.resetbuffer()
         except MemoryError:

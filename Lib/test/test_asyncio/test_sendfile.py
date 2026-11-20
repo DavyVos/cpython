@@ -22,7 +22,7 @@ except ImportError:
 
 
 def tearDownModule():
-    asyncio.set_event_loop(None)
+    asyncio.set_event_loop_policy(None)
 
 
 class MySendfileProto(asyncio.Protocol):
@@ -376,47 +376,6 @@ class SendfileMixin(SendfileBase):
         self.assertEqual(srv_proto.data, self.DATA)
         self.assertEqual(self.file.tell(), len(self.DATA))
 
-    def test_sendfile_cancel_empty_waiter(self):
-        for reading in (True, False):
-            with self.subTest(reading=reading):
-                srv_proto, cli_proto = self.prepare_sendfile()
-                transport = cli_proto.transport
-                if not reading:
-                    transport.pause_reading()
-                waiter = self.loop.create_future()
-
-                def make_empty_waiter():
-                    transport._empty_waiter = waiter
-                    return waiter
-
-                with mock.patch.object(transport, '_make_empty_waiter',
-                                       side_effect=make_empty_waiter):
-                    task = self.loop.create_task(
-                        self.loop.sendfile(transport, self.file))
-                    test_utils.run_briefly(self.loop)
-                    self.assertIs(transport._empty_waiter, waiter)
-                    self.assertFalse(waiter.done())
-                    self.assertFalse(transport.is_reading())
-                    task.cancel()
-                    with self.assertRaises(asyncio.CancelledError):
-                        self.run_loop(task)
-
-                try:
-                    self.assertIsNone(transport._empty_waiter)
-                    self.assertEqual(transport.is_reading(), reading)
-                    if isinstance(self.loop, asyncio.SelectorEventLoop):
-                        self.assertIs(
-                            self.loop._transports[transport._sock_fd],
-                            transport)
-                finally:
-                    transport._reset_empty_waiter()
-
-                ret = self.run_loop(self.loop.sendfile(transport, self.file))
-                transport.close()
-                self.run_loop(srv_proto.done)
-                self.assertEqual(ret, len(self.DATA))
-                self.assertEqual(srv_proto.data, self.DATA)
-
     def test_sendfile_force_fallback(self):
         srv_proto, cli_proto = self.prepare_sendfile()
 
@@ -553,38 +512,6 @@ class SendfileMixin(SendfileBase):
         self.assertEqual(srv_proto.data, self.DATA)
         self.assertEqual(self.file.tell(), len(self.DATA))
 
-    def test_sendfile_ssl_close_peer_in_the_middle_closes_transport(self):
-        # The protocol closes its transport when the connection is lost, as
-        # aiohttp's does.  That close() must leave a transport on which the
-        # fallback can still restore the protocol: sendfile() raises
-        # ConnectionError, not AttributeError.
-        srv_proto, cli_proto = self.prepare_sendfile(
-            is_ssl=True, close_after=1024)
-        connection_lost = cli_proto.connection_lost
-
-        def close_on_lost(exc):
-            cli_proto.transport.close()
-            connection_lost(exc)
-
-        cli_proto.connection_lost = close_on_lost
-        # Read the file synchronously, so that the fallback only waits in
-        # drain().  A read in the executor that completes in the same loop
-        # iteration as the reset lets the fallback finish before close() is
-        # called, which hides the bug.
-        def run_in_executor(executor, func, *args):
-            fut = self.loop.create_future()
-            fut.set_result(func(*args))
-            return fut
-
-        with mock.patch.object(self.loop, 'run_in_executor', run_in_executor):
-            with self.assertRaises(ConnectionError):
-                self.run_loop(
-                    self.loop.sendfile(cli_proto.transport, self.file))
-        self.run_loop(srv_proto.done)
-        self.run_loop(cli_proto.done)
-        self.assertTrue(1024 <= srv_proto.nbytes < len(self.DATA),
-                        srv_proto.nbytes)
-
     # On Solaris, lowering SO_RCVBUF on a TCP connection after it has been
     # established has no effect. Due to its age, this bug affects both Oracle
     # Solaris as well as all other OpenSolaris forks (unless they fixed it
@@ -658,8 +585,7 @@ class SendfileMixin(SendfileBase):
         transport = mock.Mock()
         transport.is_closing.side_effect = lambda: False
         transport._sendfile_compatible = constants._SendfileMode.FALLBACK
-        with self.assertRaisesRegex(asyncio.SendfileNotAvailableError,
-                                    'fallback is disabled'):
+        with self.assertRaisesRegex(RuntimeError, 'fallback is disabled'):
             self.loop.run_until_complete(
                 self.loop.sendfile(transport, None, fallback=False))
 

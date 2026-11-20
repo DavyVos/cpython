@@ -8,13 +8,12 @@
 #include "pycore_ceval.h"         // _PyEval_SignalReceived()
 #include "pycore_emscripten_signal.h"  // _Py_CHECK_EMSCRIPTEN_SIGNALS
 #include "pycore_fileutils.h"     // _Py_BEGIN_SUPPRESS_IPH
-#include "pycore_interpframe.h"   // _PyThreadState_GetFrame()
+#include "pycore_frame.h"         // _PyInterpreterFrame
 #include "pycore_moduleobject.h"  // _PyModule_GetState()
 #include "pycore_pyerrors.h"      // _PyErr_SetString()
 #include "pycore_pystate.h"       // _PyThreadState_GET()
 #include "pycore_signal.h"        // _Py_RestoreSignals()
 #include "pycore_time.h"          // _PyTime_FromSecondsObject()
-#include "pycore_tuple.h"         // _PyTuple_FromPairSteal
 
 #ifndef MS_WINDOWS
 #  include "posixmodule.h"        // _PyLong_FromUid()
@@ -51,10 +50,6 @@
 
 #if defined(PYPTHREAD_SIGMASK) && defined(HAVE_PTHREAD_H)
 #  include <pthread.h>
-#endif
-
-#ifdef HAVE_SYS_PIDFD_H
-#  include <sys/pidfd.h>          // pidfd_send_signal()
 #endif
 
 #ifndef SIG_ERR
@@ -198,16 +193,27 @@ double_from_timeval(struct timeval *tv)
 static PyObject *
 itimer_retval(struct itimerval *iv)
 {
-    PyObject *value = PyFloat_FromDouble(double_from_timeval(&iv->it_value));
-    if (value == NULL) {
+    PyObject *r, *v;
+
+    r = PyTuple_New(2);
+    if (r == NULL)
+        return NULL;
+
+    if(!(v = PyFloat_FromDouble(double_from_timeval(&iv->it_value)))) {
+        Py_DECREF(r);
         return NULL;
     }
-    PyObject *interval = PyFloat_FromDouble(double_from_timeval(&iv->it_interval));
-    if (interval == NULL) {
-        Py_DECREF(value);
+
+    PyTuple_SET_ITEM(r, 0, v);
+
+    if(!(v = PyFloat_FromDouble(double_from_timeval(&iv->it_interval)))) {
+        Py_DECREF(r);
         return NULL;
     }
-    return _PyTuple_FromPairSteal(value, interval);
+
+    PyTuple_SET_ITEM(r, 1, v);
+
+    return r;
 }
 #endif
 
@@ -239,8 +245,7 @@ report_wakeup_write_error(void *data)
     errno = (int) (intptr_t) data;
     PyObject *exc = PyErr_GetRaisedException();
     PyErr_SetFromErrno(PyExc_OSError);
-    PyErr_FormatUnraisable("Exception ignored while "
-                           "trying to write to the signal wakeup fd");
+    PyErr_FormatUnraisable("Exception ignored when trying to write to the signal wakeup fd");
     PyErr_SetRaisedException(exc);
     errno = save_errno;
     return 0;
@@ -257,8 +262,7 @@ report_wakeup_send_error(void* data)
        recognizes the error codes used by both GetLastError() and
        WSAGetLastError */
     PyErr_SetExcFromWindowsErr(PyExc_OSError, send_errno);
-    PyErr_FormatUnraisable("Exception ignored while "
-                           "trying to send to the signal wakeup fd");
+    PyErr_FormatUnraisable("Exception ignored when trying to send to the signal wakeup fd");
     PyErr_SetRaisedException(exc);
     return 0;
 }
@@ -704,7 +708,6 @@ signal_siginterrupt_impl(PyObject *module, int signalnum, int flag)
 
 
 /*[clinic input]
-@permit_long_summary
 signal.set_wakeup_fd
 
     fd as fdobj: object
@@ -723,7 +726,7 @@ The fd must be non-blocking.
 static PyObject *
 signal_set_wakeup_fd_impl(PyObject *module, PyObject *fdobj,
                           int warn_on_full_buffer)
-/*[clinic end generated code: output=2280d72dd2a54c4f input=1b914d48079e9274]*/
+/*[clinic end generated code: output=2280d72dd2a54c4f input=5b545946a28b8339]*/
 {
     struct _Py_stat_struct status;
 #ifdef MS_WINDOWS
@@ -1203,13 +1206,13 @@ signal.sigtimedwait
 
 Like sigwaitinfo(), but with a timeout.
 
-The timeout is specified in seconds, rounded up to nanoseconds.
+The timeout is specified in seconds, with floating-point numbers allowed.
 [clinic start generated code]*/
 
 static PyObject *
 signal_sigtimedwait_impl(PyObject *module, sigset_t sigset,
                          PyObject *timeout_obj)
-/*[clinic end generated code: output=59c8971e8ae18a64 input=f89af57d645e48e0]*/
+/*[clinic end generated code: output=59c8971e8ae18a64 input=955773219c1596cd]*/
 {
     PyTime_t timeout;
     if (_PyTime_FromSecondsObject(&timeout,
@@ -1304,16 +1307,15 @@ signal_pthread_kill_impl(PyObject *module, unsigned long thread_id,
 
 
 // This system call always crashes on older Android versions.
-#if defined(_Py_HAVE_PIDFD_SEND_SIGNAL) \
-    || (defined(__linux__) && defined(__NR_pidfd_send_signal) \
-        && !(defined(__ANDROID__) && __ANDROID_API__ < 31))
+#if defined(__linux__) && defined(__NR_pidfd_send_signal) && \
+    !(defined(__ANDROID__) && __ANDROID_API__ < 31)
 /*[clinic input]
 signal.pidfd_send_signal
 
     pidfd: int
     signalnum: int
     siginfo: object = None
-    flags: unsigned_int(bitwise=True) = 0
+    flags: int = 0
     /
 
 Send a signal to a process referred to by a pid file descriptor.
@@ -1321,20 +1323,15 @@ Send a signal to a process referred to by a pid file descriptor.
 
 static PyObject *
 signal_pidfd_send_signal_impl(PyObject *module, int pidfd, int signalnum,
-                              PyObject *siginfo, unsigned int flags)
-/*[clinic end generated code: output=1804b5a19d269104 input=a6e82a3c264fa19d]*/
+                              PyObject *siginfo, int flags)
+/*[clinic end generated code: output=2d59f04a75d9cbdf input=2a6543a1f4ac2000]*/
 
 {
     if (siginfo != Py_None) {
         PyErr_SetString(PyExc_TypeError, "siginfo must be None");
         return NULL;
     }
-#ifdef _Py_HAVE_PIDFD_SEND_SIGNAL
-    int res = pidfd_send_signal(pidfd, signalnum, NULL, flags);
-#else
-    int res = syscall(__NR_pidfd_send_signal, pidfd, signalnum, NULL, flags);
-#endif
-    if (res < 0) {
+    if (syscall(__NR_pidfd_send_signal, pidfd, signalnum, NULL, flags) < 0) {
         PyErr_SetFromErrno(PyExc_OSError);
         return NULL;
     }
@@ -1708,7 +1705,6 @@ _signal_module_free(void *module)
 
 
 static PyModuleDef_Slot signal_slots[] = {
-    _Py_ABI_SLOT,
     {Py_mod_exec, signal_module_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {Py_mod_gil, Py_MOD_GIL_NOT_USED},
@@ -1781,33 +1777,28 @@ PyErr_CheckSignals(void)
        Python code to ensure signals are handled. Checking for the GC here
        allows long running native code to clean cycles created using the C-API
        even if it doesn't run the evaluation loop */
-    uintptr_t breaker = _Py_atomic_load_uintptr_relaxed(&tstate->eval_breaker);
-    if (breaker & _PY_GC_SCHEDULED_BIT) {
+    if (_Py_eval_breaker_bit_is_set(tstate, _PY_GC_SCHEDULED_BIT)) {
         _Py_unset_eval_breaker_bit(tstate, _PY_GC_SCHEDULED_BIT);
         _Py_RunGC(tstate);
     }
-    if (breaker & _PY_ASYNC_EXCEPTION_BIT) {
-        if (_PyEval_RaiseAsyncExc(tstate) < 0) {
-            return -1;
-        }
+
+    if (!_Py_ThreadCanHandleSignals(tstate->interp)) {
+        return 0;
     }
 
-#if defined(Py_REMOTE_DEBUG) && defined(Py_SUPPORTS_REMOTE_DEBUG)
-    _PyRunRemoteDebugger(tstate);
-#endif
-
-    if (_PyErr_CheckSignalsTstate(tstate) < 0) {
-        return -1;
-    }
-
-    return 0;
+    return _PyErr_CheckSignalsTstate(tstate);
 }
 
 
-// Out of line, to keep the common case of _PyErr_CheckSignalsTstate() cheap.
-Py_NO_INLINE static int
-run_tripped_handlers(PyThreadState *tstate)
+/* Declared in cpython/pyerrors.h */
+int
+_PyErr_CheckSignalsTstate(PyThreadState *tstate)
 {
+    _Py_CHECK_EMSCRIPTEN_SIGNALS();
+    if (!_Py_atomic_load_int(&is_tripped)) {
+        return 0;
+    }
+
     /*
      * The is_tripped variable is meant to speed up the calls to
      * PyErr_CheckSignals (both directly or via pending calls) when no
@@ -1853,8 +1844,7 @@ run_tripped_handlers(PyThreadState *tstate)
             PyErr_Format(PyExc_OSError,
                          "Signal %i ignored due to race condition",
                          i);
-            PyErr_FormatUnraisable("Exception ignored while "
-                                   "calling signal handler");
+            PyErr_WriteUnraisable(Py_None);
             continue;
         }
         PyObject *arglist = NULL;
@@ -1887,20 +1877,6 @@ run_tripped_handlers(PyThreadState *tstate)
     return 0;
 }
 
-
-/* Declared in pycore_pyerrors.h */
-int
-_PyErr_CheckSignalsTstate(PyThreadState *tstate)
-{
-    _Py_CHECK_EMSCRIPTEN_SIGNALS();
-    if (!_Py_atomic_load_int(&is_tripped)) {
-        return 0;
-    }
-    if (!_Py_ThreadCanHandleSignals(tstate->interp)) {
-        return 0;
-    }
-    return run_tripped_handlers(tstate);
-}
 
 
 int

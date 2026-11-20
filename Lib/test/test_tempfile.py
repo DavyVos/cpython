@@ -149,7 +149,6 @@ class TestExports(BaseTestCase):
             "template" : 1,
             "SpooledTemporaryFile" : 1,
             "TemporaryDirectory" : 1,
-            "TemporaryFileWrapper" : 1,
         }
 
         unexp = []
@@ -330,6 +329,10 @@ def _mock_candidate_names(*names):
 
 
 class TestBadTempdir:
+
+    @unittest.skipIf(
+        support.is_emscripten, "Emscripten cannot remove write bits."
+    )
     def test_read_only_directory(self):
         with _inside_empty_temp_dir():
             probe = os.path.join(tempfile.tempdir, 'probe')
@@ -517,8 +520,6 @@ class TestMkstempInner(TestBadTempdir, BaseTestCase):
         self.assertFalse(retval > 0, "child process reports failure %d"%retval)
 
     @unittest.skipUnless(has_textmode, "text mode not available")
-    @unittest.skipIf(sys.platform == "cygwin",
-                     "truncate text mode is not supported on Cygwin")
     def test_textmode(self):
         # _mkstemp_inner can create files in text mode
 
@@ -543,11 +544,11 @@ class TestMkstempInner(TestBadTempdir, BaseTestCase):
              _mock_candidate_names('aaa', 'aaa', 'bbb'):
             (fd1, name1) = self.make_temp()
             os.close(fd1)
-            self.assertEndsWith(name1, 'aaa')
+            self.assertTrue(name1.endswith('aaa'))
 
             (fd2, name2) = self.make_temp()
             os.close(fd2)
-            self.assertEndsWith(name2, 'bbb')
+            self.assertTrue(name2.endswith('bbb'))
 
     def test_collision_with_existing_directory(self):
         # _mkstemp_inner tries another name when a directory with
@@ -555,11 +556,11 @@ class TestMkstempInner(TestBadTempdir, BaseTestCase):
         with _inside_empty_temp_dir(), \
              _mock_candidate_names('aaa', 'aaa', 'bbb'):
             dir = tempfile.mkdtemp()
-            self.assertEndsWith(dir, 'aaa')
+            self.assertTrue(dir.endswith('aaa'))
 
             (fd, name) = self.make_temp()
             os.close(fd)
-            self.assertEndsWith(name, 'bbb')
+            self.assertTrue(name.endswith('bbb'))
 
 
 class TestGetTempPrefix(BaseTestCase):
@@ -855,9 +856,9 @@ class TestMkdtemp(TestBadTempdir, BaseTestCase):
              _mock_candidate_names('aaa', 'aaa', 'bbb'):
             file = tempfile.NamedTemporaryFile(delete=False)
             file.close()
-            self.assertEndsWith(file.name, 'aaa')
+            self.assertTrue(file.name.endswith('aaa'))
             dir = tempfile.mkdtemp()
-            self.assertEndsWith(dir, 'bbb')
+            self.assertTrue(dir.endswith('bbb'))
 
     def test_collision_with_existing_directory(self):
         # mkdtemp tries another name when a directory with
@@ -865,9 +866,9 @@ class TestMkdtemp(TestBadTempdir, BaseTestCase):
         with _inside_empty_temp_dir(), \
              _mock_candidate_names('aaa', 'aaa', 'bbb'):
             dir1 = tempfile.mkdtemp()
-            self.assertEndsWith(dir1, 'aaa')
+            self.assertTrue(dir1.endswith('aaa'))
             dir2 = tempfile.mkdtemp()
-            self.assertEndsWith(dir2, 'bbb')
+            self.assertTrue(dir2.endswith('bbb'))
 
     def test_for_tempdir_is_bytes_issue40701_api_warts(self):
         orig_tempdir = tempfile.tempdir
@@ -982,22 +983,11 @@ class TestNamedTemporaryFile(BaseTestCase):
 
     def test_basic(self):
         # NamedTemporaryFile can create files
-        f = self.do_create()
-        self.assertIsInstance(f, tempfile.TemporaryFileWrapper)
+        self.do_create()
         self.do_create(pre="a")
         self.do_create(suf="b")
         self.do_create(pre="a", suf="b")
         self.do_create(pre="aa", suf=".txt")
-
-    def test_in_all(self):
-        self.assertIn("TemporaryFileWrapper", tempfile.__all__)
-
-    def test_deprecated_TemporaryFileWrapper_alias(self):
-        # gh-152586: _TemporaryFileWrapper is a deprecated alias
-        # for the public TemporaryFileWrapper class.
-        with self.assertWarns(DeprecationWarning):
-            obj = tempfile._TemporaryFileWrapper
-        self.assertIs(obj, tempfile.TemporaryFileWrapper)
 
     def test_method_lookup(self):
         # Issue #18879: Looking up a temporary file method should keep it
@@ -1150,14 +1140,11 @@ class TestNamedTemporaryFile(BaseTestCase):
             # Testing extreme case, where the file is not explicitly closed
             # f.close()
             return tmp_name
+        # Make sure that the garbage collector has finalized the file object.
+        gc.collect()
         dir = tempfile.mkdtemp()
         try:
-            with self.assertWarnsRegex(
-                expected_warning=ResourceWarning,
-                expected_regex=r"Implicitly cleaning up <TemporaryFileWrapper file=.*>",
-            ):
-                tmp_name = my_func(dir)
-                support.gc_collect()
+            tmp_name = my_func(dir)
             self.assertFalse(os.path.exists(tmp_name),
                         f"NamedTemporaryFile {tmp_name!r} "
                         f"exists after finalizer ")
@@ -1198,7 +1185,7 @@ class TestNamedTemporaryFile(BaseTestCase):
     def test_unexpected_error(self):
         dir = tempfile.mkdtemp()
         self.addCleanup(os_helper.rmtree, dir)
-        with mock.patch('tempfile.TemporaryFileWrapper') as mock_ntf, \
+        with mock.patch('tempfile._TemporaryFileWrapper') as mock_ntf, \
              mock.patch('io.open', mock.mock_open()) as mock_open:
             mock_ntf.side_effect = KeyboardInterrupt()
             with self.assertRaises(KeyboardInterrupt):
@@ -1277,6 +1264,9 @@ class TestSpooledTemporaryFile(BaseTestCase):
         with self.assertWarns(ResourceWarning):
             f.__del__()
 
+    @unittest.skipIf(
+        support.is_emscripten, "Emscripten cannot fstat renamed files."
+    )
     def test_del_rolled_file(self):
         # The rolled file should be deleted when the SpooledTemporaryFile
         # object is deleted. This should raise a ResourceWarning since the file
@@ -1424,7 +1414,7 @@ class TestSpooledTemporaryFile(BaseTestCase):
 
         f.write(b'x')
         self.assertTrue(f._rolled)
-        self.assertEqual(f.mode, 'wb+')
+        self.assertEqual(f.mode, 'rb+')
         self.assertIsNotNone(f.name)
         with self.assertRaises(AttributeError):
             f.newlines
@@ -1530,6 +1520,9 @@ class TestSpooledTemporaryFile(BaseTestCase):
                 pass
         self.assertRaises(ValueError, use_closed)
 
+    @unittest.skipIf(
+        support.is_emscripten, "Emscripten cannot fstat renamed files."
+    )
     def test_truncate_with_size_parameter(self):
         # A SpooledTemporaryFile can be truncated to zero size
         f = tempfile.SpooledTemporaryFile(max_size=10)
@@ -1653,14 +1646,10 @@ class NulledModules:
 class TestTemporaryDirectory(BaseTestCase):
     """Test TemporaryDirectory()."""
 
-    def do_create(self, dir=None, pre=None, suf=None, recurse=1, dirs=1, files=1,
+    def do_create(self, dir=None, pre="", suf="", recurse=1, dirs=1, files=1,
                   ignore_cleanup_errors=False):
         if dir is None:
             dir = tempfile.gettempdir()
-        if pre is None:
-            pre = type(dir)()
-        if suf is None:
-            suf = type(dir)()
         tmp = tempfile.TemporaryDirectory(
             dir=dir, prefix=pre, suffix=suf,
             ignore_cleanup_errors=ignore_cleanup_errors)
@@ -1670,17 +1659,13 @@ class TestTemporaryDirectory(BaseTestCase):
 
     def do_create2(self, path, recurse=1, dirs=1, files=1):
         # Create subdirectories and some files
-        def join(name):
-            if isinstance(path, bytes):
-                name = os.fsencode(name)
-            return os.path.join(path, name)
         if recurse:
             for i in range(dirs):
-                name = join("dir%d" % i)
+                name = os.path.join(path, "dir%d" % i)
                 os.mkdir(name)
                 self.do_create2(name, recurse-1, dirs, files)
         for i in range(files):
-            with open(join("test%d.txt" % i), "wb") as f:
+            with open(os.path.join(path, "test%d.txt" % i), "wb") as f:
                 f.write(b"Hello world!")
 
     def test_mkdtemp_failure(self):
@@ -1705,15 +1690,6 @@ class TestTemporaryDirectory(BaseTestCase):
                         "TemporaryDirectory %s exists after cleanup" % d.name)
         finally:
             os.rmdir(dir)
-
-    def test_explicit_cleanup_bytes(self):
-        # A TemporaryDirectory with a bytes name is deleted when cleaned up
-        with tempfile.TemporaryDirectory() as working_dir:
-            d = self.do_create(dir=os.fsencode(working_dir), recurse=2)
-            self.assertIsInstance(d.name, bytes)
-            self.assertTrue(os.path.exists(d.name))
-            d.cleanup()
-            self.assertFalse(os.path.exists(d.name))
 
     def test_explicit_cleanup_ignore_errors(self):
         """Test that cleanup doesn't return an error when ignoring them."""
@@ -1886,6 +1862,9 @@ class TestTemporaryDirectory(BaseTestCase):
                                             'emscripten-core/emscripten#27761')
     @unittest.skipUnless(shutil.rmtree.avoids_symlink_attacks,
                          'requires the fd based implementation of rmtree()')
+    @unittest.skipIf(
+        sys.platform == "android",
+        "On Android, os.chmod doesn't support dir_fd until API level 23")
     def test_cleanup_with_symlink_race(self):
         # cleanup() should not operate on files outside of the temporary
         # directory when a directory is replaced with a symlink while it
@@ -1926,87 +1905,6 @@ class TestTemporaryDirectory(BaseTestCase):
 
             self.assertTrue(os.path.exists(target_file))
             self.assertEqual(os.stat(target_file).st_mode, target_mode)
-
-    def _make_unopenable_subdir(self):
-        # Create the following structure:
-        # work/          - top-level
-        #   <d>/         - tempdir to clean up (random name)
-        #     sub/       - an unopenable dir
-        #        subsub/
-        #          file
-        # Return:
-        # - `work` name (str)
-        # - `d` (TemporaryDirectory)
-        # - `subsub` stat result
-        work = self.enterContext(os_helper.temp_dir())
-        d = tempfile.TemporaryDirectory(dir=work)
-        sub = os.path.join(d.name, 'sub')
-        subsub = os.path.join(sub, 'subsub')
-        os.mkdir(sub)
-        os.mkdir(subsub)
-        subsub_stat = os.lstat(subsub)
-        with open(os.path.join(subsub, 'file'), 'w') as f:
-            f.write("rm me pls")
-        os.chmod(sub, 0)
-        # If the test fails, make sure everything can still be removed.
-        self.addCleanup(d.cleanup)
-        @self.addCleanup
-        def _clean():
-            if os.path.isdir(sub):
-                os.chmod(sub, 0o700)
-        return work, d, subsub_stat
-
-    @os_helper.skip_unless_working_chmod
-    @support.requires_non_root_user
-    @unittest.skipUnless(tempfile._rmtree_use_dir_fd
-                         and shutil.rmtree.avoids_symlink_attacks,
-                         'requires the fd based cleanup')
-    def test_cleanup_nested_toplevel_error(self):
-        # rmtree() reports errors relative to the correct parent directory
-        work, d, subsub_stat = self._make_unopenable_subdir()
-        # An unrelated directory with the same name; should not be touched
-        unrelated = os.path.join(work, 'sub')
-        os.mkdir(unrelated)
-
-        rmdir = os.rmdir
-        failed_path = None
-        def failing_rmdir(path, *, dir_fd=None):
-            nonlocal failed_path
-            if path == 'sub' and dir_fd is not None and failed_path is None:
-                failed_path = path
-                raise PermissionError(errno.EPERM, 'simulated', path)
-            return rmdir(path, dir_fd=dir_fd)
-        with os_helper.change_cwd(work), mock.patch('os.rmdir', failing_rmdir):
-            d.cleanup()
-        self.assertEqual(failed_path, 'sub')
-        self.assertFalse(os.path.exists(d.name))
-        self.assertTrue(os.path.exists(unrelated))
-
-    @os_helper.skip_unless_working_chmod
-    @support.requires_non_root_user
-    @unittest.skipUnless(tempfile._rmtree_use_dir_fd
-                         and shutil.rmtree.avoids_symlink_attacks,
-                         'requires the fd based cleanup')
-    def test_cleanup_nested_scandir_error(self):
-        # A scandir() error is reported relative to the parent directory.
-        work, d, subsub_stat = self._make_unopenable_subdir()
-
-        scandir = os.scandir
-        failed = False
-        def failing_scandir(path='.'):
-            nonlocal failed
-            if (
-                not failed
-                and isinstance(path, int)
-                and os.path.samestat(os.fstat(path), subsub_stat)
-            ):
-                failed = True
-                raise PermissionError(errno.EACCES, 'simulated')
-            return scandir(path)
-        with os_helper.change_cwd(work), mock.patch('os.scandir', failing_scandir):
-            d.cleanup()
-        self.assertTrue(failed)
-        self.assertFalse(os.path.exists(d.name))
 
     @support.cpython_only
     def test_del_on_collection(self):
@@ -2166,17 +2064,11 @@ class TestTemporaryDirectory(BaseTestCase):
             self.assertEqual(name, d.name)
         self.assertFalse(os.path.exists(name))
 
-    @support.subTests('bytes_name', (False, True))
-    def test_modes(self, bytes_name):
+    def test_modes(self):
         for mode in range(8):
             mode <<= 6
             with self.subTest(mode=format(mode, '03o')):
-                if bytes_name:
-                    d = self.do_create(recurse=3, dirs=2, files=2,
-                                       dir=tempfile.gettempdirb())
-                else:
-                    d = self.do_create(recurse=3, dirs=2, files=2)
-                self.assertIsInstance(d.name, bytes if bytes_name else str)
+                d = self.do_create(recurse=3, dirs=2, files=2)
                 with d:
                     # Change files and directories mode recursively.
                     for root, dirs, files in os.walk(d.name, topdown=False):
@@ -2187,17 +2079,13 @@ class TestTemporaryDirectory(BaseTestCase):
                 self.assertFalse(os.path.exists(d.name))
 
     @support.subTests('ignore_errors', (True, False))
-    @support.subTests('bytes_name', (False, True))
-    def test_parent_mode_preserved(self, ignore_errors, bytes_name):
+    def test_parent_mode_preserved(self, ignore_errors):
         # Test that cleanup does not touch the parent directory,
         # even if that prevents removal.
         for mode in range(8):
             mode <<= 6
             with self.subTest(mode=format(mode, '03o')):
-                if bytes_name:
-                    outer = self.do_create(dir=tempfile.gettempdirb())
-                else:
-                    outer = self.do_create()
+                outer = self.do_create()
                 with outer:
                     d = self.do_create(dir=outer.name, dirs=2, files=2,
                                        ignore_cleanup_errors=ignore_errors)
@@ -2256,52 +2144,14 @@ class TestTemporaryDirectory(BaseTestCase):
         'regression test for supported platforms')
     @unittest.skipIf(support.MS_WINDOWS, 'dirfd not used on Windows')
     @unittest.skipIf(support.is_wasi, 'WASI has no chmod')
+    @unittest.skipIf(
+        sys.platform == "android",
+        "On Android, os.chmod doesn't support dir_fd until API level 23")
     def test_cleanup_safe(self):
         """Verify that cleanup uses the safer code path"""
         # This is a regression test. Feel free to add exceptions for new
         # platforms, but don't forget to update the docs.
         self.assertTrue(tempfile._rmtree_use_dir_fd)
-
-
-class TestMisc(BaseTestCase):
-    def test_prefix_suffix_error(self):
-        tests = [
-            f"dir{os.sep}name",
-            f"{os.sep}abs_name",
-        ]
-        if os.altsep is not None:
-            tests.extend((
-                f"dir{os.altsep}name",
-                f"{os.altsep}abs_name",
-            ))
-        if support.MS_WINDOWS:
-            tests.append('C:name')
-        tests.extend(tuple(os.fsencode(path) for path in tests))
-
-        PREFIX_ERR = "prefix can't contain a directory component"
-        SUFFIX_ERR = "suffix can't contain a directory component"
-        for value in tests:
-            with self.subTest(value):
-                # test prefix
-                with self.assertRaisesRegex(ValueError, PREFIX_ERR):
-                    tempfile.mkstemp(prefix=value)
-                with self.assertRaisesRegex(ValueError, PREFIX_ERR):
-                    tempfile.mkdtemp(prefix=value)
-                with self.assertRaisesRegex(ValueError, PREFIX_ERR):
-                    tempfile.TemporaryFile(prefix=value)
-                with self.assertRaisesRegex(ValueError, PREFIX_ERR):
-                    tempfile.NamedTemporaryFile(prefix=value)
-
-                # test suffix
-                with self.assertRaisesRegex(ValueError, SUFFIX_ERR):
-                    tempfile.mkstemp(suffix=value)
-                with self.assertRaisesRegex(ValueError, SUFFIX_ERR):
-                    tempfile.mkdtemp(suffix=value)
-                with self.assertRaisesRegex(ValueError, SUFFIX_ERR):
-                    tempfile.TemporaryFile(suffix=value)
-                with self.assertRaisesRegex(ValueError, SUFFIX_ERR):
-                    tempfile.NamedTemporaryFile(suffix=value)
-
 
 if __name__ == "__main__":
     unittest.main()

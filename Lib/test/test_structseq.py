@@ -6,7 +6,6 @@ import re
 import textwrap
 import time
 import unittest
-from test import support
 from test.support import script_helper
 
 
@@ -44,7 +43,7 @@ class StructSeqTest(unittest.TestCase):
         # os.stat() gives a complicated struct sequence.
         st = os.stat(__file__)
         rep = repr(st)
-        self.assertStartsWith(rep, "os.stat_result")
+        self.assertTrue(rep.startswith("os.stat_result"))
         self.assertIn("st_mode=", rep)
         self.assertIn("st_ino=", rep)
         self.assertIn("st_dev=", rep)
@@ -309,7 +308,7 @@ class StructSeqTest(unittest.TestCase):
         self.assertEqual(t5.tm_mon, 2)
 
         # named invisible fields
-        self.assertHasAttr(t, 'tm_zone')
+        self.assertTrue(hasattr(t, 'tm_zone'), f"{t} has no attribute 'tm_zone'")
         with self.assertRaisesRegex(AttributeError, 'readonly attribute'):
             t.tm_zone = 'some other zone'
         self.assertEqual(t2.tm_zone, t.tm_zone)
@@ -352,9 +351,9 @@ class StructSeqTest(unittest.TestCase):
         # was cleared first, the structseq instance would crash in the
         # destructor.
         script_helper.assert_python_ok("-c", textwrap.dedent(r"""
-            import os
-            t = os.stat('.')
-            type(t).refcycle = t
+            import time
+            t = time.gmtime()
+            type(t).refcyle = t
         """))
 
     def test_replace_gc_tracked(self):
@@ -365,9 +364,6 @@ class StructSeqTest(unittest.TestCase):
         lst.append(replaced_struct)
 
         self.assertTrue(gc.is_tracked(replaced_struct))
-
-    def test_struct_time_type_immutable(self):
-        support.check_immutable_type(self, type(time.gmtime()))
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,8 @@
 /* Python interpreter main program for frozen scripts */
 
 #include "Python.h"
-#include "pycore_pystate.h"       // _PyInterpreterState_SetRunningMain()
+#include "pycore_pystate.h"       // _Py_GetConfig()
+#include "pycore_runtime.h"       // _PyRuntime_Initialize()
 
 #ifdef HAVE_UNISTD_H
 #  include <unistd.h>             // isatty()
@@ -19,6 +20,11 @@ extern int PyInitFrozenExtensions(void);
 int
 Py_FrozenMain(int argc, char **argv)
 {
+    PyStatus status = _PyRuntime_Initialize();
+    if (PyStatus_Exception(status)) {
+        Py_ExitStatusException(status);
+    }
+
     PyConfig config;
     PyConfig_InitPythonConfig(&config);
     // Suppress errors from getpath.c
@@ -26,7 +32,7 @@ Py_FrozenMain(int argc, char **argv)
     // Don't parse command line options like -E
     config.parse_argv = 0;
 
-    PyStatus status = PyConfig_SetBytesArgv(&config, argc, argv);
+    status = PyConfig_SetBytesArgv(&config, argc, argv);
     if (PyStatus_Exception(status)) {
         PyConfig_Clear(&config);
         Py_ExitStatusException(status);
@@ -58,12 +64,7 @@ Py_FrozenMain(int argc, char **argv)
     PyWinFreeze_ExeInit();
 #endif
 
-    int verbose;
-    if (PyConfig_GetInt("verbose", &verbose) < 0) {
-        verbose = 0;
-        PyErr_Clear();
-    }
-    if (verbose) {
+    if (_Py_GetConfig()->verbose) {
         fprintf(stderr, "Python %s\n%s\n",
                 Py_GetVersion(), Py_GetCopyright());
     }

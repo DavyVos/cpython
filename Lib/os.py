@@ -58,19 +58,10 @@ if 'posix' in _names:
         __all__.append('_exit')
     except ImportError:
         pass
-    try:
-        from posix import _clearenv
-        __all__.append('_clearenv')
-    except ImportError:
-        pass
     import posixpath as path
 
     try:
         from posix import _have_functions
-    except ImportError:
-        pass
-    try:
-        from posix import _create_environ
     except ImportError:
         pass
 
@@ -95,10 +86,6 @@ elif 'nt' in _names:
 
     try:
         from nt import _have_functions
-    except ImportError:
-        pass
-    try:
-        from nt import _create_environ
     except ImportError:
         pass
 
@@ -136,8 +123,6 @@ if _exists("_have_functions"):
     _add("HAVE_UNLINKAT",   "unlink")
     _add("HAVE_UNLINKAT",   "rmdir")
     _add("HAVE_UTIMENSAT",  "utime")
-    if _exists("statx"):
-        _set.add(statx)
     supports_dir_fd = _set
 
     _set = set()
@@ -159,11 +144,6 @@ if _exists("_have_functions"):
     _add("HAVE_FPATHCONF",  "pathconf")
     if _exists("statvfs") and _exists("fstatvfs"): # mac os x10.3
         _add("HAVE_FSTATVFS", "statvfs")
-    if _exists("statx"):
-        _set.add(statx)
-    _add("HAVE_FREADLINK", "readlink")
-    if sys.platform in ["linux", "android"] and "O_PATH" in _globals:
-        _add("HAVE_READLINKAT", "readlink")
     supports_fd = _set
 
     _set = set()
@@ -202,8 +182,6 @@ if _exists("_have_functions"):
     _add("HAVE_FSTATAT",    "stat")
     _add("HAVE_UTIMENSAT",  "utime")
     _add("MS_WINDOWS",      "stat")
-    if _exists("statx"):
-        _set.add(statx)
     supports_follow_symlinks = _set
 
     del _set
@@ -222,17 +200,14 @@ SEEK_END = 2
 # Super directory utilities.
 # (Inspired by Eric Raymond; the doc strings are mostly his)
 
-def makedirs(name, mode=0o777, exist_ok=False, *, parent_mode=None):
-    """makedirs(name [, mode=0o777][, exist_ok=False][, parent_mode=None])
+def makedirs(name, mode=0o777, exist_ok=False):
+    """makedirs(name [, mode=0o777][, exist_ok=False])
 
     Super-mkdir; create a leaf directory and all intermediate ones.  Works
     like mkdir, except that any intermediate path segment (not just the
     rightmost) will be created if it does not exist.  If the target
     directory already exists, raise an OSError if exist_ok is False.
-    Otherwise no exception is raised.  If parent_mode is not None, it will
-    be used as the mode for any newly-created, intermediate-level
-    directories. Otherwise, intermediate directories are created with the
-    default permissions (respecting umask).  This is recursive.
+    Otherwise no exception is raised.  This is recursive.
 
     """
     head, tail = path.split(name)
@@ -240,11 +215,7 @@ def makedirs(name, mode=0o777, exist_ok=False, *, parent_mode=None):
         head, tail = path.split(head)
     if head and tail and not path.exists(head):
         try:
-            if parent_mode is not None:
-                makedirs(head, mode=parent_mode, exist_ok=exist_ok,
-                         parent_mode=parent_mode)
-            else:
-                makedirs(head, exist_ok=exist_ok)
+            makedirs(head, exist_ok=exist_ok)
         except FileExistsError:
             # Defeats race condition when another thread created the path
             pass
@@ -395,59 +366,73 @@ def walk(top, topdown=True, onerror=None, followlinks=False):
         # minor reason when (say) a thousand readable directories are still
         # left to visit.
         try:
-            with scandir(top) as entries:
-                for entry in entries:
-                    try:
-                        if followlinks is _walk_symlinks_as_files:
-                            is_dir = entry.is_dir(follow_symlinks=False) and not entry.is_junction()
-                        else:
-                            is_dir = entry.is_dir()
-                    except OSError:
-                        # If is_dir() raises an OSError, consider the entry not to
-                        # be a directory, same behaviour as os.path.isdir().
-                        is_dir = False
-
-                    if is_dir:
-                        dirs.append(entry.name)
-                    else:
-                        nondirs.append(entry.name)
-
-                    if not topdown and is_dir:
-                        # Bottom-up: traverse into sub-directory, but exclude
-                        # symlinks to directories if followlinks is False
-                        if followlinks:
-                            walk_into = True
-                        else:
-                            try:
-                                is_symlink = entry.is_symlink()
-                            except OSError:
-                                # If is_symlink() raises an OSError, consider the
-                                # entry not to be a symbolic link, same behaviour
-                                # as os.path.islink().
-                                is_symlink = False
-                            walk_into = not is_symlink
-
-                        if walk_into:
-                            walk_dirs.append(entry.path)
+            scandir_it = scandir(top)
         except OSError as error:
             if onerror is not None:
                 onerror(error)
+            continue
+
+        cont = False
+        with scandir_it:
+            while True:
+                try:
+                    try:
+                        entry = next(scandir_it)
+                    except StopIteration:
+                        break
+                except OSError as error:
+                    if onerror is not None:
+                        onerror(error)
+                    cont = True
+                    break
+
+                try:
+                    if followlinks is _walk_symlinks_as_files:
+                        is_dir = entry.is_dir(follow_symlinks=False) and not entry.is_junction()
+                    else:
+                        is_dir = entry.is_dir()
+                except OSError:
+                    # If is_dir() raises an OSError, consider the entry not to
+                    # be a directory, same behaviour as os.path.isdir().
+                    is_dir = False
+
+                if is_dir:
+                    dirs.append(entry.name)
+                else:
+                    nondirs.append(entry.name)
+
+                if not topdown and is_dir:
+                    # Bottom-up: traverse into sub-directory, but exclude
+                    # symlinks to directories if followlinks is False
+                    if followlinks:
+                        walk_into = True
+                    else:
+                        try:
+                            is_symlink = entry.is_symlink()
+                        except OSError:
+                            # If is_symlink() raises an OSError, consider the
+                            # entry not to be a symbolic link, same behaviour
+                            # as os.path.islink().
+                            is_symlink = False
+                        walk_into = not is_symlink
+
+                    if walk_into:
+                        walk_dirs.append(entry.path)
+        if cont:
             continue
 
         if topdown:
             # Yield before sub-directory traversal if going top down
             yield top, dirs, nondirs
             # Traverse into sub-directories
-            if dirs:
-                prefix = join(top, top[:0])  # Add trailing slash
-                for dirname in reversed(dirs):
-                    new_path = prefix + dirname
-                    # bpo-23605: os.path.islink() is used instead of caching
-                    # entry.is_symlink() result during the loop on os.scandir() because
-                    # the caller can replace the directory entry during the "yield"
-                    # above.
-                    if followlinks or not islink(new_path):
-                        stack.append(new_path)
+            for dirname in reversed(dirs):
+                new_path = join(top, dirname)
+                # bpo-23605: os.path.islink() is used instead of caching
+                # entry.is_symlink() result during the loop on os.scandir() because
+                # the caller can replace the directory entry during the "yield"
+                # above.
+                if followlinks or not islink(new_path):
+                    stack.append(new_path)
         else:
             # Yield after sub-directory traversal if going bottom up
             stack.append((top, dirs, nondirs))
@@ -646,13 +631,11 @@ def _execvpe(file, args, env=None):
         argrest = (args,)
         env = environ
 
-    file = fspath(file)
     if path.dirname(file):
         exec_func(file, *argrest)
         return
     saved_exc = None
     path_list = get_exec_path(env)
-    orig_file = file
     if name != 'nt':
         file = fsencode(file)
         path_list = map(fsencode, path_list)
@@ -668,11 +651,6 @@ def _execvpe(file, args, env=None):
                 saved_exc = e
     if saved_exc is not None:
         raise saved_exc
-    # At this point, last_exc.filename contains the full path of whatever
-    # directory happened to be last in path_list. Set it to the filename that
-    # was passed in, which is what the caller will expect. This is what
-    # subprocess does too (see err_filename in Popen._execute_child()).
-    last_exc.filename = orig_file
     raise last_exc
 
 
@@ -723,11 +701,6 @@ def get_exec_path(env=None):
 # Change environ to automatically call putenv() and unsetenv()
 from _collections_abc import MutableMapping, Mapping
 
-# Sentinel used for seeing if a value is found within the internal _Environ
-# dictionary.
-_MISSING = sentinel("MISSING")
-
-
 class _Environ(MutableMapping):
     def __init__(self, data, encodekey, decodekey, encodevalue, decodevalue):
         self.encodekey = encodekey
@@ -735,9 +708,6 @@ class _Environ(MutableMapping):
         self.encodevalue = encodevalue
         self.decodevalue = decodevalue
         self._data = data
-
-    def __contains__(self, key):
-        return self.encodekey(key) in self._data
 
     def __getitem__(self, key):
         try:
@@ -781,10 +751,6 @@ class _Environ(MutableMapping):
     def copy(self):
         return dict(self)
 
-    def get(self, key, default=None):
-        val = self._data.get(self.encodekey(key), _MISSING)
-        return default if val is _MISSING else self.decodevalue(val)
-
     def setdefault(self, key, value):
         if key not in self:
             self[key] = value
@@ -808,13 +774,7 @@ class _Environ(MutableMapping):
         new.update(self)
         return new
 
-    if _exists("_clearenv"):
-        def clear(self):
-            _clearenv()
-            self._data.clear()
-
-
-def _create_environ_mapping():
+def _createenviron():
     if name == 'nt':
         # Where Env Var Names Must Be UPPERCASE
         def check_str(value):
@@ -844,24 +804,9 @@ def _create_environ_mapping():
         encode, decode)
 
 # unicode environ
-environ = _create_environ_mapping()
-del _create_environ_mapping
+environ = _createenviron()
+del _createenviron
 
-
-if _exists("_create_environ"):
-    def reload_environ():
-        data = _create_environ()
-        if name == 'nt':
-            encodekey = environ.encodekey
-            data = {encodekey(key): value
-                    for key, value in data.items()}
-
-        # modify in-place to keep os.environb in sync
-        env_data = environ._data
-        env_data.clear()
-        env_data.update(data)
-
-    __all__.append("reload_environ")
 
 def getenv(key, default=None):
     """Get an environment variable, return None if it doesn't exist.

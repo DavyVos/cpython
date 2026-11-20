@@ -1,9 +1,8 @@
-# Copyright (C) 2003 Python Software Foundation
+# Copyright (C) 2003-2013 Python Software Foundation
 import copy
 import operator
 import pickle
 import struct
-import tracemalloc
 import unittest
 import plistlib
 import os
@@ -14,6 +13,7 @@ import codecs
 import subprocess
 import binascii
 import collections
+import time
 import zoneinfo
 from test import support
 from test.support import os_helper
@@ -807,25 +807,6 @@ class TestPlistlib(unittest.TestCase):
                 })
                 self.assertIsNot(pl2['first'], pl2['second'])
 
-    def test_frozendict(self):
-        pl = frozendict(
-            aString="Doodah",
-            anInt=728,
-            aDict=frozendict(
-                anotherString="hello",
-                aTrueValue=True,
-            ),
-            aList=["A", "B", 12],
-        )
-
-        for fmt in ALL_FORMATS:
-            with self.subTest(fmt=fmt):
-                data = plistlib.dumps(pl, fmt=fmt)
-                pl2 = plistlib.loads(data)
-                self.assertEqual(pl2, dict(pl))
-                self.assertIsInstance(pl2, dict)
-                self.assertIsInstance(pl2['aDict'], dict)
-
     def test_controlcharacters(self):
         for i in range(128):
             c = chr(i)
@@ -1037,25 +1018,6 @@ class TestBinaryPlistlib(unittest.TestCase):
             with self.subTest(x=x):
                 data = plistlib.dumps([x]*1000, fmt=plistlib.FMT_BINARY)
                 self.assertLess(len(data), 1100, repr(data))
-
-    def test_dump_large_container_memory(self):
-        # Writing a large container should not leave memory proportional
-        # to its size allocated after the call returns.
-        if not tracemalloc.is_tracing():
-            tracemalloc.start()
-            self.addCleanup(tracemalloc.stop)
-        n = 20_000
-        for make in (lambda n: [True] * n,
-                     lambda n: dict.fromkeys(map(str, range(n)), True)):
-            x = make(n)
-            with self.subTest(type=type(x).__name__):
-                # Warm up with a slightly smaller container, so that
-                # memory kept by free lists is not counted.
-                plistlib.dumps(make(n - 1), fmt=plistlib.FMT_BINARY)
-                before, _ = tracemalloc.get_traced_memory()
-                plistlib.dumps(x, fmt=plistlib.FMT_BINARY)
-                after, _ = tracemalloc.get_traced_memory()
-                self.assertLess(after - before, n)
 
     def test_identity(self):
         for x in (None, False, True, 12345, 123.45, 'abcde', b'abcde',

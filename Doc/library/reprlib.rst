@@ -4,6 +4,8 @@
 .. module:: reprlib
    :synopsis: Alternate repr() implementation with size limits.
 
+.. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
+
 **Source code:** :source:`Lib/reprlib.py`
 
 --------------
@@ -39,10 +41,6 @@ This module provides a class, an instance, and a function:
 
    .. versionchanged:: 3.12
       Allow attributes to be set via keyword arguments.
-
-   .. versionchanged:: 3.16
-      :class:`!Repr` instances now have a string representation that includes
-      their attribute values.
 
 
 .. data:: aRepr

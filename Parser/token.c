@@ -68,9 +68,6 @@ const char * const _PyParser_TokenNames[] = {
     "FSTRING_START",
     "FSTRING_MIDDLE",
     "FSTRING_END",
-    "TSTRING_START",
-    "TSTRING_MIDDLE",
-    "TSTRING_END",
     "COMMENT",
     "NL",
     "<ERRORTOKEN>",
@@ -113,7 +110,7 @@ _PyToken_OneChar(int c1)
 }
 
 int
-_PyToken_TwoChars(int c1, int c2, int BARRY_AS_BDFL)
+_PyToken_TwoChars(int c1, int c2)
 {
     switch (c1) {
     case '!':
@@ -163,7 +160,7 @@ _PyToken_TwoChars(int c1, int c2, int BARRY_AS_BDFL)
         switch (c2) {
         case '<': return LEFTSHIFT;
         case '=': return LESSEQUAL;
-        case '>': return BARRY_AS_BDFL ? NOTEQUAL : OP;
+        case '>': return NOTEQUAL;
         }
         break;
     case '=':

@@ -215,8 +215,6 @@ The following exceptions are the exceptions that are usually raised.
 
       The object that was accessed for the named attribute.
 
-   When possible, :attr:`name` and :attr:`obj` are set automatically.
-
    .. versionchanged:: 3.10
       Added the :attr:`name` and :attr:`obj` attributes.
 
@@ -268,12 +266,6 @@ The following exceptions are the exceptions that are usually raised.
 
    .. versionadded:: 3.6
 
-.. exception:: ImportCycleError
-
-   A subclass of :exc:`ImportError` which is raised when a lazy import fails
-   because it (directly or indirectly) tries to import itself.
-
-   .. versionadded:: 3.15
 
 .. exception:: IndexError
 
@@ -396,9 +388,10 @@ The following exceptions are the exceptions that are usually raised.
 
    .. attribute:: strerror
 
-      The corresponding error message, as provided by the operating system.
-      Under POSIX, it is obtained using the C functions :c:func:`!strerror`
-      or :c:func:`!strerror_r`; under Windows, :c:func:`!FormatMessage` is used.
+      The corresponding error message, as provided by
+      the operating system.  It is formatted by the C
+      functions :c:func:`!perror` under POSIX, and :c:func:`!FormatMessage`
+      under Windows.
 
    .. attribute:: filename
                   filename2
@@ -443,24 +436,13 @@ The following exceptions are the exceptions that are usually raised.
    :exc:`PythonFinalizationError` during the Python finalization:
 
    * Creating a new Python thread.
-   * :meth:`Joining <threading.Thread.join>` a running daemon thread.
-   * :func:`os.fork`,
-   * acquiring a lock such as :class:`threading.Lock`, when it is known that
-     the operation would otherwise deadlock.
+   * :func:`os.fork`.
 
    See also the :func:`sys.is_finalizing` function.
 
    .. versionadded:: 3.13
       Previously, a plain :exc:`RuntimeError` was raised.
 
-   .. versionchanged:: 3.14
-
-      :meth:`threading.Thread.join` can now raise this exception.
-
-   .. versionchanged:: 3.15
-
-      This exception may be raised when acquiring :meth:`threading.Lock`
-      or :meth:`threading.RLock`.
 
 .. exception:: RecursionError
 
@@ -565,6 +547,11 @@ The following exceptions are the exceptions that are usually raised.
 
       The column in the end line where the error occurred finishes. This is
       1-indexed: the first character in the line has an ``offset`` of 1.
+
+   For errors in f-string fields, the message is prefixed by "f-string: "
+   and the offsets are offsets in a text constructed from the replacement
+   expression.  For example, compiling f'Bad {a b} field' results in this
+   args attribute: ('f-string: ...', ('', 1, 2, '(a b)\n', 1, 5)).
 
    .. versionchanged:: 3.10
       Added the :attr:`end_lineno` and :attr:`end_offset` attributes.
@@ -671,15 +658,9 @@ The following exceptions are the exceptions that are usually raised.
 
        The first index of invalid data in :attr:`object`.
 
-       This value should not be negative as it is interpreted as an
-       absolute offset but this constraint is not enforced at runtime.
-
    .. attribute:: end
 
        The index after the last invalid data in :attr:`object`.
-
-       This value should not be negative as it is interpreted as an
-       absolute offset but this constraint is not enforced at runtime.
 
 
 .. exception:: UnicodeEncodeError

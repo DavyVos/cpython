@@ -1,1 +1,0 @@
-Improve performance of :func:`isinstance` when the check fails.

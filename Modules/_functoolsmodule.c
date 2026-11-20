@@ -4,7 +4,6 @@
 #include "pycore_long.h"          // _PyLong_GetZero()
 #include "pycore_moduleobject.h"  // _PyModule_GetState()
 #include "pycore_object.h"        // _PyObject_GC_TRACK
-#include "pycore_pyatomic_ft_wrappers.h"
 #include "pycore_pystate.h"       // _PyThreadState_GET()
 #include "pycore_tuple.h"         // _PyTuple_ITEMS()
 #include "pycore_weakref.h"       // FT_CLEAR_WEAKREFS()
@@ -20,14 +19,13 @@ class _functools._lru_cache_wrapper "PyObject *" "&lru_cache_type_spec"
 /* _functools module written and maintained
    by Hye-Shik Chang <perky@FreeBSD.org>
    with adaptations by Raymond Hettinger <python@rcn.com>
-   Copyright (c) 2004 Python Software Foundation.
+   Copyright (c) 2004, 2005, 2006 Python Software Foundation.
    All rights reserved.
 */
 
 typedef struct _functools_state {
     /* this object is used delimit args and keywords in the cache keys */
     PyObject *kwd_mark;
-    PyObject *placeholder;  // strong reference (singleton)
     PyTypeObject *partial_type;
     PyTypeObject *keyobject_type;
     PyTypeObject *lru_list_elem_type;
@@ -41,18 +39,8 @@ get_functools_state(PyObject *module)
     return (_functools_state *)state;
 }
 
+
 /* partial object **********************************************************/
-
-
-// The 'Placeholder' singleton indicates which formal positional
-// parameters are to be bound first when using a 'partial' object.
-
-typedef struct {
-    PyObject_HEAD
-} placeholderobject;
-
-static inline _functools_state *
-get_functools_state_by_type(PyTypeObject *type);
 
 typedef struct {
     PyObject_HEAD
@@ -61,18 +49,13 @@ typedef struct {
     PyObject *kw;
     PyObject *dict;        /* __dict__ */
     PyObject *weakreflist; /* List of weak references */
-    PyObject *placeholder; /* Placeholder for positional arguments */
-    Py_ssize_t phcount;    /* Number of placeholders */
     vectorcallfunc vectorcall;
 } partialobject;
-
-// cast a PyObject pointer PTR to a partialobject pointer (no type checks)
-#define partialobject_CAST(op)  ((partialobject *)(op))
 
 static void partial_setvectorcall(partialobject *pto);
 static struct PyModuleDef _functools_module;
 static PyObject *
-partial_call(PyObject *pto, PyObject *args, PyObject *kwargs);
+partial_call(partialobject *pto, PyObject *args, PyObject *kwargs);
 
 static inline _functools_state *
 get_functools_state_by_type(PyTypeObject *type)
@@ -88,20 +71,12 @@ get_functools_state_by_type(PyTypeObject *type)
 static PyObject *
 partial_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 {
-    PyObject *func, *pto_args, *new_args, *pto_kw, *phold;
+    PyObject *func, *pargs, *nargs, *pkw;
     partialobject *pto;
-    Py_ssize_t pto_phcount = 0;
-    Py_ssize_t new_nargs = PyTuple_GET_SIZE(args) - 1;
 
-    if (new_nargs < 0) {
+    if (PyTuple_GET_SIZE(args) < 1) {
         PyErr_SetString(PyExc_TypeError,
                         "type 'partial' takes at least one argument");
-        return NULL;
-    }
-    func = PyTuple_GET_ITEM(args, 0);
-    if (!PyCallable_Check(func)) {
-        PyErr_SetString(PyExc_TypeError,
-                        "the first argument must be callable");
         return NULL;
     }
 
@@ -109,30 +84,10 @@ partial_new(PyTypeObject *type, PyObject *args, PyObject *kw)
     if (state == NULL) {
         return NULL;
     }
-    phold = state->placeholder;
 
-    /* Placeholder restrictions */
-    if (new_nargs && PyTuple_GET_ITEM(args, new_nargs) == phold) {
-        PyErr_SetString(PyExc_TypeError,
-                        "trailing Placeholders are not allowed");
-        return NULL;
-    }
+    pargs = pkw = NULL;
+    func = PyTuple_GET_ITEM(args, 0);
 
-    /* keyword Placeholder prohibition */
-    if (kw != NULL) {
-        PyObject *key, *val;
-        Py_ssize_t pos = 0;
-        while (PyDict_Next(kw, &pos, &key, &val)) {
-            if (val == phold) {
-                PyErr_SetString(PyExc_TypeError,
-                                "Placeholder cannot be passed as a keyword argument");
-                return NULL;
-            }
-        }
-    }
-
-    /* check wrapped function / object */
-    pto_args = pto_kw = NULL;
     int res = PyObject_TypeCheck(func, state->partial_type);
     if (res == -1) {
         return NULL;
@@ -141,13 +96,17 @@ partial_new(PyTypeObject *type, PyObject *args, PyObject *kw)
         // We can use its underlying function directly and merge the arguments.
         partialobject *part = (partialobject *)func;
         if (part->dict == NULL) {
-            pto_args = part->args;
-            pto_kw = part->kw;
+            pargs = part->args;
+            pkw = part->kw;
             func = part->fn;
-            pto_phcount = part->phcount;
-            assert(PyTuple_Check(pto_args));
-            assert(PyDict_Check(pto_kw));
+            assert(PyTuple_Check(pargs));
+            assert(PyDict_Check(pkw));
         }
+    }
+    if (!PyCallable_Check(func)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "the first argument must be callable");
+        return NULL;
     }
 
     /* create partialobject structure */
@@ -156,63 +115,18 @@ partial_new(PyTypeObject *type, PyObject *args, PyObject *kw)
         return NULL;
 
     pto->fn = Py_NewRef(func);
-    pto->placeholder = phold;
 
-    new_args = PyTuple_GetSlice(args, 1, new_nargs + 1);
-    if (new_args == NULL) {
+    nargs = PyTuple_GetSlice(args, 1, PY_SSIZE_T_MAX);
+    if (nargs == NULL) {
         Py_DECREF(pto);
         return NULL;
     }
-
-    /* Count placeholders */
-    Py_ssize_t phcount = 0;
-    for (Py_ssize_t i = 0; i < new_nargs - 1; i++) {
-        if (PyTuple_GET_ITEM(new_args, i) == phold) {
-            phcount++;
-        }
-    }
-    /* merge args with args of `func` which is `partial` */
-    if (pto_phcount > 0 && new_nargs > 0) {
-        Py_ssize_t npargs = PyTuple_GET_SIZE(pto_args);
-        Py_ssize_t tot_nargs = npargs;
-        if (new_nargs > pto_phcount) {
-            tot_nargs += new_nargs - pto_phcount;
-        }
-        PyObject *item;
-        PyObject *tot_args = PyTuple_New(tot_nargs);
-        if (tot_args == NULL) {
-            Py_DECREF(new_args);
-            Py_DECREF(pto);
-            return NULL;
-        }
-        for (Py_ssize_t i = 0, j = 0; i < tot_nargs; i++) {
-            if (i < npargs) {
-                item = PyTuple_GET_ITEM(pto_args, i);
-                if (j < new_nargs && item == phold) {
-                    item = PyTuple_GET_ITEM(new_args, j);
-                    j++;
-                    pto_phcount--;
-                }
-            }
-            else {
-                item = PyTuple_GET_ITEM(new_args, j);
-                j++;
-            }
-            Py_INCREF(item);
-            PyTuple_SET_ITEM(tot_args, i, item);
-        }
-        pto->args = tot_args;
-        pto->phcount = pto_phcount + phcount;
-        Py_DECREF(new_args);
-    }
-    else if (pto_args == NULL) {
-        pto->args = new_args;
-        pto->phcount = phcount;
+    if (pargs == NULL) {
+        pto->args = nargs;
     }
     else {
-        pto->args = PySequence_Concat(pto_args, new_args);
-        pto->phcount = pto_phcount + phcount;
-        Py_DECREF(new_args);
+        pto->args = PySequence_Concat(pargs, nargs);
+        Py_DECREF(nargs);
         if (pto->args == NULL) {
             Py_DECREF(pto);
             return NULL;
@@ -220,11 +134,11 @@ partial_new(PyTypeObject *type, PyObject *args, PyObject *kw)
         assert(PyTuple_Check(pto->args));
     }
 
-    if (pto_kw == NULL || PyDict_GET_SIZE(pto_kw) == 0) {
+    if (pkw == NULL || PyDict_GET_SIZE(pkw) == 0) {
         if (kw == NULL) {
             pto->kw = PyDict_New();
         }
-        else if (_PyObject_IsUniquelyReferenced(kw)) {
+        else if (Py_REFCNT(kw) == 1) {
             pto->kw = Py_NewRef(kw);
         }
         else {
@@ -232,7 +146,7 @@ partial_new(PyTypeObject *type, PyObject *args, PyObject *kw)
         }
     }
     else {
-        pto->kw = PyDict_Copy(pto_kw);
+        pto->kw = PyDict_Copy(pkw);
         if (kw != NULL && pto->kw != NULL) {
             if (PyDict_Merge(pto->kw, kw, 1) != 0) {
                 Py_DECREF(pto);
@@ -250,9 +164,8 @@ partial_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 }
 
 static int
-partial_clear(PyObject *self)
+partial_clear(partialobject *pto)
 {
-    partialobject *pto = partialobject_CAST(self);
     Py_CLEAR(pto->fn);
     Py_CLEAR(pto->args);
     Py_CLEAR(pto->kw);
@@ -261,9 +174,8 @@ partial_clear(PyObject *self)
 }
 
 static int
-partial_traverse(PyObject *self, visitproc visit, void *arg)
+partial_traverse(partialobject *pto, visitproc visit, void *arg)
 {
-    partialobject *pto = partialobject_CAST(self);
     Py_VISIT(Py_TYPE(pto));
     Py_VISIT(pto->fn);
     Py_VISIT(pto->args);
@@ -273,14 +185,14 @@ partial_traverse(PyObject *self, visitproc visit, void *arg)
 }
 
 static void
-partial_dealloc(PyObject *self)
+partial_dealloc(partialobject *pto)
 {
-    PyTypeObject *tp = Py_TYPE(self);
+    PyTypeObject *tp = Py_TYPE(pto);
     /* bpo-31095: UnTrack is needed before calling any callbacks */
-    PyObject_GC_UnTrack(self);
-    FT_CLEAR_WEAKREFS(self, partialobject_CAST(self)->weakreflist);
-    (void)partial_clear(self);
-    tp->tp_free(self);
+    PyObject_GC_UnTrack(pto);
+    FT_CLEAR_WEAKREFS((PyObject*)pto, pto->weakreflist);
+    (void)partial_clear(pto);
+    tp->tp_free(pto);
     Py_DECREF(tp);
 }
 
@@ -290,212 +202,97 @@ partial_descr_get(PyObject *self, PyObject *obj, PyObject *type)
     if (obj == Py_None || obj == NULL) {
         return Py_NewRef(self);
     }
-    return PyMethod_New(self, obj);
+    if (PyErr_WarnEx(PyExc_FutureWarning,
+                     "functools.partial will be a method descriptor in "
+                     "future Python versions; wrap it in staticmethod() "
+                     "if you want to preserve the old behavior", 1) < 0)
+    {
+        return NULL;
+    }
+    return Py_NewRef(self);
+}
+
+/* Merging keyword arguments using the vectorcall convention is messy, so
+ * if we would need to do that, we stop using vectorcall and fall back
+ * to using partial_call() instead. */
+Py_NO_INLINE static PyObject *
+partial_vectorcall_fallback(PyThreadState *tstate, partialobject *pto,
+                            PyObject *const *args, size_t nargsf,
+                            PyObject *kwnames)
+{
+#ifndef Py_GIL_DISABLED
+    pto->vectorcall = NULL;
+#endif
+    Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
+    return _PyObject_MakeTpCall(tstate, (PyObject *)pto,
+                                args, nargs, kwnames);
 }
 
 static PyObject *
-partial_vectorcall(PyObject *self, PyObject *const *args,
+partial_vectorcall(partialobject *pto, PyObject *const *args,
                    size_t nargsf, PyObject *kwnames)
 {
-    partialobject *pto = partialobject_CAST(self);;
     PyThreadState *tstate = _PyThreadState_GET();
+
+    /* pto->kw is mutable, so need to check every time */
+    if (PyDict_GET_SIZE(pto->kw)) {
+        return partial_vectorcall_fallback(tstate, pto, args, nargsf, kwnames);
+    }
+
     Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
-
-    /* Placeholder check */
-    Py_ssize_t pto_phcount = pto->phcount;
-    if (nargs < pto_phcount) {
-        PyErr_Format(PyExc_TypeError,
-                     "missing positional arguments in 'partial' call; "
-                     "expected at least %zd, got %zd", pto_phcount, nargs);
-        return NULL;
+    Py_ssize_t nargs_total = nargs;
+    if (kwnames != NULL) {
+        nargs_total += PyTuple_GET_SIZE(kwnames);
     }
 
-    PyObject *result = NULL;
-    PyObject *partial_function = Py_NewRef(pto->fn);
-    PyObject *partial_args = Py_NewRef(pto->args);
-    PyObject *partial_keywords = Py_NewRef(pto->kw);
+    PyObject **pto_args = _PyTuple_ITEMS(pto->args);
+    Py_ssize_t pto_nargs = PyTuple_GET_SIZE(pto->args);
 
-    PyObject **pto_args = _PyTuple_ITEMS(partial_args);
-    Py_ssize_t pto_nargs = PyTuple_GET_SIZE(partial_args);
-    Py_ssize_t pto_nkwds = PyDict_GET_SIZE(partial_keywords);
-    Py_ssize_t nkwds = kwnames == NULL ? 0 : PyTuple_GET_SIZE(kwnames);
-    Py_ssize_t nargskw = nargs + nkwds;
-
-    /* Special cases */
-    if (!pto_nkwds) {
-        /* Fast path if we're called without arguments */
-        if (nargskw == 0) {
-            result = _PyObject_VectorcallTstate(tstate, partial_function, pto_args,
-                                                pto_nargs, NULL);
-            goto done;
-        }
-
-        /* Use PY_VECTORCALL_ARGUMENTS_OFFSET to prepend a single
-         * positional argument. */
-        if (pto_nargs == 1 && (nargsf & PY_VECTORCALL_ARGUMENTS_OFFSET)) {
-            PyObject **newargs = (PyObject **)args - 1;
-            PyObject *tmp = newargs[0];
-            newargs[0] = pto_args[0];
-            result = _PyObject_VectorcallTstate(tstate, partial_function, newargs,
-                                                nargs + 1, kwnames);
-            newargs[0] = tmp;
-            goto done;
-        }
+    /* Fast path if we're called without arguments */
+    if (nargs_total == 0) {
+        return _PyObject_VectorcallTstate(tstate, pto->fn,
+                                          pto_args, pto_nargs, NULL);
     }
 
-    /* Total sizes */
-    Py_ssize_t tot_nargs = pto_nargs + nargs - pto_phcount;
-    Py_ssize_t tot_nkwds = pto_nkwds + nkwds;
-    Py_ssize_t tot_nargskw = tot_nargs + tot_nkwds;
-
-    PyObject *pto_kw_merged = NULL;  // pto_kw with duplicates merged (if any)
-    PyObject *tot_kwnames;
-
-    /* Allocate Stack
-     * Note, _PY_FASTCALL_SMALL_STACK is optimal for positional only
-     * This case might have keyword arguments
-     *  furthermore, it might use extra stack space for temporary key storage
-     *  thus, double small_stack size is used, which is 10 * 8 = 80 bytes */
-    PyObject *small_stack[_PY_FASTCALL_SMALL_STACK * 2];
-    PyObject **tmp_stack, **stack;
-    Py_ssize_t init_stack_size = tot_nargskw;
-    if (pto_nkwds) {
-        // If pto_nkwds, allocate additional space for temporary new keys
-        init_stack_size += nkwds;
+    /* Fast path using PY_VECTORCALL_ARGUMENTS_OFFSET to prepend a single
+     * positional argument */
+    if (pto_nargs == 1 && (nargsf & PY_VECTORCALL_ARGUMENTS_OFFSET)) {
+        PyObject **newargs = (PyObject **)args - 1;
+        PyObject *tmp = newargs[0];
+        newargs[0] = pto_args[0];
+        PyObject *ret = _PyObject_VectorcallTstate(tstate, pto->fn,
+                                                   newargs, nargs + 1, kwnames);
+        newargs[0] = tmp;
+        return ret;
     }
-    if (init_stack_size <= (Py_ssize_t)Py_ARRAY_LENGTH(small_stack)) {
+
+    Py_ssize_t newnargs_total = pto_nargs + nargs_total;
+
+    PyObject *small_stack[_PY_FASTCALL_SMALL_STACK];
+    PyObject *ret;
+    PyObject **stack;
+
+    if (newnargs_total <= (Py_ssize_t)Py_ARRAY_LENGTH(small_stack)) {
         stack = small_stack;
     }
     else {
-        stack = PyMem_Malloc(init_stack_size * sizeof(PyObject *));
+        stack = PyMem_Malloc(newnargs_total * sizeof(PyObject *));
         if (stack == NULL) {
             PyErr_NoMemory();
-            goto done;
+            return NULL;
         }
     }
 
-    /* Copy keywords to stack */
-    if (!pto_nkwds) {
-        tot_kwnames = kwnames;
-        if (nkwds) {
-            /* if !pto_nkwds & nkwds, then simply append kw */
-            memcpy(stack + tot_nargs, args + nargs, nkwds * sizeof(PyObject*));
-        }
-    }
-    else {
-        /* stack is now         [<positionals>, <pto_kwds>, <kwds>, <kwds_keys>]
-         * Will resize later to [<positionals>, <merged_kwds>] */
-        PyObject *key, *val;
+    /* Copy to new stack, using borrowed references */
+    memcpy(stack, pto_args, pto_nargs * sizeof(PyObject*));
+    memcpy(stack + pto_nargs, args, nargs_total * sizeof(PyObject*));
 
-        /* Merge kw to pto_kw or add to tail (if not duplicate) */
-        Py_ssize_t n_tail = 0;
-        for (Py_ssize_t i = 0; i < nkwds; ++i) {
-            key = PyTuple_GET_ITEM(kwnames, i);
-            val = args[nargs + i];
-            int contains = PyDict_Contains(partial_keywords, key);
-            if (contains < 0) {
-                goto clean_stack;
-            }
-            else if (contains == 1) {
-                if (pto_kw_merged == NULL) {
-                    pto_kw_merged = PyDict_Copy(partial_keywords);
-                    if (pto_kw_merged == NULL) {
-                        goto clean_stack;
-                    }
-                }
-                if (PyDict_SetItem(pto_kw_merged, key, val) < 0) {
-                    Py_DECREF(pto_kw_merged);
-                    goto clean_stack;
-                }
-            }
-            else {
-                /* Copy keyword tail to stack */
-                stack[tot_nargs + pto_nkwds + n_tail] = val;
-                stack[tot_nargskw + n_tail] = key;
-                n_tail++;
-            }
-        }
-        Py_ssize_t n_merges = nkwds - n_tail;
-
-        /* Create total kwnames */
-        tot_kwnames = PyTuple_New(tot_nkwds - n_merges);
-        if (tot_kwnames == NULL) {
-            Py_XDECREF(pto_kw_merged);
-            goto clean_stack;
-        }
-        for (Py_ssize_t i = 0; i < n_tail; ++i) {
-            key = Py_NewRef(stack[tot_nargskw + i]);
-            PyTuple_SET_ITEM(tot_kwnames, pto_nkwds + i, key);
-        }
-
-        /* Copy pto_keywords with overlapping call keywords merged
-         * Note, tail is already coppied. */
-        Py_ssize_t pos = 0, i = 0;
-        PyObject *keyword_dict = n_merges ? pto_kw_merged : partial_keywords;
-        Py_BEGIN_CRITICAL_SECTION(keyword_dict);
-        while (PyDict_Next(keyword_dict, &pos, &key, &val)) {
-            assert(i < pto_nkwds);
-            PyTuple_SET_ITEM(tot_kwnames, i, Py_NewRef(key));
-            stack[tot_nargs + i] = val;
-            i++;
-        }
-        Py_END_CRITICAL_SECTION();
-        assert(i == pto_nkwds);
-        Py_XDECREF(pto_kw_merged);
-
-        /* Resize Stack if the removing overallocation saves some noticable memory
-         * NOTE: This whole block can be removed without breaking anything */
-        Py_ssize_t noveralloc = n_merges + nkwds;
-        if (stack != small_stack && noveralloc > 6 && noveralloc > init_stack_size / 10) {
-            tmp_stack = PyMem_Realloc(stack, (tot_nargskw - n_merges) * sizeof(PyObject *));
-            if (tmp_stack == NULL) {
-                Py_DECREF(tot_kwnames);
-                PyErr_NoMemory();
-                goto clean_stack;
-            }
-            stack = tmp_stack;
-        }
-    }
-
-    /* Copy Positionals to stack */
-    if (pto_phcount) {
-        Py_ssize_t j = 0;       // New args index
-        for (Py_ssize_t i = 0; i < pto_nargs; i++) {
-            if (pto_args[i] == pto->placeholder) {
-                stack[i] = args[j];
-                j += 1;
-            }
-            else {
-                stack[i] = pto_args[i];
-            }
-        }
-        assert(j == pto_phcount);
-        /* Add remaining args from new_args */
-        if (nargs > pto_phcount) {
-            memcpy(stack + pto_nargs, args + j, (nargs - j) * sizeof(PyObject*));
-        }
-    }
-    else {
-        memcpy(stack, pto_args, pto_nargs * sizeof(PyObject*));
-        memcpy(stack + pto_nargs, args, nargs * sizeof(PyObject*));
-    }
-
-    result = _PyObject_VectorcallTstate(tstate, partial_function, stack,
-                                        tot_nargs, tot_kwnames);
-    if (pto_nkwds) {
-        Py_DECREF(tot_kwnames);
-    }
-
- clean_stack:
+    ret = _PyObject_VectorcallTstate(tstate, pto->fn,
+                                     stack, pto_nargs + nargs, kwnames);
     if (stack != small_stack) {
         PyMem_Free(stack);
     }
-
- done:
-    Py_DECREF(partial_function);
-    Py_DECREF(partial_args);
-    Py_DECREF(partial_keywords);
-    return result;
+    return ret;
 }
 
 /* Set pto->vectorcall depending on the parameters of the partial object */
@@ -510,95 +307,53 @@ partial_setvectorcall(partialobject *pto)
      * but that is unlikely (why use partial without arguments?),
      * so we don't optimize that */
     else {
-        pto->vectorcall = partial_vectorcall;
+        pto->vectorcall = (vectorcallfunc)partial_vectorcall;
     }
 }
 
 
 // Not converted to argument clinic, because of `*args, **kwargs` arguments.
 static PyObject *
-partial_call(PyObject *self, PyObject *args, PyObject *kwargs)
+partial_call(partialobject *pto, PyObject *args, PyObject *kwargs)
 {
-    partialobject *pto = partialobject_CAST(self);
     assert(PyCallable_Check(pto->fn));
     assert(PyTuple_Check(pto->args));
     assert(PyDict_Check(pto->kw));
 
-    Py_ssize_t nargs = PyTuple_GET_SIZE(args);
-    Py_ssize_t pto_phcount = pto->phcount;
-    if (nargs < pto_phcount) {
-        PyErr_Format(PyExc_TypeError,
-                     "missing positional arguments in 'partial' call; "
-                     "expected at least %zd, got %zd", pto_phcount, nargs);
-        return NULL;
-    }
-
     /* Merge keywords */
-    PyObject *tot_kw;
+    PyObject *kwargs2;
     if (PyDict_GET_SIZE(pto->kw) == 0) {
         /* kwargs can be NULL */
-        tot_kw = Py_XNewRef(kwargs);
+        kwargs2 = Py_XNewRef(kwargs);
     }
     else {
         /* bpo-27840, bpo-29318: dictionary of keyword parameters must be
            copied, because a function using "**kwargs" can modify the
            dictionary. */
-        tot_kw = PyDict_Copy(pto->kw);
-        if (tot_kw == NULL) {
+        kwargs2 = PyDict_Copy(pto->kw);
+        if (kwargs2 == NULL) {
             return NULL;
         }
 
         if (kwargs != NULL) {
-            if (PyDict_Merge(tot_kw, kwargs, 1) != 0) {
-                Py_DECREF(tot_kw);
+            if (PyDict_Merge(kwargs2, kwargs, 1) != 0) {
+                Py_DECREF(kwargs2);
                 return NULL;
             }
         }
     }
 
     /* Merge positional arguments */
-    PyObject *tot_args;
-    if (pto_phcount) {
-        Py_ssize_t pto_nargs = PyTuple_GET_SIZE(pto->args);
-        Py_ssize_t tot_nargs = pto_nargs + nargs - pto_phcount;
-        assert(tot_nargs >= 0);
-        tot_args = PyTuple_New(tot_nargs);
-        if (tot_args == NULL) {
-            Py_XDECREF(tot_kw);
-            return NULL;
-        }
-        PyObject *pto_args = pto->args;
-        PyObject *item;
-        Py_ssize_t j = 0;   // New args index
-        for (Py_ssize_t i = 0; i < pto_nargs; i++) {
-            item = PyTuple_GET_ITEM(pto_args, i);
-            if (item == pto->placeholder) {
-                item = PyTuple_GET_ITEM(args, j);
-                j += 1;
-            }
-            Py_INCREF(item);
-            PyTuple_SET_ITEM(tot_args, i, item);
-        }
-        assert(j == pto_phcount);
-        for (Py_ssize_t i = pto_nargs; i < tot_nargs; i++) {
-            item = PyTuple_GET_ITEM(args, j);
-            Py_INCREF(item);
-            PyTuple_SET_ITEM(tot_args, i, item);
-            j += 1;
-        }
-    }
-    else {
-        /* Note: tupleconcat() is optimized for empty tuples */
-        tot_args = PySequence_Concat(pto->args, args);
-        if (tot_args == NULL) {
-            Py_XDECREF(tot_kw);
-            return NULL;
-        }
+    /* Note: tupleconcat() is optimized for empty tuples */
+    PyObject *args2 = PySequence_Concat(pto->args, args);
+    if (args2 == NULL) {
+        Py_XDECREF(kwargs2);
+        return NULL;
     }
 
-    PyObject *res = PyObject_Call(pto->fn, tot_args, tot_kw);
-    Py_DECREF(tot_args);
-    Py_XDECREF(tot_kw);
+    PyObject *res = PyObject_Call(pto->fn, args2, kwargs2);
+    Py_DECREF(args2);
+    Py_XDECREF(kwargs2);
     return res;
 }
 
@@ -630,9 +385,8 @@ static PyGetSetDef partial_getsetlist[] = {
 };
 
 static PyObject *
-partial_repr(PyObject *self)
+partial_repr(partialobject *pto)
 {
-    partialobject *pto = partialobject_CAST(self);
     PyObject *result = NULL;
     PyObject *arglist = NULL;
     PyObject *mod = NULL;
@@ -641,7 +395,7 @@ partial_repr(PyObject *self)
     PyObject *key, *value;
     int status;
 
-    status = Py_ReprEnter(self);
+    status = Py_ReprEnter((PyObject *)pto);
     if (status != 0) {
         if (status < 0) {
             return NULL;
@@ -655,7 +409,7 @@ partial_repr(PyObject *self)
     assert(PyTuple_Check(args));
     assert(PyDict_Check(kw));
 
-    arglist = Py_GetConstant(Py_CONSTANT_EMPTY_STR);
+    arglist = PyUnicode_FromString("");
     if (arglist == NULL) {
         goto done;
     }
@@ -669,8 +423,6 @@ partial_repr(PyObject *self)
         }
     }
     /* Pack keyword arguments */
-    int error = 0;
-    Py_BEGIN_CRITICAL_SECTION(kw);
     for (i = 0; PyDict_Next(kw, &i, &key, &value);) {
         /* Prevent key.__str__ from deleting the value. */
         Py_INCREF(value);
@@ -678,13 +430,8 @@ partial_repr(PyObject *self)
                                                 key, value));
         Py_DECREF(value);
         if (arglist == NULL) {
-            error = 1;
-            break;
+            goto done;
         }
-    }
-    Py_END_CRITICAL_SECTION();
-    if (error) {
-        goto done;
     }
 
     mod = PyType_GetModuleName(Py_TYPE(pto));
@@ -705,7 +452,7 @@ done:
     Py_DECREF(fn);
     Py_DECREF(args);
     Py_DECREF(kw);
-    Py_ReprLeave(self);
+    Py_ReprLeave((PyObject *)pto);
     return result;
 }
 
@@ -717,25 +464,20 @@ done:
  */
 
 static PyObject *
-partial_reduce(PyObject *self, PyObject *Py_UNUSED(args))
+partial_reduce(partialobject *pto, PyObject *unused)
 {
-    partialobject *pto = partialobject_CAST(self);
     return Py_BuildValue("O(O)(OOOO)", Py_TYPE(pto), pto->fn, pto->fn,
                          pto->args, pto->kw,
                          pto->dict ? pto->dict : Py_None);
 }
 
 static PyObject *
-partial_setstate(PyObject *self, PyObject *state)
+partial_setstate(partialobject *pto, PyObject *state)
 {
-    partialobject *pto = partialobject_CAST(self);
     PyObject *fn, *fnargs, *kw, *dict;
 
-    if (!PyTuple_Check(state)) {
-        PyErr_SetString(PyExc_TypeError, "invalid partial state");
-        return NULL;
-    }
-    if (!PyArg_ParseTuple(state, "OOOO", &fn, &fnargs, &kw, &dict) ||
+    if (!PyTuple_Check(state) ||
+        !PyArg_ParseTuple(state, "OOOO", &fn, &fnargs, &kw, &dict) ||
         !PyCallable_Check(fn) ||
         !PyTuple_Check(fnargs) ||
         (kw != Py_None && !PyDict_Check(kw)) ||
@@ -743,20 +485,6 @@ partial_setstate(PyObject *self, PyObject *state)
     {
         PyErr_SetString(PyExc_TypeError, "invalid partial state");
         return NULL;
-    }
-
-    Py_ssize_t nargs = PyTuple_GET_SIZE(fnargs);
-    if (nargs && PyTuple_GET_ITEM(fnargs, nargs - 1) == pto->placeholder) {
-        PyErr_SetString(PyExc_TypeError,
-                        "trailing Placeholders are not allowed");
-        return NULL;
-    }
-    /* Count placeholders */
-    Py_ssize_t phcount = 0;
-    for (Py_ssize_t i = 0; i < nargs - 1; i++) {
-        if (PyTuple_GET_ITEM(fnargs, i) == pto->placeholder) {
-            phcount++;
-        }
     }
 
     if(!PyTuple_CheckExact(fnargs))
@@ -781,18 +509,18 @@ partial_setstate(PyObject *self, PyObject *state)
         dict = NULL;
     else
         Py_INCREF(dict);
+
     Py_SETREF(pto->fn, Py_NewRef(fn));
     Py_SETREF(pto->args, fnargs);
     Py_SETREF(pto->kw, kw);
-    pto->phcount = phcount;
     Py_XSETREF(pto->dict, dict);
     partial_setvectorcall(pto);
     Py_RETURN_NONE;
 }
 
 static PyMethodDef partial_methods[] = {
-    {"__reduce__", partial_reduce, METH_NOARGS},
-    {"__setstate__", partial_setstate, METH_O},
+    {"__reduce__", (PyCFunction)partial_reduce, METH_NOARGS},
+    {"__setstate__", (PyCFunction)partial_setstate, METH_O},
     {"__class_getitem__",    Py_GenericAlias,
     METH_O|METH_CLASS,
     PyDoc_STR("partial is generic over the wrapped function's return type")},
@@ -811,7 +539,7 @@ static PyType_Slot partial_type_slots[] = {
     {Py_tp_methods, partial_methods},
     {Py_tp_members, partial_memberlist},
     {Py_tp_getset, partial_getsetlist},
-    {Py_tp_descr_get, partial_descr_get},
+    {Py_tp_descr_get, (descrgetfunc)partial_descr_get},
     {Py_tp_new, partial_new},
     {Py_tp_free, PyObject_GC_Del},
     {0, 0}
@@ -835,19 +563,16 @@ typedef struct {
     PyObject *object;
 } keyobject;
 
-#define keyobject_CAST(op)  ((keyobject *)(op))
-
 static int
-keyobject_clear(PyObject *op)
+keyobject_clear(keyobject *ko)
 {
-    keyobject *ko = keyobject_CAST(op);
     Py_CLEAR(ko->cmp);
     Py_CLEAR(ko->object);
     return 0;
 }
 
 static void
-keyobject_dealloc(PyObject *ko)
+keyobject_dealloc(keyobject *ko)
 {
     PyTypeObject *tp = Py_TYPE(ko);
     PyObject_GC_UnTrack(ko);
@@ -857,9 +582,8 @@ keyobject_dealloc(PyObject *ko)
 }
 
 static int
-keyobject_traverse(PyObject *op, visitproc visit, void *arg)
+keyobject_traverse(keyobject *ko, visitproc visit, void *arg)
 {
-    keyobject *ko = keyobject_CAST(op);
     Py_VISIT(Py_TYPE(ko));
     Py_VISIT(ko->cmp);
     Py_VISIT(ko->object);
@@ -874,18 +598,18 @@ static PyMemberDef keyobject_members[] = {
 };
 
 static PyObject *
-keyobject_text_signature(PyObject *Py_UNUSED(self), void *Py_UNUSED(ignored))
+keyobject_text_signature(PyObject *self, void *Py_UNUSED(ignored))
 {
     return PyUnicode_FromString("(obj)");
 }
 
 static PyGetSetDef keyobject_getset[] = {
-    {"__text_signature__", keyobject_text_signature, NULL},
+    {"__text_signature__", keyobject_text_signature, (setter)NULL},
     {NULL}
 };
 
 static PyObject *
-keyobject_call(PyObject *ko, PyObject *args, PyObject *kwds);
+keyobject_call(keyobject *ko, PyObject *args, PyObject *kwds);
 
 static PyObject *
 keyobject_richcompare(PyObject *ko, PyObject *other, int op);
@@ -911,12 +635,11 @@ static PyType_Spec keyobject_type_spec = {
 };
 
 static PyObject *
-keyobject_call(PyObject *self, PyObject *args, PyObject *kwds)
+keyobject_call(keyobject *ko, PyObject *args, PyObject *kwds)
 {
     PyObject *object;
     keyobject *result;
     static char *kwargs[] = {"obj", NULL};
-    keyobject *ko = keyobject_CAST(self);
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O:K", kwargs, &object))
         return NULL;
@@ -932,20 +655,17 @@ keyobject_call(PyObject *self, PyObject *args, PyObject *kwds)
 }
 
 static PyObject *
-keyobject_richcompare(PyObject *self, PyObject *other, int op)
+keyobject_richcompare(PyObject *ko, PyObject *other, int op)
 {
-    if (!Py_IS_TYPE(other, Py_TYPE(self))) {
+    if (!Py_IS_TYPE(other, Py_TYPE(ko))) {
         PyErr_Format(PyExc_TypeError, "other argument must be K instance");
         return NULL;
     }
 
-    keyobject *lhs = keyobject_CAST(self);
-    keyobject *rhs = keyobject_CAST(other);
-
-    PyObject *compare = lhs->cmp;
+    PyObject *compare = ((keyobject *) ko)->cmp;
     assert(compare != NULL);
-    PyObject *x = lhs->object;
-    PyObject *y = rhs->object;
+    PyObject *x = ((keyobject *) ko)->object;
+    PyObject *y = ((keyobject *) other)->object;
     if (!x || !y){
         PyErr_Format(PyExc_AttributeError, "object");
         return NULL;
@@ -993,32 +713,15 @@ _functools_cmp_to_key_impl(PyObject *module, PyObject *mycmp)
 
 /* reduce (used to be a builtin) ********************************************/
 
-/*[clinic input]
-@permit_long_summary
-_functools.reduce
-
-    function as func: object
-    iterable as seq: object
-    /
-    initial as result: object(c_default="NULL") = functools._initial_missing
-
-Apply a function of two arguments cumulatively to the items of an iterable, from left to right.
-
-This effectively reduces the iterable to a single value.  If initial is
-present, it is placed before the items of the iterable in the
-calculation, and serves as a default when the iterable is empty.
-
-For example, reduce(lambda x, y: x+y, [1, 2, 3, 4, 5])
-calculates ((((1 + 2) + 3) + 4) + 5).
-[clinic start generated code]*/
-
+// Not converted to argument clinic, because of `args` in-place modification.
+// AC will affect performance.
 static PyObject *
-_functools_reduce_impl(PyObject *module, PyObject *func, PyObject *seq,
-                       PyObject *result)
-/*[clinic end generated code: output=30d898fe1267c79d input=ff4d5c73100e72e8]*/
+functools_reduce(PyObject *self, PyObject *args)
 {
-    PyObject *args, *it;
+    PyObject *seq, *func, *result = NULL, *it;
 
+    if (!PyArg_UnpackTuple(args, "reduce", 2, 3, &func, &seq, &result))
+        return NULL;
     if (result != NULL)
         Py_INCREF(result);
 
@@ -1037,7 +740,7 @@ _functools_reduce_impl(PyObject *module, PyObject *func, PyObject *seq,
     for (;;) {
         PyObject *op2;
 
-        if (!_PyObject_IsUniquelyReferenced(args)) {
+        if (Py_REFCNT(args) > 1) {
             Py_DECREF(args);
             if ((args = PyTuple_New(2)) == NULL)
                 goto Fail;
@@ -1062,7 +765,9 @@ _functools_reduce_impl(PyObject *module, PyObject *func, PyObject *seq,
             }
             // bpo-42536: The GC may have untracked this args tuple. Since we're
             // recycling it, make sure it's tracked again:
-            _PyTuple_Recycle(args);
+            if (!_PyObject_GC_IS_TRACKED(args)) {
+                _PyObject_GC_TRACK(args);
+            }
         }
     }
 
@@ -1070,7 +775,7 @@ _functools_reduce_impl(PyObject *module, PyObject *func, PyObject *seq,
 
     if (result == NULL)
         PyErr_SetString(PyExc_TypeError,
-                        "reduce() of empty iterable with no initial value");
+                   "reduce() of empty iterable with no initial value");
 
     Py_DECREF(it);
     return result;
@@ -1081,6 +786,18 @@ Fail:
     Py_DECREF(it);
     return NULL;
 }
+
+PyDoc_STRVAR(functools_reduce_doc,
+"reduce(function, iterable[, initial], /) -> value\n\
+\n\
+Apply a function of two arguments cumulatively to the items of an iterable, from left to right.\n\
+\n\
+This effectively reduces the iterable to a single value.  If initial is present,\n\
+it is placed before the items of the iterable in the calculation, and serves as\n\
+a default when the iterable is empty.\n\
+\n\
+For example, reduce(lambda x, y: x+y, [1, 2, 3, 4, 5])\n\
+calculates ((((1 + 2) + 3) + 4) + 5).");
 
 /* lru_cache object **********************************************************/
 
@@ -1113,12 +830,9 @@ typedef struct lru_list_elem {
     PyObject *key, *result;
 } lru_list_elem;
 
-#define lru_list_elem_CAST(op)  ((lru_list_elem *)(op))
-
 static void
-lru_list_elem_dealloc(PyObject *op)
+lru_list_elem_dealloc(lru_list_elem *link)
 {
-    lru_list_elem *link = lru_list_elem_CAST(op);
     PyTypeObject *tp = Py_TYPE(link);
     Py_XDECREF(link->key);
     Py_XDECREF(link->result);
@@ -1158,8 +872,6 @@ typedef struct lru_cache_object {
     PyObject *dict;
     PyObject *weakreflist;
 } lru_cache_object;
-
-#define lru_cache_object_CAST(op)   ((lru_cache_object *)(op))
 
 static PyObject *
 lru_cache_make_key(PyObject *kwd_mark, PyObject *args,
@@ -1227,7 +939,7 @@ uncached_lru_cache_wrapper(lru_cache_object *self, PyObject *args, PyObject *kwd
 {
     PyObject *result;
 
-    FT_ATOMIC_ADD_SSIZE(self->misses, 1);
+    self->misses++;
     result = PyObject_Call(self->func, args, kwds);
     if (!result)
         return NULL;
@@ -1247,17 +959,18 @@ infinite_lru_cache_wrapper(lru_cache_object *self, PyObject *args, PyObject *kwd
         Py_DECREF(key);
         return NULL;
     }
-    int res = _PyDict_GetItemRef_KnownHash((PyDictObject *)self->cache, key, hash, &result);
-    if (res > 0) {
-        FT_ATOMIC_ADD_SSIZE(self->hits, 1);
+    result = _PyDict_GetItem_KnownHash(self->cache, key, hash);
+    if (result) {
+        Py_INCREF(result);
+        self->hits++;
         Py_DECREF(key);
         return result;
     }
-    if (res < 0) {
+    if (PyErr_Occurred()) {
         Py_DECREF(key);
         return NULL;
     }
-    FT_ATOMIC_ADD_SSIZE(self->misses, 1);
+    self->misses++;
     result = PyObject_Call(self->func, args, kwds);
     if (!result) {
         Py_DECREF(key);
@@ -1332,65 +1045,50 @@ lru_cache_prepend_link(lru_cache_object *self, lru_list_elem *link)
    so that we know the cache is a consistent state.
  */
 
-static int
-bounded_lru_cache_get_lock_held(lru_cache_object *self, PyObject *args, PyObject *kwds,
-                                PyObject **result, PyObject **key, Py_hash_t *hash)
+static PyObject *
+bounded_lru_cache_wrapper(lru_cache_object *self, PyObject *args, PyObject *kwds)
 {
-    _Py_CRITICAL_SECTION_ASSERT_OBJECT_LOCKED(self);
     lru_list_elem *link;
+    PyObject *key, *result, *testresult;
+    Py_hash_t hash;
 
-    PyObject *key_ = *key = lru_cache_make_key(self->kwd_mark, args, kwds, self->typed);
-    if (!key_)
-        return -1;
-    Py_hash_t hash_ = *hash = PyObject_Hash(key_);
-    if (hash_ == -1) {
-        Py_DECREF(key_);  /* dead reference left in *key, is not used */
-        return -1;
+    key = lru_cache_make_key(self->kwd_mark, args, kwds, self->typed);
+    if (!key)
+        return NULL;
+    hash = PyObject_Hash(key);
+    if (hash == -1) {
+        Py_DECREF(key);
+        return NULL;
     }
-    int res = _PyDict_GetItemRef_KnownHash_LockHeld((PyDictObject *)self->cache, key_, hash_,
-                                                    (PyObject **)&link);
-    if (res > 0) {
+    link  = (lru_list_elem *)_PyDict_GetItem_KnownHash(self->cache, key, hash);
+    if (link != NULL) {
         lru_cache_extract_link(link);
         lru_cache_append_link(self, link);
-        *result = link->result;
-        FT_ATOMIC_ADD_SSIZE(self->hits, 1);
-        Py_INCREF(link->result);
-        Py_DECREF(link);
-        Py_DECREF(key_);
-        return 1;
+        result = link->result;
+        self->hits++;
+        Py_INCREF(result);
+        Py_DECREF(key);
+        return result;
     }
-    if (res < 0) {
-        Py_DECREF(key_);
-        return -1;
+    if (PyErr_Occurred()) {
+        Py_DECREF(key);
+        return NULL;
     }
-    FT_ATOMIC_ADD_SSIZE(self->misses, 1);
-    return 0;
-}
-
-static PyObject *
-bounded_lru_cache_update_lock_held(lru_cache_object *self,
-                                   PyObject *result, PyObject *key, Py_hash_t hash)
-{
-    _Py_CRITICAL_SECTION_ASSERT_OBJECT_LOCKED(self);
-    lru_list_elem *link;
-    PyObject *testresult;
-    int res;
-
+    self->misses++;
+    result = PyObject_Call(self->func, args, kwds);
     if (!result) {
         Py_DECREF(key);
         return NULL;
     }
-    res = _PyDict_GetItemRef_KnownHash_LockHeld((PyDictObject *)self->cache, key, hash,
-                                                &testresult);
-    if (res > 0) {
+    testresult = _PyDict_GetItem_KnownHash(self->cache, key, hash);
+    if (testresult != NULL) {
         /* Getting here means that this same key was added to the cache
            during the PyObject_Call().  Since the link update is already
            done, we need only return the computed result. */
-        Py_DECREF(testresult);
         Py_DECREF(key);
         return result;
     }
-    if (res < 0) {
+    if (PyErr_Occurred()) {
         /* This is an unusual case since this same lookup
            did not previously trigger an error during lookup.
            Treat it the same as an error in user function
@@ -1424,8 +1122,8 @@ bounded_lru_cache_update_lock_held(lru_cache_object *self,
            this same key, then this setitem call will update the cache dict
            with this new link, leaving the old link as an orphan (i.e. not
            having a cache dict entry that refers to it). */
-        if (_PyDict_SetItem_KnownHash_LockHeld((PyDictObject *)self->cache, key,
-                                               (PyObject *)link, hash) < 0) {
+        if (_PyDict_SetItem_KnownHash(self->cache, key, (PyObject *)link,
+                                      hash) < 0) {
             Py_DECREF(link);
             return NULL;
         }
@@ -1454,8 +1152,8 @@ bounded_lru_cache_update_lock_held(lru_cache_object *self,
        The cache dict holds one reference to the link.
        We created one other reference when the link was created.
        The linked list only has borrowed references. */
-    res = _PyDict_Pop_KnownHash((PyDictObject*)self->cache, link->key,
-                                link->hash, &popresult);
+    int res = _PyDict_Pop_KnownHash((PyDictObject*)self->cache, link->key,
+                                    link->hash, &popresult);
     if (res < 0) {
         /* An error arose while trying to remove the oldest key (the one
            being evicted) from the cache.  We restore the link to its
@@ -1494,8 +1192,8 @@ bounded_lru_cache_update_lock_held(lru_cache_object *self,
        for successful insertion in the cache dict before adding the
        link to the linked list.  Otherwise, the potentially reentrant
        __eq__ call could cause the then orphan link to be visited. */
-    if (_PyDict_SetItem_KnownHash_LockHeld((PyDictObject *)self->cache, key,
-                                           (PyObject *)link, hash) < 0) {
+    if (_PyDict_SetItem_KnownHash(self->cache, key, (PyObject *)link,
+                                  hash) < 0) {
         /* Somehow the cache dict update failed.  We no longer can
            restore the old link.  Let the error propagate upward and
            leave the cache short one link. */
@@ -1510,37 +1208,6 @@ bounded_lru_cache_update_lock_held(lru_cache_object *self,
     Py_DECREF(popresult);
     Py_DECREF(oldkey);
     Py_DECREF(oldresult);
-    return result;
-}
-
-static PyObject *
-bounded_lru_cache_wrapper(lru_cache_object *self, PyObject *args, PyObject *kwds)
-{
-    PyObject *key, *result;
-    Py_hash_t hash;
-    int res;
-
-    Py_BEGIN_CRITICAL_SECTION(self);
-    res = bounded_lru_cache_get_lock_held(self, args, kwds, &result, &key, &hash);
-    Py_END_CRITICAL_SECTION();
-
-    if (res < 0) {
-        return NULL;
-    }
-    if (res > 0) {
-        return result;
-    }
-
-    result = PyObject_Call(self->func, args, kwds);
-
-    Py_BEGIN_CRITICAL_SECTION(self);
-    /* Note:  key will be stolen in the below function, and
-       result may be stolen or sometimes re-returned as a passthrough.
-       Treat both as being stolen.
-     */
-    result = bounded_lru_cache_update_lock_held(self, result, key, hash);
-    Py_END_CRITICAL_SECTION();
-
     return result;
 }
 
@@ -1641,9 +1308,8 @@ lru_cache_clear_list(lru_list_elem *link)
 }
 
 static int
-lru_cache_tp_clear(PyObject *op)
+lru_cache_tp_clear(lru_cache_object *self)
 {
-    lru_cache_object *self = lru_cache_object_CAST(op);
     lru_list_elem *list = lru_cache_unlink_list(self);
     Py_CLEAR(self->cache);
     Py_CLEAR(self->func);
@@ -1656,25 +1322,25 @@ lru_cache_tp_clear(PyObject *op)
 }
 
 static void
-lru_cache_dealloc(PyObject *op)
+lru_cache_dealloc(lru_cache_object *obj)
 {
-    lru_cache_object *obj = lru_cache_object_CAST(op);
     PyTypeObject *tp = Py_TYPE(obj);
     /* bpo-31095: UnTrack is needed before calling any callbacks */
     PyObject_GC_UnTrack(obj);
-    FT_CLEAR_WEAKREFS(op, obj->weakreflist);
+    FT_CLEAR_WEAKREFS((PyObject*)obj, obj->weakreflist);
 
-    (void)lru_cache_tp_clear(op);
+    (void)lru_cache_tp_clear(obj);
     tp->tp_free(obj);
     Py_DECREF(tp);
 }
 
 static PyObject *
-lru_cache_call(PyObject *op, PyObject *args, PyObject *kwds)
+lru_cache_call(lru_cache_object *self, PyObject *args, PyObject *kwds)
 {
-    lru_cache_object *self = lru_cache_object_CAST(op);
     PyObject *result;
+    Py_BEGIN_CRITICAL_SECTION(self);
     result = self->wrapper(self, args, kwds);
+    Py_END_CRITICAL_SECTION();
     return result;
 }
 
@@ -1701,15 +1367,11 @@ _functools__lru_cache_wrapper_cache_info_impl(PyObject *self)
     lru_cache_object *_self = (lru_cache_object *) self;
     if (_self->maxsize == -1) {
         return PyObject_CallFunction(_self->cache_info_type, "nnOn",
-                                     FT_ATOMIC_LOAD_SSIZE_RELAXED(_self->hits),
-                                     FT_ATOMIC_LOAD_SSIZE_RELAXED(_self->misses),
-                                     Py_None,
+                                     _self->hits, _self->misses, Py_None,
                                      PyDict_GET_SIZE(_self->cache));
     }
     return PyObject_CallFunction(_self->cache_info_type, "nnnn",
-                                 FT_ATOMIC_LOAD_SSIZE_RELAXED(_self->hits),
-                                 FT_ATOMIC_LOAD_SSIZE_RELAXED(_self->misses),
-                                 _self->maxsize,
+                                 _self->hits, _self->misses, _self->maxsize,
                                  PyDict_GET_SIZE(_self->cache));
 }
 
@@ -1726,58 +1388,33 @@ _functools__lru_cache_wrapper_cache_clear_impl(PyObject *self)
 {
     lru_cache_object *_self = (lru_cache_object *) self;
     lru_list_elem *list = lru_cache_unlink_list(_self);
-    FT_ATOMIC_STORE_SSIZE_RELAXED(_self->hits, 0);
-    FT_ATOMIC_STORE_SSIZE_RELAXED(_self->misses, 0);
-    if (_self->wrapper == bounded_lru_cache_wrapper) {
-        /* The critical section on the lru cache itself protects the dictionary
-           for bounded_lru_cache instances. */
-        _PyDict_Clear_LockHeld(_self->cache);
-    } else {
-        PyDict_Clear(_self->cache);
-    }
+    _self->hits = _self->misses = 0;
+    PyDict_Clear(_self->cache);
     lru_cache_clear_list(list);
     Py_RETURN_NONE;
 }
 
 static PyObject *
-lru_cache_reduce(PyObject *self, PyObject *Py_UNUSED(dummy))
+lru_cache_reduce(PyObject *self, PyObject *unused)
 {
     return PyObject_GetAttrString(self, "__qualname__");
 }
 
-/*[clinic input]
-_functools._lru_cache_wrapper.__copy__
-
-Return a copy of the wrapper, which is the wrapper itself.
-[clinic start generated code]*/
-
 static PyObject *
-_functools__lru_cache_wrapper___copy___impl(PyObject *self)
-/*[clinic end generated code: output=d681851615d57391 input=41d000bde05efb2b]*/
+lru_cache_copy(PyObject *self, PyObject *unused)
 {
     return Py_NewRef(self);
 }
 
-/*[clinic input]
-_functools._lru_cache_wrapper.__deepcopy__
-
-    memo: object
-    /
-
-Return a deep copy of the wrapper, which is the wrapper itself.
-[clinic start generated code]*/
-
 static PyObject *
-_functools__lru_cache_wrapper___deepcopy__(PyObject *self, PyObject *memo)
-/*[clinic end generated code: output=3445cd9d96273c9e input=84f706565f55ce46]*/
+lru_cache_deepcopy(PyObject *self, PyObject *unused)
 {
     return Py_NewRef(self);
 }
 
 static int
-lru_cache_tp_traverse(PyObject *op, visitproc visit, void *arg)
+lru_cache_tp_traverse(lru_cache_object *self, visitproc visit, void *arg)
 {
-    lru_cache_object *self = lru_cache_object_CAST(op);
     Py_VISIT(Py_TYPE(self));
     lru_list_elem *link = self->root.next;
     while (link != &self->root) {
@@ -1816,9 +1453,9 @@ cache_info_type:    namedtuple class with the fields:\n\
 static PyMethodDef lru_cache_methods[] = {
     _FUNCTOOLS__LRU_CACHE_WRAPPER_CACHE_INFO_METHODDEF
     _FUNCTOOLS__LRU_CACHE_WRAPPER_CACHE_CLEAR_METHODDEF
-    {"__reduce__", lru_cache_reduce, METH_NOARGS},
-    _FUNCTOOLS__LRU_CACHE_WRAPPER___COPY___METHODDEF
-    _FUNCTOOLS__LRU_CACHE_WRAPPER___DEEPCOPY___METHODDEF
+    {"__reduce__", (PyCFunction)lru_cache_reduce, METH_NOARGS},
+    {"__copy__", (PyCFunction)lru_cache_copy, METH_VARARGS},
+    {"__deepcopy__", (PyCFunction)lru_cache_deepcopy, METH_VARARGS},
     {NULL}
 };
 
@@ -1864,7 +1501,7 @@ PyDoc_STRVAR(_functools_doc,
 "Tools that operate on functions.");
 
 static PyMethodDef _functools_methods[] = {
-    _FUNCTOOLS_REDUCE_METHODDEF
+    {"reduce",          functools_reduce,     METH_VARARGS, functools_reduce_doc},
     _FUNCTOOLS_CMP_TO_KEY_METHODDEF
     {NULL,              NULL}           /* sentinel */
 };
@@ -1877,16 +1514,6 @@ _functools_exec(PyObject *module)
     if (state->kwd_mark == NULL) {
         return -1;
     }
-
-    PyObject *placeholder = PySentinel_New("Placeholder", "functools", NULL);
-    if (placeholder == NULL) {
-        return -1;
-    }
-    if (PyModule_AddObjectRef(module, "Placeholder", placeholder) < 0) {
-        Py_DECREF(placeholder);
-        return -1;
-    }
-    state->placeholder = placeholder;
 
     state->partial_type = (PyTypeObject *)PyType_FromModuleAndSpec(module,
         &partial_type_spec, NULL);
@@ -1932,7 +1559,6 @@ _functools_traverse(PyObject *module, visitproc visit, void *arg)
 {
     _functools_state *state = get_functools_state(module);
     Py_VISIT(state->kwd_mark);
-    Py_VISIT(state->placeholder);
     Py_VISIT(state->partial_type);
     Py_VISIT(state->keyobject_type);
     Py_VISIT(state->lru_list_elem_type);
@@ -1944,7 +1570,6 @@ _functools_clear(PyObject *module)
 {
     _functools_state *state = get_functools_state(module);
     Py_CLEAR(state->kwd_mark);
-    Py_CLEAR(state->placeholder);
     Py_CLEAR(state->partial_type);
     Py_CLEAR(state->keyobject_type);
     Py_CLEAR(state->lru_list_elem_type);
@@ -1954,11 +1579,10 @@ _functools_clear(PyObject *module)
 static void
 _functools_free(void *module)
 {
-    (void)_functools_clear((PyObject *)module);
+    _functools_clear((PyObject *)module);
 }
 
 static struct PyModuleDef_Slot _functools_slots[] = {
-    _Py_ABI_SLOT,
     {Py_mod_exec, _functools_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
     {Py_mod_gil, Py_MOD_GIL_NOT_USED},

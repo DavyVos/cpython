@@ -77,7 +77,6 @@ typedef struct {
 #define _MultibyteStatefulCodec_HEAD            \
     PyObject_HEAD                               \
     const MultibyteCodec *codec;                \
-    PyObject *codec_owner;                      \
     MultibyteCodec_State state;                 \
     PyObject *errors;
 typedef struct {
@@ -92,8 +91,7 @@ typedef struct {
     _MultibyteStatefulEncoder_HEAD
 } MultibyteStatefulEncoderContext;
 
-/* ISO-2022 may retain an incomplete escape sequence up to 15 bytes. */
-#define MAXDECPENDING   16
+#define MAXDECPENDING   8
 #define _MultibyteStatefulDecoder_HEAD          \
     _MultibyteStatefulCodec_HEAD                \
     unsigned char pending[MAXDECPENDING];       \

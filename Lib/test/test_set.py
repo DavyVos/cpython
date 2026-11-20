@@ -1,17 +1,16 @@
-import collections.abc
-import copy
-import gc
-import itertools
-import operator
-import pickle
-import re
 import unittest
-import warnings
-import weakref
-from random import randrange, shuffle
 from test import support
 from test.support import warnings_helper
-
+import gc
+import weakref
+import operator
+import copy
+import pickle
+from random import randrange, shuffle
+import warnings
+import collections
+import collections.abc
+import itertools
 
 class PassThru(Exception):
     pass
@@ -188,10 +187,7 @@ class TestJointOps:
         self.assertEqual(type(i), self.basetype)
         self.assertRaises(PassThru, self.s.symmetric_difference, check_pass_thru())
         self.assertRaises(TypeError, self.s.symmetric_difference, [[]])
-        constructors = (set, frozenset,
-                        dict.fromkeys, frozendict.fromkeys,
-                        str, list, tuple)
-        for C in constructors:
+        for C in set, frozenset, dict.fromkeys, str, list, tuple:
             self.assertEqual(self.thetype('abcba').symmetric_difference(C('cdc')), set('abd'))
             self.assertEqual(self.thetype('abcba').symmetric_difference(C('efgfe')), set('abcefg'))
             self.assertEqual(self.thetype('abcba').symmetric_difference(C('ccb')), set('a'))
@@ -248,7 +244,7 @@ class TestJointOps:
             if type(self.s) not in (set, frozenset):
                 self.assertEqual(self.s.x, dup.x)
                 self.assertEqual(self.s.z, dup.z)
-                self.assertNotHasAttr(self.s, 'y')
+                self.assertFalse(hasattr(self.s, 'y'))
                 del self.s.x, self.s.z
 
     def test_iterator_pickling(self):
@@ -657,35 +653,6 @@ class TestSet(TestJointOps, unittest.TestCase):
         self.assertRaises(KeyError, myset.remove, set(range(1)))
         self.assertRaises(KeyError, myset.remove, set(range(3)))
 
-    def test_unhashable_element(self):
-        myset = {'a'}
-        elem = [1, 2, 3]
-
-        def check_unhashable_element():
-            msg = "cannot use 'list' as a set element (unhashable type: 'list')"
-            return self.assertRaisesRegex(TypeError, re.escape(msg))
-
-        with check_unhashable_element():
-            elem in myset
-        with check_unhashable_element():
-            myset.add(elem)
-        with check_unhashable_element():
-            myset.discard(elem)
-
-        # Only TypeError exception is overridden,
-        # other exceptions are left unchanged.
-        class HashError:
-            def __hash__(self):
-                raise KeyError('error')
-
-        elem2 = HashError()
-        with self.assertRaises(KeyError):
-            elem2 in myset
-        with self.assertRaises(KeyError):
-            myset.add(elem2)
-        with self.assertRaises(KeyError):
-            myset.discard(elem2)
-
     def test_hash_collision_remove_add(self):
         self.maxDiff = None
         # There should be enough space, so all elements with unique hash
@@ -761,17 +728,6 @@ class TestFrozenSet(TestJointOps, unittest.TestCase):
         s = self.thetype(range(3))
         t = self.thetype(s)
         self.assertEqual(id(s), id(t))
-
-    def test_gc_tracking(self):
-        # gh-140232: frozensets whose elements can never be tracked by the
-        # GC are not tracked, including the compiled frozenset({...}) form
-        s = {1, 2}
-        self.assertFalse(gc.is_tracked(frozenset(s)))
-        self.assertFalse(gc.is_tracked(frozenset({1, 2})))
-        self.assertFalse(gc.is_tracked(frozenset({x for x in range(2)})))
-        class C:
-            pass
-        self.assertTrue(gc.is_tracked(frozenset({C()})))
 
     def test_hash(self):
         self.assertEqual(hash(self.thetype('abcdeb')),
@@ -920,8 +876,8 @@ class TestBasicOps:
 
     def check_repr_against_values(self):
         text = repr(self.set)
-        self.assertStartsWith(text, '{')
-        self.assertEndsWith(text, '}')
+        self.assertTrue(text.startswith('{'))
+        self.assertTrue(text.endswith('}'))
 
         result = text[1:-1].split(', ')
         result.sort()
@@ -1601,14 +1557,6 @@ class TestOnlySetsDict(TestOnlySetsInBinaryOps, unittest.TestCase):
     def setUp(self):
         self.set   = set((1, 2, 3))
         self.other = {1:2, 3:4}
-        self.otherIsIterable = True
-
-#------------------------------------------------------------------------------
-
-class TestOnlySetsFrozenDict(TestOnlySetsInBinaryOps, unittest.TestCase):
-    def setUp(self):
-        self.set   = set((1, 2, 3))
-        self.other = frozendict({1:2, 3:4})
         self.otherIsIterable = True
 
 #------------------------------------------------------------------------------

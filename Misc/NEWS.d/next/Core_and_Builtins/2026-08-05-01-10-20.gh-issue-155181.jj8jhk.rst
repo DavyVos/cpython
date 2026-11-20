@@ -1,3 +1,0 @@
-:class:`frozenset` objects created from a set literal or a set comprehension
-are now untracked by the garbage collector when none of their elements can
-be tracked.

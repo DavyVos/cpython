@@ -10,7 +10,7 @@ from shutil import copy2
 
 
 __all__ = ["version", "bootstrap"]
-_PIP_VERSION = "26.3"
+_PIP_VERSION = "26.2.2"
 
 # Directory of system wheel packages. Some Linux distribution packaging
 # policies recommend against bundling dependencies. For example, Fedora
@@ -131,15 +131,6 @@ def _bootstrap(*, root=None, upgrade=False, user=False,
 
     Note that calling this function will alter both sys.path and os.environ.
     """
-
-    try:
-        import zlib
-    except ImportError:
-        raise ModuleNotFoundError(
-            "ensurepip requires the standard library module 'zlib' "
-            "to install pip."
-        ) from None
-
     if altinstall and default_pip:
         raise ValueError("Cannot use altinstall and default_pip together")
 
@@ -178,8 +169,6 @@ def _bootstrap(*, root=None, upgrade=False, user=False,
             args += ["--user"]
         if verbosity:
             args += ["-" + "v" * verbosity]
-        if sys.implementation.cache_tag is None:
-            args += ["--no-compile"]
 
         return _run_pip([*args, "pip"], [os.fsdecode(tmp_wheel_path)])
 
@@ -217,7 +206,7 @@ def _uninstall_helper(*, verbosity=0):
 
 def _main(argv=None):
     import argparse
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(prog="python -m ensurepip")
     parser.add_argument(
         "--version",
         action="version",

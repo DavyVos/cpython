@@ -34,5 +34,4 @@ def getregentry():
         incrementaldecoder=IncrementalDecoder,
         streamreader=StreamReader,
         streamwriter=StreamWriter,
-        _expat_decoding_table=False,
     )

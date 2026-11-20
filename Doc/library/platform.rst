@@ -4,6 +4,9 @@
 .. module:: platform
    :synopsis: Retrieves as much platform identifying data as possible.
 
+.. moduleauthor:: Marc-André Lemburg <mal@egenix.com>
+.. sectionauthor:: Bjorn Pettersen <bpettersen@corp.fairisaac.com>
+
 **Source code:** :source:`Lib/platform.py`
 
 --------------
@@ -185,13 +188,23 @@ Cross platform
    .. versionchanged:: 3.9
       :attr:`processor` is resolved late instead of immediately.
 
-.. function:: invalidate_caches()
 
-   Clear out the internal cache of information, such as the :func:`uname`.
-   This is typically useful when the platform's :func:`node` is changed
-   by an external process and one needs to retrieve the updated value.
+Java platform
+-------------
 
-   .. versionadded:: 3.14
+
+.. function:: java_ver(release='', vendor='', vminfo=('','',''), osinfo=('','',''))
+
+   Version interface for Jython.
+
+   Returns a tuple ``(release, vendor, vminfo, osinfo)`` with *vminfo* being a
+   tuple ``(vm_name, vm_release, vm_vendor)`` and *osinfo* being a tuple
+   ``(os_name, os_version, os_arch)``. Values which cannot be determined are set to
+   the defaults given as parameters (which all default to ``''``).
+
+   .. deprecated-removed:: 3.13 3.15
+      It was largely untested, had a confusing API,
+      and was only useful for Jython support.
 
 
 Windows platform
@@ -353,7 +366,7 @@ Android platform
 Command-line usage
 ------------------
 
-:mod:`!platform` can also be invoked directly using the :option:`-m`
+:mod:`platform` can also be invoked directly using the :option:`-m`
 switch of the interpreter::
 
    python -m platform [--terse] [--nonaliased] [{nonaliased,terse} ...]

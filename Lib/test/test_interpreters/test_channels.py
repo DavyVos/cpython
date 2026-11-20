@@ -1,3 +1,4 @@
+import importlib
 import pickle
 import threading
 from textwrap import dedent
@@ -7,8 +8,8 @@ import time
 from test.support import import_helper
 # Raise SkipTest if subinterpreters not supported.
 _channels = import_helper.import_module('_interpchannels')
-from concurrent import interpreters
-from test.support import channels, force_not_colorized
+from test.support import interpreters
+from test.support.interpreters import channels
 from .utils import _run_output, TestBase
 
 
@@ -27,45 +28,7 @@ class LowLevelTests(TestBase):
 
     def test_highlevel_reloaded(self):
         # See gh-115490 (https://github.com/python/cpython/issues/115490).
-        interp = interpreters.create()
-        interp.exec(dedent(f"""
-            import importlib
-            from test.support import channels
-            importlib.reload(channels)
-            """));
-
-    @force_not_colorized
-    def test_channel_id_types(self):
-        # See https://github.com/python/cpython/issues/143376.
-        code = """\
-        import _interpchannels
-        import re
-        from concurrent import interpreters
-
-        class End:
-            __slots__ = ()
-            def __new__(cls, chan=None):
-                return object.__new__(cls)
-            @property
-            def _id(self):
-                return object()
-
-        class Send(End): pass
-        class Recv(End): pass
-
-        _interpchannels._register_end_types(Send, Recv)
-        chan = _interpchannels._channel_id(_interpchannels.create(), _resolve=True)
-        interp = interpreters.create()
-        try:
-            interp.prepare_main(chan=Send(chan))
-        finally:
-            interp.close()
-        """
-
-        out, err = self.assert_python_failure("-c", code)
-        self.assertEqual(out, '')
-        errmsg = "TypeError: '_id' attribute must be an _interpchannels.ChannelID object, not object"
-        self.assertIn(errmsg, err)
+        importlib.reload(channels)
 
 
 class TestChannels(TestBase):
@@ -164,11 +127,9 @@ class TestRecvChannelAttrs(TestBase):
 
     def test_pickle(self):
         ch, _ = channels.create()
-        for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
-            with self.subTest(protocol=protocol):
-                data = pickle.dumps(ch, protocol)
-                unpickled = pickle.loads(data)
-                self.assertEqual(unpickled, ch)
+        data = pickle.dumps(ch)
+        unpickled = pickle.loads(data)
+        self.assertEqual(unpickled, ch)
 
 
 class TestSendChannelAttrs(TestBase):
@@ -197,11 +158,9 @@ class TestSendChannelAttrs(TestBase):
 
     def test_pickle(self):
         _, ch = channels.create()
-        for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
-            with self.subTest(protocol=protocol):
-                data = pickle.dumps(ch, protocol)
-                unpickled = pickle.loads(data)
-                self.assertEqual(unpickled, ch)
+        data = pickle.dumps(ch)
+        unpickled = pickle.loads(data)
+        self.assertEqual(unpickled, ch)
 
 
 class TestSendRecv(TestBase):
@@ -218,7 +177,7 @@ class TestSendRecv(TestBase):
     def test_send_recv_same_interpreter(self):
         interp = interpreters.create()
         interp.exec(dedent("""
-            from test.support import channels
+            from test.support.interpreters import channels
             r, s = channels.create()
             orig = b'spam'
             s.send_nowait(orig)
@@ -291,7 +250,7 @@ class TestSendRecv(TestBase):
     def test_send_recv_nowait_same_interpreter(self):
         interp = interpreters.create()
         interp.exec(dedent("""
-            from test.support import channels
+            from test.support.interpreters import channels
             r, s = channels.create()
             orig = b'spam'
             s.send_nowait(orig)
@@ -424,17 +383,17 @@ class TestSendRecv(TestBase):
             if not unbound:
                 extraargs = ''
             elif unbound is channels.UNBOUND:
-                extraargs = ', unbounditems=channels.UNBOUND'
+                extraargs = ', unbound=channels.UNBOUND'
             elif unbound is channels.UNBOUND_ERROR:
-                extraargs = ', unbounditems=channels.UNBOUND_ERROR'
+                extraargs = ', unbound=channels.UNBOUND_ERROR'
             elif unbound is channels.UNBOUND_REMOVE:
-                extraargs = ', unbounditems=channels.UNBOUND_REMOVE'
+                extraargs = ', unbound=channels.UNBOUND_REMOVE'
             else:
                 raise NotImplementedError(repr(unbound))
             interp = interpreters.create()
 
             _run_output(interp, dedent(f"""
-                from test.support import channels
+                from test.support.interpreters import channels
                 sch = channels.SendChannel({sch.id})
                 obj1 = b'spam'
                 obj2 = b'eggs'
@@ -501,11 +460,11 @@ class TestSendRecv(TestBase):
             with self.assertRaises(channels.ChannelEmptyError):
                 rch.recv_nowait()
 
-            sch.send_nowait(b'ham', unbounditems=channels.UNBOUND_REMOVE)
+            sch.send_nowait(b'ham', unbound=channels.UNBOUND_REMOVE)
             self.assertEqual(_channels.get_count(rch.id), 1)
             interp = common(rch, sch, channels.UNBOUND_REMOVE, 1)
             self.assertEqual(_channels.get_count(rch.id), 3)
-            sch.send_nowait(42, unbounditems=channels.UNBOUND_REMOVE)
+            sch.send_nowait(42, unbound=channels.UNBOUND_REMOVE)
             self.assertEqual(_channels.get_count(rch.id), 4)
             del interp
             self.assertEqual(_channels.get_count(rch.id), 2)
@@ -529,13 +488,13 @@ class TestSendRecv(TestBase):
         self.assertEqual(_channels.get_count(rch.id), 0)
 
         _run_output(interp, dedent(f"""
-            from test.support import channels
+            from test.support.interpreters import channels
             sch = channels.SendChannel({sch.id})
-            sch.send_nowait(1, unbounditems=channels.UNBOUND)
-            sch.send_nowait(2, unbounditems=channels.UNBOUND_ERROR)
+            sch.send_nowait(1, unbound=channels.UNBOUND)
+            sch.send_nowait(2, unbound=channels.UNBOUND_ERROR)
             sch.send_nowait(3)
-            sch.send_nowait(4, unbounditems=channels.UNBOUND_REMOVE)
-            sch.send_nowait(5, unbounditems=channels.UNBOUND)
+            sch.send_nowait(4, unbound=channels.UNBOUND_REMOVE)
+            sch.send_nowait(5, unbound=channels.UNBOUND)
             """))
         self.assertEqual(_channels.get_count(rch.id), 5)
 
@@ -565,15 +524,15 @@ class TestSendRecv(TestBase):
 
         sch.send_nowait(1)
         _run_output(interp1, dedent(f"""
-            from test.support import channels
+            from test.support.interpreters import channels
             rch = channels.RecvChannel({rch.id})
             sch = channels.SendChannel({sch.id})
             obj1 = rch.recv()
-            sch.send_nowait(2, unbounditems=channels.UNBOUND)
-            sch.send_nowait(obj1, unbounditems=channels.UNBOUND_REMOVE)
+            sch.send_nowait(2, unbound=channels.UNBOUND)
+            sch.send_nowait(obj1, unbound=channels.UNBOUND_REMOVE)
             """))
         _run_output(interp2, dedent(f"""
-            from test.support import channels
+            from test.support.interpreters import channels
             rch = channels.RecvChannel({rch.id})
             sch = channels.SendChannel({sch.id})
             obj2 = rch.recv()
@@ -582,21 +541,21 @@ class TestSendRecv(TestBase):
         self.assertEqual(_channels.get_count(rch.id), 0)
         sch.send_nowait(3)
         _run_output(interp1, dedent("""
-            sch.send_nowait(4, unbounditems=channels.UNBOUND)
+            sch.send_nowait(4, unbound=channels.UNBOUND)
             # interp closed here
-            sch.send_nowait(5, unbounditems=channels.UNBOUND_REMOVE)
-            sch.send_nowait(6, unbounditems=channels.UNBOUND)
+            sch.send_nowait(5, unbound=channels.UNBOUND_REMOVE)
+            sch.send_nowait(6, unbound=channels.UNBOUND)
             """))
         _run_output(interp2, dedent("""
-            sch.send_nowait(7, unbounditems=channels.UNBOUND_ERROR)
+            sch.send_nowait(7, unbound=channels.UNBOUND_ERROR)
             # interp closed here
-            sch.send_nowait(obj1, unbounditems=channels.UNBOUND_ERROR)
-            sch.send_nowait(obj2, unbounditems=channels.UNBOUND_REMOVE)
-            sch.send_nowait(8, unbounditems=channels.UNBOUND)
+            sch.send_nowait(obj1, unbound=channels.UNBOUND_ERROR)
+            sch.send_nowait(obj2, unbound=channels.UNBOUND_REMOVE)
+            sch.send_nowait(8, unbound=channels.UNBOUND)
             """))
         _run_output(interp1, dedent("""
-            sch.send_nowait(9, unbounditems=channels.UNBOUND_REMOVE)
-            sch.send_nowait(10, unbounditems=channels.UNBOUND)
+            sch.send_nowait(9, unbound=channels.UNBOUND_REMOVE)
+            sch.send_nowait(10, unbound=channels.UNBOUND)
             """))
         self.assertEqual(_channels.get_count(rch.id), 10)
 

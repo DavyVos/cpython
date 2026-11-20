@@ -4,6 +4,8 @@
 .. module:: contextvars
    :synopsis: Context Variables
 
+.. sectionauthor:: Yury Selivanov <yury@magic.io>
+
 --------------
 
 This module provides APIs to manage, store, and access context-local
@@ -78,32 +80,6 @@ Context Variables
       to restore the variable to its previous value via the
       :meth:`ContextVar.reset` method.
 
-      For convenience, the token object can be used as a context manager
-      to avoid calling :meth:`ContextVar.reset` manually::
-
-          var = ContextVar('var', default='default value')
-
-          with var.set('new value'):
-              assert var.get() == 'new value'
-
-          assert var.get() == 'default value'
-
-      It is a shorthand for::
-
-          var = ContextVar('var', default='default value')
-
-          token = var.set('new value')
-          try:
-              assert var.get() == 'new value'
-          finally:
-              var.reset(token)
-
-          assert var.get() == 'default value'
-
-      .. versionadded:: 3.14
-
-         Added support for using tokens as context managers.
-
    .. method:: reset(token)
 
       Reset the context variable to the value it had before the
@@ -130,15 +106,8 @@ Context Variables
    the value of the variable to what it was before the corresponding
    *set*. A single token cannot reset a context variable more than once.
 
-   Tokens support the :ref:`context manager protocol <context-managers>`
-   to automatically reset context variables. See :meth:`ContextVar.set`.
-
    Tokens are :ref:`generic <generics>` over the same type as the
    :class:`ContextVar` which created them.
-
-   .. versionadded:: 3.14
-
-      Added support for usage as a context manager.
 
    .. attribute:: Token.var
 
@@ -337,7 +306,7 @@ client::
         addr = writer.transport.get_extra_info('socket').getpeername()
         client_addr_var.set(addr)
 
-        # In any code that we call, it is now possible to get the
+        # In any code that we call is now possible to get
         # client's address by calling 'client_addr_var.get()'.
 
         while True:

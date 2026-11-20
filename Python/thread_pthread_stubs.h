@@ -1,9 +1,5 @@
 #include "cpython/pthread_stubs.h"
 
-typedef struct py_stub_tls_entry py_tls_entry;
-
-#define py_tls_entries (_PyRuntime.threads.stubs.tls_entries)
-
 // mutex
 int
 pthread_mutex_init(pthread_mutex_t *restrict mutex,
@@ -109,7 +105,7 @@ pthread_join(pthread_t thread, void** value_ptr)
 
 PyAPI_FUNC(pthread_t) pthread_self(void)
 {
-    return (pthread_t)(uintptr_t)&py_tls_entries;
+    return 0;
 }
 
 int
@@ -137,6 +133,10 @@ pthread_attr_destroy(pthread_attr_t *attr)
     return 0;
 }
 
+
+typedef struct py_stub_tls_entry py_tls_entry;
+
+#define py_tls_entries (_PyRuntime.threads.stubs.tls_entries)
 
 int
 pthread_key_create(pthread_key_t *key, void (*destr_function)(void *))

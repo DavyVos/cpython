@@ -47,8 +47,6 @@ class MiscTests(unittest.TestCase):
             del element.attrib
         self.assertEqual(element.attrib, {'A': 'B', 'C': 'D'})
 
-    @support.skip_wasi_stack_overflow()
-    @support.skip_emscripten_stack_overflow()
     def test_trashcan(self):
         # If this test fails, it will most likely die via segfault.
         e = root = cET.Element('root')
@@ -161,35 +159,6 @@ class MiscTests(unittest.TestCase):
         del parser
         support.gc_collect()
 
-    def test_iter_tag_reentrant_compare(self):
-        destroyed = []
-        compared = []
-
-        class Tag:
-            def __del__(self):
-                destroyed.append(True)
-
-            def __eq__(self, other):
-                child.tag = "replaced"
-                return NotImplemented
-
-            __hash__ = object.__hash__
-
-        class Sought:
-            def __eq__(self, other):
-                if isinstance(other, Tag):
-                    compared.append(not destroyed)
-                return NotImplemented
-
-            __hash__ = object.__hash__
-
-        root = cET.Element("root")
-        child = cET.SubElement(root, "x")
-        child.tag = Tag()
-        self.assertEqual(list(root.iter(Sought())), [])
-        self.assertEqual(compared, [True])
-        self.assertEqual(child.tag, "replaced")
-
     def test_dict_disappearing_during_get_item(self):
         # test fix for seg fault reported in issue 27946
         class X:
@@ -213,7 +182,8 @@ class MiscTests(unittest.TestCase):
         )
         for tp in dataset:
             with self.subTest(tp=tp):
-                support.check_immutable_type(self, tp)
+                with self.assertRaisesRegex(TypeError, "immutable"):
+                    tp.foo = 1
 
     @support.cpython_only
     def test_disallow_instantiation(self):

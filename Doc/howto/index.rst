@@ -37,8 +37,6 @@ Python Library Reference.
    mro.rst
    free-threading-python.rst
    free-threading-extensions.rst
-   abi3t-migration.rst
-   remote_debugging.rst
 
 General:
 
@@ -62,7 +60,6 @@ Advanced development:
 * :ref:`freethreading-python-howto`
 * :ref:`freethreading-extensions-howto`
 * :ref:`isolating-extensions-howto`
-* :ref:`abi3t-migration-howto`
 * :ref:`python_2.3_mro`
 * :ref:`socket-howto`
 * :ref:`timerfd-howto`
@@ -73,4 +70,3 @@ Debugging and profiling:
 * :ref:`gdb`
 * :ref:`instrumentation`
 * :ref:`perf_profiling`
-* :ref:`remote-debugging`

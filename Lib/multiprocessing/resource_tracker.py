@@ -52,8 +52,12 @@ if os.name == 'posix':
     # absence of POSIX named semaphores. In that case, no named semaphores were
     # ever opened, so no cleanup would be necessary.
     if hasattr(_multiprocessing, 'sem_unlink'):
-        _CLEANUP_FUNCS['semaphore'] = _multiprocessing.sem_unlink
-    _CLEANUP_FUNCS['shared_memory'] = _posixshmem.shm_unlink
+        _CLEANUP_FUNCS.update({
+            'semaphore': _multiprocessing.sem_unlink,
+        })
+    _CLEANUP_FUNCS.update({
+        'shared_memory': _posixshmem.shm_unlink,
+    })
 
 
 class ReentrantCallError(RuntimeError):
@@ -74,7 +78,7 @@ class ResourceTracker(object):
         # Filenames not supported by the simple format will always be sent
         # using JSON.
         # The reader should understand all formats.
-        self._use_simple_format = False
+        self._use_simple_format = True
 
         # Set to True by _stop_locked() if the waitpid polling loop ran to
         # its timeout without reaping the tracker.  Exposed for tests.

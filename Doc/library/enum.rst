@@ -4,6 +4,11 @@
 .. module:: enum
    :synopsis: Implementation of an enumeration class.
 
+.. moduleauthor:: Ethan Furman <ethan@stoneleaf.us>
+.. sectionauthor:: Barry Warsaw <barry@python.org>
+.. sectionauthor:: Eli Bendersky <eliben@gmail.com>
+.. sectionauthor:: Ethan Furman <ethan@stoneleaf.us>
+
 .. versionadded:: 3.4
 
 **Source code:** :source:`Lib/enum.py`
@@ -222,7 +227,7 @@ Data types
       names of the members in *cls*::
 
         >>> dir(Color)
-        ['BLUE', 'GREEN', 'RED', '__class__', '__contains__', '__doc__', '__getitem__', '__init_subclass__', '__iter__', '__len__', '__members__', '__module__', '__name__', '__qualname__', '_generate_next_value_', '_missing_']
+        ['BLUE', 'GREEN', 'RED', '__class__', '__contains__', '__doc__', '__getitem__', '__init_subclass__', '__iter__', '__len__', '__members__', '__module__', '__name__', '__qualname__']
 
    .. method:: EnumType.__getitem__(cls, name)
 
@@ -355,7 +360,7 @@ Data types
          ...         print(f'today is {cls(dt.date.today().isoweekday()).name}')
          ...
          >>> dir(Weekday.SATURDAY)
-         ['__class__', '__doc__', '__eq__', '__hash__', '__module__', '_add_alias_', '_add_value_alias_', '_generate_next_value_', '_missing_', 'name', 'today', 'value']
+         ['__class__', '__doc__', '__eq__', '__hash__', '__module__', 'name', 'today', 'value']
 
    .. method:: Enum._generate_next_value_(name, start, count, last_values)
 
@@ -502,7 +507,7 @@ Data types
       Using :class:`auto` with :class:`Enum` results in integers of increasing value,
       starting with ``1``.
 
-   .. versionchanged:: 3.12 Added :ref:`enum-dataclass-support`.
+   .. versionchanged:: 3.12 Added :ref:`enum-dataclass-support`
 
    .. method:: Enum._add_alias_
 
@@ -710,7 +715,7 @@ Data types
       of two, starting with ``1``.
 
    .. versionchanged:: 3.11 The *repr()* of zero-valued flags has changed.  It
-      is now:
+      is now::
 
          >>> Color(0) # doctest: +SKIP
          <Color: 0>
@@ -742,7 +747,7 @@ Data types
    * the result is a valid *IntFlag*: an *IntFlag* is returned
    * the result is not a valid *IntFlag*: the result depends on the :class:`FlagBoundary` setting
 
-   The :func:`repr` of unnamed zero-valued flags has changed.  It is now::
+   The :func:`repr` of unnamed zero-valued flags has changed.  It is now:
 
       >>> Color(0)
       <Color: 0>
@@ -977,9 +982,9 @@ Utilities and decorators
 
    *auto* can be used in place of a value.  If used, the *Enum* machinery will
    call an :class:`Enum`'s :meth:`~Enum._generate_next_value_` to get an appropriate value.
-   For :class:`Enum` and :class:`IntEnum` that appropriate value will be the highest value seen
-   plus one; for :class:`Flag` and :class:`IntFlag` it will be the first power-of-two greater
-   than the highest value seen; for :class:`StrEnum` it will be the lower-cased version of
+   For :class:`Enum` and :class:`IntEnum` that appropriate value will be the last value plus
+   one; for :class:`Flag` and :class:`IntFlag` it will be the first power-of-two greater
+   than the highest value; for :class:`StrEnum` it will be the lower-cased version of
    the member's name.  Care must be taken if mixing *auto()* with manually
    specified values.
 
@@ -989,8 +994,8 @@ Utilities and decorators
    * ``FIRST = auto()`` will work (auto() is replaced with ``1``);
    * ``SECOND = auto(), -2`` will work (auto is replaced with ``2``, so ``2, -2`` is
      used to create the ``SECOND`` enum member;
-   * ``THIRD = [auto(), -3]`` will *not* work (``[<auto instance>, -3]`` is used to
-     create the ``THIRD`` enum member)
+   * ``THREE = [auto(), -3]`` will *not* work (``[<auto instance>, -3]`` is used to
+     create the ``THREE`` enum member)
 
    .. versionchanged:: 3.11.1
 
@@ -1000,7 +1005,7 @@ Utilities and decorators
    ``_generate_next_value_`` can be overridden to customize the values used by
    *auto*.
 
-   .. note:: In version 3.13 the default ``_generate_next_value_`` will always return
+   .. note:: in 3.13 the default ``_generate_next_value_`` will always return
              the highest member value incremented by 1, and will fail if any
              member is an incompatible type.
 
@@ -1010,7 +1015,7 @@ Utilities and decorators
    enumerations.  It allows member attributes to have the same names as members
    themselves.
 
-   .. note:: The *property* and the member must be defined in separate classes;
+   .. note:: the *property* and the member must be defined in separate classes;
              for example, the *value* and *name* attributes are defined in the
              *Enum* class, and *Enum* subclasses can define members with the
              names ``value`` and ``name``.
@@ -1061,7 +1066,6 @@ Utilities and decorators
    to show its members as belonging to the module instead of its class.
    Should only be used when the enum members are exported
    to the module global namespace (see :class:`re.RegexFlag` for an example).
-
 
    .. versionadded:: 3.11
 

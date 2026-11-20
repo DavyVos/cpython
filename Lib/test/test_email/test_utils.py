@@ -3,17 +3,9 @@ from email import utils
 import test.support
 import time
 import unittest
-
-from test.support import cpython_only
-from test.support.import_helper import ensure_lazy_imports
-
-
-class TestImportTime(unittest.TestCase):
-
-    @cpython_only
-    def test_lazy_import(self):
-        ensure_lazy_imports("email.utils", {"random", "socket"})
-
+import sys
+import os.path
+import zoneinfo
 
 class DateTimeTests(unittest.TestCase):
 
@@ -171,6 +163,10 @@ class LocaltimeTests(unittest.TestCase):
         t1 = utils.localtime(t0)
         self.assertEqual(t1.tzname(), 'EET')
 
+    def test_isdst_deprecation(self):
+        with self.assertWarns(DeprecationWarning):
+            t0 = datetime.datetime(1990, 1, 1)
+            t1 = utils.localtime(t0, isdst=True)
 
 # Issue #24836: The timezone files are out of date (pre 2011k)
 # on Mac OS X Snow Leopard.

@@ -4,6 +4,9 @@
 .. module:: logging.config
    :synopsis: Configuration of the logging module.
 
+.. moduleauthor:: Vinay Sajip <vinay_sajip@red-dove.com>
+.. sectionauthor:: Vinay Sajip <vinay_sajip@red-dove.com>
+
 **Source code:** :source:`Lib/logging/config.py`
 
 .. sidebar:: Important
@@ -25,7 +28,7 @@ Configuration functions
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 The following functions configure the logging module. They are located in the
-:mod:`!logging.config` module.  Their use is optional --- you can configure the
+:mod:`logging.config` module.  Their use is optional --- you can configure the
 logging module using these functions or by making calls to the main API (defined
 in :mod:`logging` itself) and defining handlers which are declared either in
 :mod:`logging` or :mod:`logging.handlers`.
@@ -52,7 +55,7 @@ in :mod:`logging` itself) and defining handlers which are declared either in
 
    Parsing is performed by the :class:`DictConfigurator` class, whose
    constructor is passed the dictionary used for configuration, and
-   has a :meth:`configure` method.  The :mod:`!logging.config` module
+   has a :meth:`configure` method.  The :mod:`logging.config` module
    has a callable attribute :attr:`dictConfigClass`
    which is initially set to :class:`DictConfigurator`.
    You can replace the value of :attr:`dictConfigClass` with a
@@ -124,12 +127,12 @@ in :mod:`logging` itself) and defining handlers which are declared either in
         application (e.g. based on command-line parameters or other aspects
         of the runtime environment) before being passed to ``fileConfig``.
 
-   .. versionchanged:: 3.10
-      Added the *encoding* parameter.
+    .. versionchanged:: 3.10
+       Added the *encoding* parameter.
 
-   .. versionchanged:: 3.12
-      An exception will be thrown if the provided file
-      doesn't exist or is invalid or empty.
+    .. versionchanged:: 3.12
+       An exception will be thrown if the provided file
+       doesn't exist or is invalid or empty.
 
 .. function:: listen(port=DEFAULT_LOGGING_CONFIG_PORT, verify=None)
 

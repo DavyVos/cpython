@@ -100,27 +100,8 @@ class TestFail:
     def test_not_serializable(self):
         import sys
         with self.assertRaisesRegex(TypeError,
-                'Object of type module is not JSON serializable') as cm:
+                'Object of type module is not JSON serializable'):
             self.dumps(sys)
-        self.assertNotHasAttr(cm.exception, '__notes__')
-
-        with self.assertRaises(TypeError) as cm:
-            self.dumps([1, [2, 3, sys]])
-        self.assertEqual(cm.exception.__notes__,
-                         ['when serializing list item 2',
-                          'when serializing list item 1'])
-
-        with self.assertRaises(TypeError) as cm:
-            self.dumps((1, (2, 3, sys)))
-        self.assertEqual(cm.exception.__notes__,
-                         ['when serializing tuple item 2',
-                          'when serializing tuple item 1'])
-
-        with self.assertRaises(TypeError) as cm:
-            self.dumps({'a': {'b': sys}})
-        self.assertEqual(cm.exception.__notes__,
-                         ["when serializing dict item 'b'",
-                          "when serializing dict item 'a'"])
 
     def test_truncated_input(self):
         test_cases = [
@@ -200,24 +181,6 @@ class TestFail:
             self.assertEqual(str(err),
                              '%s: line 1 column %d (char %d)' %
                              (msg, idx + 1, idx))
-
-    def test_invalid_escape_position(self):
-        # The position points to the backslash of the invalid escape.
-        test_cases = [
-            ('"\\a"', 1),
-            ('"ab\\x"', 3),
-            ('["\\\'"]', 2),
-            ('{"k": "v\\ "}', 8),
-        ]
-        for data, idx in test_cases:
-            with self.subTest(data=data):
-                with self.assertRaises(self.JSONDecodeError) as cm:
-                    self.loads(data)
-                err = cm.exception
-                self.assertStartsWith(err.msg, 'Invalid \\escape')
-                self.assertEqual(err.pos, idx)
-                self.assertEqual(err.lineno, 1)
-                self.assertEqual(err.colno, idx + 1)
 
     def test_extra_data(self):
         test_cases = [

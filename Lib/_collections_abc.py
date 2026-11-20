@@ -49,7 +49,7 @@ __all__ = ["Awaitable", "Coroutine",
            "Mapping", "MutableMapping",
            "MappingView", "KeysView", "ItemsView", "ValuesView",
            "Sequence", "MutableSequence",
-           "Buffer",
+           "ByteString", "Buffer",
            ]
 
 # This module has been renamed from collections.abc to _collections_abc to
@@ -67,6 +67,7 @@ __name__ = "collections.abc"
 # are not included on this list.
 bytes_iterator = type(iter(b''))
 bytearray_iterator = type(iter(bytearray()))
+#callable_iterator = ???
 dict_keyiterator = type(iter({}.keys()))
 dict_valueiterator = type(iter({}.values()))
 dict_itemiterator = type(iter({}.items()))
@@ -318,6 +319,7 @@ class Iterator(Iterable):
 
 Iterator.register(bytes_iterator)
 Iterator.register(bytearray_iterator)
+#Iterator.register(callable_iterator)
 Iterator.register(dict_keyiterator)
 Iterator.register(dict_valueiterator)
 Iterator.register(dict_itemiterator)
@@ -483,10 +485,9 @@ class _CallableGenericAlias(GenericAlias):
     def __repr__(self):
         if len(self.__args__) == 2 and _is_param_expr(self.__args__[0]):
             return super().__repr__()
-        from annotationlib import type_repr
         return (f'collections.abc.Callable'
-                f'[[{", ".join([type_repr(a) for a in self.__args__[:-1]])}], '
-                f'{type_repr(self.__args__[-1])}]')
+                f'[[{", ".join([_type_repr(a) for a in self.__args__[:-1]])}], '
+                f'{_type_repr(self.__args__[-1])}]')
 
     def __reduce__(self):
         args = self.__args__
@@ -522,6 +523,23 @@ def _is_param_expr(obj):
     obj = type(obj)
     names = ('ParamSpec', '_ConcatenateGenericAlias')
     return obj.__module__ == 'typing' and any(obj.__name__ == name for name in names)
+
+def _type_repr(obj):
+    """Return the repr() of an object, special-casing types (internal helper).
+
+    Copied from :mod:`typing` since collections.abc
+    shouldn't depend on that module.
+    (Keep this roughly in sync with the typing version.)
+    """
+    if isinstance(obj, type):
+        if obj.__module__ == 'builtins':
+            return obj.__qualname__
+        return f'{obj.__module__}.{obj.__qualname__}'
+    if obj is Ellipsis:
+        return '...'
+    if isinstance(obj, FunctionType):
+        return obj.__name__
+    return repr(obj)
 
 
 class Callable(metaclass=ABCMeta):
@@ -821,7 +839,6 @@ class Mapping(Collection):
 
     __reversed__ = None
 
-Mapping.register(frozendict)
 Mapping.register(mappingproxy)
 Mapping.register(framelocalsproxy)
 
@@ -1060,7 +1077,6 @@ class Sequence(Reversible, Collection):
 
 Sequence.register(tuple)
 Sequence.register(str)
-Sequence.register(bytes)
 Sequence.register(range)
 Sequence.register(memoryview)
 
@@ -1168,14 +1184,4 @@ class MutableSequence(Sequence):
 
 
 MutableSequence.register(list)
-MutableSequence.register(bytearray)
-
-_deprecated_ByteString = globals().pop("ByteString")
-
-def __getattr__(attr):
-    if attr == "ByteString":
-        import warnings
-        warnings._deprecated("collections.abc.ByteString", remove=(3, 17))
-        globals()["ByteString"] = _deprecated_ByteString
-        return _deprecated_ByteString
-    raise AttributeError(f"module 'collections.abc' has no attribute {attr!r}")
+MutableSequence.register(bytearray)  # Multiply inheriting, see ByteString

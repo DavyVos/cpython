@@ -102,7 +102,7 @@ The :mod:`!glob` module defines the following functions:
 .. function:: iglob(pathname, *, root_dir=None, dir_fd=None, recursive=False, \
                     include_hidden=False)
 
-   Return an :term:`iterator` which yields the same values as :func:`~glob.glob`
+   Return an :term:`iterator` which yields the same values as :func:`glob`
    without actually storing them all simultaneously.
 
    .. audit-event:: glob.glob pathname,recursive glob.iglob
@@ -141,8 +141,7 @@ The :mod:`!glob` module defines the following functions:
 .. function:: translate(pathname, *, recursive=False, include_hidden=False, seps=None)
 
    Convert the given path specification to a regular expression for use with
-   :func:`re.prefixmatch`. The path specification can contain shell-style
-   wildcards.
+   :func:`re.match`. The path specification can contain shell-style wildcards.
 
    For example:
 
@@ -150,9 +149,9 @@ The :mod:`!glob` module defines the following functions:
       >>>
       >>> regex = glob.translate('**/*.txt', recursive=True, include_hidden=True)
       >>> regex
-      '(?s:(?:.+/)?[^/]*\\.txt)\\z'
+      '(?s:(?:.+/)?[^/]*\\.txt)\\Z'
       >>> reobj = re.compile(regex)
-      >>> reobj.prefixmatch('foo/bar/baz.txt')
+      >>> reobj.match('foo/bar/baz.txt')
       <re.Match object; span=(0, 15), match='foo/bar/baz.txt'>
 
    Path separators and segments are meaningful to this function, unlike
@@ -182,7 +181,7 @@ Examples
 
 Consider a directory containing the following files:
 :file:`1.gif`, :file:`2.txt`, :file:`card.gif` and a subdirectory :file:`sub`
-which contains only the file :file:`3.txt`.  :func:`~glob.glob` will produce
+which contains only the file :file:`3.txt`.  :func:`glob` will produce
 the following results.  Notice how any leading components of the path are
 preserved. ::
 

@@ -50,22 +50,19 @@ rules[RuleList]:
     | rule { [rule] }
 
 rule[Rule]:
-    | rulename flags=flags? ":" alts NEWLINE INDENT more_alts DEDENT {
-          Rule(rulename[0], rulename[1], Rhs(alts.alts + more_alts.alts), flags=flags) }
-    | rulename flags=flags? ":" NEWLINE INDENT more_alts DEDENT {
-          Rule(rulename[0], rulename[1], more_alts, flags=flags) }
-    | rulename flags=flags? ":" alts NEWLINE { Rule(rulename[0], rulename[1], alts, flags=flags) }
+    | rulename memoflag? ":" alts NEWLINE INDENT more_alts DEDENT {
+          Rule(rulename[0], rulename[1], Rhs(alts.alts + more_alts.alts), memo=opt) }
+    | rulename memoflag? ":" NEWLINE INDENT more_alts DEDENT {
+          Rule(rulename[0], rulename[1], more_alts, memo=opt) }
+    | rulename memoflag? ":" alts NEWLINE { Rule(rulename[0], rulename[1], alts, memo=opt) }
 
 rulename[RuleName]:
     | NAME annotation { (name.string, annotation) }
     | NAME { (name.string, None) }
 
-flags[frozenset[str]]:
-    | '(' a=','.flag+ ')' { frozenset(a) }
-
-flag[str]:
-    | a=NAME '=' b=NAME { a.string + "=" + b.string }
-    | NAME { name.string }
+# In the future this may return something more complicated
+memoflag[str]:
+    | '(' "memo" ')' { "memo" }
 
 alts[Rhs]:
     | alt "|" alts { Rhs([alt] + alts.alts)}
@@ -129,9 +126,6 @@ target_atom[str]:
     | NAME { name.string }
     | NUMBER { number.string }
     | STRING { string.string }
-    | FSTRING_START { fstring_start.string }
-    | FSTRING_MIDDLE { fstring_middle.string }
-    | FSTRING_END { fstring_end.string }
     | "?" { "?" }
     | ":" { ":" }
     | !"}" !"]" OP { op.string }

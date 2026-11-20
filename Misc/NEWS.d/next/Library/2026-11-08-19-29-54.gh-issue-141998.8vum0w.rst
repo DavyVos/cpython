@@ -1,2 +1,0 @@
-Do not syntax highlight text typed in response to :func:`input` in the
-:term:`REPL`.

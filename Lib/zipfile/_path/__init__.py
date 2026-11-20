@@ -7,16 +7,16 @@ https://github.com/python/importlib_metadata/wiki/Development-Methodology
 for more detail.
 """
 
-import functools
+import contextlib
 import io
 import itertools
 import pathlib
 import posixpath
 import re
 import stat
+import sys
 import zipfile
 
-from ._functools import none_as, save_method_args
 from .glob import Translator
 
 __all__ = ['Path']
@@ -65,7 +65,7 @@ def _ancestry(path):
     path = path.rstrip(posixpath.sep)
     while path.rstrip(posixpath.sep):
         yield path
-        path, _tail = posixpath.split(path)
+        path, tail = posixpath.split(path)
 
 
 _dedupe = dict.fromkeys
@@ -85,12 +85,13 @@ class InitializedState:
     Mix-in to save the initialization state for pickling.
     """
 
-    @save_method_args
     def __init__(self, *args, **kwargs):
+        self.__args = args
+        self.__kwargs = kwargs
         super().__init__(*args, **kwargs)
 
     def __getstate__(self):
-        return self._saved___init__.args, self._saved___init__.kwargs
+        return self.__args, self.__kwargs
 
     def __setstate__(self, state):
         args, kwargs = state
@@ -155,7 +156,10 @@ class CompleteDirs(InitializedState, zipfile.ZipFile):
             return cls(source)
 
         # Only allow for FastLookup when supplied zipfile is read-only
-        source.__class__ = cls if 'r' in source.mode else CompleteDirs
+        if 'r' not in source.mode:
+            cls = CompleteDirs
+
+        source.__class__ = cls
         return source
 
     @classmethod
@@ -176,22 +180,24 @@ class FastLookup(CompleteDirs):
     """
 
     def namelist(self):
-        return self._namelist
-
-    @functools.cached_property
-    def _namelist(self):
-        return super().namelist()
+        with contextlib.suppress(AttributeError):
+            return self.__names
+        self.__names = super().namelist()
+        return self.__names
 
     def _name_set(self):
-        return self._name_set_prop
-
-    @functools.cached_property
-    def _name_set_prop(self):
-        return super()._name_set()
-
+        with contextlib.suppress(AttributeError):
+            return self.__lookup
+        self.__lookup = super()._name_set()
+        return self.__lookup
 
 def _extract_text_encoding(encoding=None, *args, **kwargs):
-    stack_level = 3
+    # compute stack level so that the caller of the caller sees any warning.
+    is_pypy = sys.implementation.name == 'pypy'
+    # PyPy no longer special cased after 7.3.19 (or maybe 7.3.18)
+    # See jaraco/zipp#143
+    is_old_pypi = is_pypy and sys.pypy_version_info < (7, 3, 19)
+    stack_level = 3 + is_old_pypi
     return io.text_encoding(encoding, stack_level), args, kwargs
 
 
@@ -267,7 +273,7 @@ class Path:
     resolve to the zipfile.
 
     >>> str(path)
-    'mem/abcde.zip'
+    'mem/abcde.zip/'
     >>> path.name
     'abcde.zip'
     >>> path.filename == pathlib.Path('mem/abcde.zip')
@@ -275,7 +281,7 @@ class Path:
     >>> str(path.parent)
     'mem'
 
-    If the zipfile has no filename, such attributes are not
+    If the zipfile has no filename, such ﻿attributes are not
     valid and accessing them will raise an Exception.
 
     >>> zf.filename = None
@@ -394,7 +400,7 @@ class Path:
 
     def iterdir(self):
         if not self.is_dir():
-            raise NotADirectoryError("Can't listdir a file")
+            raise ValueError("Can't listdir a file")
         subs = map(self._next, self.root.namelist())
         return filter(self._is_child, subs)
 
@@ -425,8 +431,7 @@ class Path:
         return posixpath.relpath(str(self), str(other.joinpath(*extra)))
 
     def __str__(self):
-        root = none_as(self.root.filename, ':zipfile:')
-        return posixpath.join(root, self.at) if self.at else root
+        return posixpath.join(self.root.filename, self.at)
 
     def __repr__(self):
         return self.__repr.format(self=self)

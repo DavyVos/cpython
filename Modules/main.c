@@ -2,8 +2,6 @@
 
 #include "Python.h"
 #include "pycore_call.h"          // _PyObject_CallNoArgs()
-#include "pycore_fileutils.h"     // struct _Py_stat_struct
-#include "pycore_import.h"        // _PyImport_Fini2()
 #include "pycore_initconfig.h"    // _PyArgv
 #include "pycore_interp.h"        // _PyInterpreterState.sysdict
 #include "pycore_long.h"          // _PyLong_GetOne()
@@ -11,9 +9,6 @@
 #include "pycore_pylifecycle.h"   // _Py_PreInitializeFromPyArgv()
 #include "pycore_pystate.h"       // _PyInterpreterState_GET()
 #include "pycore_pythonrun.h"     // _PyRun_AnyFile()
-#include "pycore_sysmodule.h"     // _PySys_FormatV()
-#include "pycore_tuple.h"         // _PyTuple_FromPair
-#include "pycore_unicodeobject.h" // _PyUnicode_Dedent()
 
 /* Includes for exit_sigint() */
 #include <stdio.h>                // perror()
@@ -81,26 +76,6 @@ done:
 
 /* --- pymain_run_python() ---------------------------------------- */
 
-static void
-pymain_error_format(const char *format, ...)
-{
-    va_list vargs;
-    va_start(vargs, format);
-
-    PySys_WriteStderr("python: ");
-    _PySys_FormatV(&_Py_ID(stderr), stderr, format, vargs);
-    PySys_WriteStderr("\n");
-
-    va_end(vargs);
-}
-
-// See also pyrun_error()
-static void
-pymain_error(const char *msg)
-{
-    PySys_FormatStderr("python: %s\n", msg);
-}
-
 static int
 pymain_check_signals(void)
 {
@@ -130,7 +105,7 @@ static int
 pymain_err_print(int *exitcode_p)
 {
     int exitcode;
-    if (_Py_HandleSystemExitAndKeyboardInterrupt(&exitcode)) {
+    if (_Py_HandleSystemExit(&exitcode)) {
         *exitcode_p = exitcode;
         return 1;
     }
@@ -149,29 +124,19 @@ pymain_exit_err_print(void)
 }
 
 
-// If filename is a package (ex: directory or ZIP file) which contains
-// __main__.py, main_importer_path is set to filename and will be prepended to
-// sys.path.
-//
-// Otherwise, main_importer_path is left unchanged.
-//
-// Write an exitcode into *exitcode and return 1 if we have to exit Python.
-// Return 0 otherwise.
+/* Write an exitcode into *exitcode and return 1 if we have to exit Python.
+   Return 0 otherwise. */
 static int
-pymain_get_importer(const PyConfig *config, PyObject **importer_p,
-                    int *exitcode)
+pymain_get_importer(const wchar_t *filename, PyObject **importer_p, int *exitcode)
 {
-    const wchar_t *filename = config->run_filename;
-    if (filename == NULL) {
-        return 0;
-    }
+    PyObject *sys_path0 = NULL, *importer;
 
-    PyObject *sys_path0 = PyUnicode_FromWideChar(filename, -1);
+    sys_path0 = PyUnicode_FromWideChar(filename, wcslen(filename));
     if (sys_path0 == NULL) {
         goto error;
     }
 
-    PyObject *importer = PyImport_GetImporter(sys_path0);
+    importer = PyImport_GetImporter(sys_path0);
     if (importer == NULL) {
         goto error;
     }
@@ -189,16 +154,15 @@ pymain_get_importer(const PyConfig *config, PyObject **importer_p,
 error:
     Py_XDECREF(sys_path0);
 
-    pymain_error("Failed checking if argv[0] is an import path entry:");
+    PySys_WriteStderr("Failed checking if argv[0] is an import path entry\n");
     return pymain_err_print(exitcode);
 }
 
 
 static int
-pymain_sys_path_add_path0(PyObject *path0)
+pymain_sys_path_add_path0(PyInterpreterState *interp, PyObject *path0)
 {
     PyObject *sys_path;
-    PyInterpreterState *interp = _PyInterpreterState_GET();
     PyObject *sysdict = interp->sysdict;
     if (sysdict != NULL) {
         sys_path = PyDict_GetItemWithError(sysdict, &_Py_ID(path));
@@ -211,10 +175,6 @@ pymain_sys_path_add_path0(PyObject *path0)
     }
     if (sys_path == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "unable to get sys.path");
-        return -1;
-    }
-
-    if (PyDict_SetItemString(sysdict, "_path0", path0) < 0) {
         return -1;
     }
 
@@ -267,7 +227,6 @@ pymain_import_readline(const PyConfig *config)
     else {
         Py_DECREF(mod);
     }
-
     mod = PyImport_ImportModule("rlcompleter");
     if (mod == NULL) {
         PyErr_Clear();
@@ -290,13 +249,7 @@ pymain_run_command(wchar_t *command)
     }
 
     if (PySys_Audit("cpython.run_command", "O", unicode) < 0) {
-        Py_DECREF(unicode);
         return pymain_exit_err_print();
-    }
-
-    Py_SETREF(unicode, _PyUnicode_Dedent(unicode));
-    if (unicode == NULL) {
-        goto error;
     }
 
     bytes = PyUnicode_AsUTF8String(unicode);
@@ -321,30 +274,29 @@ pymain_run_command(wchar_t *command)
     return 0;
 
 error:
-    pymain_error("Unable to decode the command from the command line:");
+    PySys_WriteStderr("Unable to decode the command from the command line:\n");
     return pymain_exit_err_print();
 }
 
 
 static int
-pymain_run_pyrepl(int pythonstartup)
+pymain_run_pyrepl(void)
 {
     int exitcode = 0;
     PyObject *console = NULL;
     PyObject *empty_tuple = NULL;
     PyObject *kwargs = NULL;
     PyObject *console_result = NULL;
-    PyObject *main_module = NULL;
 
     PyObject *pyrepl = PyImport_ImportModule("_pyrepl.main");
     if (pyrepl == NULL) {
-        pymain_error("Could not import _pyrepl.main");
+        fprintf(stderr, "Could not import _pyrepl.main\n");
         goto error;
     }
 
     console = PyObject_GetAttrString(pyrepl, "interactive_console");
     if (console == NULL) {
-        pymain_error("Could not access _pyrepl.main.interactive_console");
+        fprintf(stderr, "Could not access _pyrepl.main.interactive_console\n");
         goto error;
     }
 
@@ -357,15 +309,16 @@ pymain_run_pyrepl(int pythonstartup)
         goto error;
     }
 
-    main_module = PyImport_AddModuleRef("__main__");
-    if (main_module == NULL) {
+    if (PyDict_SetItemString(kwargs, "pythonstartup", _PyLong_GetOne())) {
         goto error;
     }
 
-    PyObject *value = pythonstartup ? Py_True : Py_False;
-    if (PyDict_SetItemString(kwargs, "mainmodule", main_module)
-        || PyDict_SetItemString(kwargs, "pythonstartup", value))
-    {
+    _PyRuntime.signals.unhandled_keyboard_interrupt = 0;
+    console_result = PyObject_Call(console, empty_tuple, kwargs);
+    if (!console_result && PyErr_Occurred() == PyExc_KeyboardInterrupt) {
+        _PyRuntime.signals.unhandled_keyboard_interrupt = 1;
+    }
+    if (console_result == NULL) {
         goto error;
     }
 
@@ -380,7 +333,6 @@ done:
     Py_XDECREF(empty_tuple);
     Py_XDECREF(console);
     Py_XDECREF(pyrepl);
-    Py_XDECREF(main_module);
     return exitcode;
 
 error:
@@ -392,65 +344,69 @@ error:
 static int
 pymain_run_module(const wchar_t *modname, int set_argv0)
 {
-    int exitcode = 0;
-    PyObject *module = NULL;
-    PyObject *runmodule = NULL;
-    PyObject *runargs = NULL;
-    PyObject *result = NULL;
-
+    PyObject *module, *runpy, *runmodule, *runargs, *result;
     if (PySys_Audit("cpython.run_module", "u", modname) < 0) {
-        goto error;
+        return pymain_exit_err_print();
     }
-
-    runmodule = PyImport_ImportModuleAttrString("runpy",
-                                                "_run_module_as_main");
+    runpy = PyImport_ImportModule("runpy");
+    if (runpy == NULL) {
+        fprintf(stderr, "Could not import runpy module\n");
+        return pymain_exit_err_print();
+    }
+    runmodule = PyObject_GetAttrString(runpy, "_run_module_as_main");
     if (runmodule == NULL) {
-        pymain_error("Could not import runpy._run_module_as_main");
-        goto error;
+        fprintf(stderr, "Could not access runpy._run_module_as_main\n");
+        Py_DECREF(runpy);
+        return pymain_exit_err_print();
     }
-
-    module = PyUnicode_FromWideChar(modname, -1);
+    module = PyUnicode_FromWideChar(modname, wcslen(modname));
     if (module == NULL) {
-        pymain_error("Could not convert module name to unicode");
-        goto error;
+        fprintf(stderr, "Could not convert module name to unicode\n");
+        Py_DECREF(runpy);
+        Py_DECREF(runmodule);
+        return pymain_exit_err_print();
     }
-
-    runargs = _PyTuple_FromPair(module, set_argv0 ? Py_True : Py_False);
+    runargs = PyTuple_Pack(2, module, set_argv0 ? Py_True : Py_False);
     if (runargs == NULL) {
-        pymain_error("Could not create arguments "
-                     "for runpy._run_module_as_main");
-        goto error;
+        fprintf(stderr,
+            "Could not create arguments for runpy._run_module_as_main\n");
+        Py_DECREF(runpy);
+        Py_DECREF(runmodule);
+        Py_DECREF(module);
+        return pymain_exit_err_print();
     }
-
+    _PyRuntime.signals.unhandled_keyboard_interrupt = 0;
     result = PyObject_Call(runmodule, runargs, NULL);
-    if (result == NULL) {
-        goto error;
+    if (!result && PyErr_Occurred() == PyExc_KeyboardInterrupt) {
+        _PyRuntime.signals.unhandled_keyboard_interrupt = 1;
     }
-
-done:
-    Py_XDECREF(module);
-    Py_XDECREF(runmodule);
-    Py_XDECREF(runargs);
-    Py_XDECREF(result);
-    return exitcode;
-
-error:
-    exitcode = pymain_exit_err_print();
-    goto done;
+    Py_DECREF(runpy);
+    Py_DECREF(runmodule);
+    Py_DECREF(module);
+    Py_DECREF(runargs);
+    if (result == NULL) {
+        return pymain_exit_err_print();
+    }
+    Py_DECREF(result);
+    return 0;
 }
 
 
 static int
-pymain_run_file_obj(PyObject *filename, int skip_source_first_line)
+pymain_run_file_obj(PyObject *program_name, PyObject *filename,
+                    int skip_source_first_line)
 {
     if (PySys_Audit("cpython.run_file", "O", filename) < 0) {
         return pymain_exit_err_print();
     }
 
-    FILE *fp = Py_fopen(filename, "rb");
+    FILE *fp = _Py_fopen_obj(filename, "rb");
     if (fp == NULL) {
-        pymain_error_format("can't open file %R:", filename);
-        pymain_exit_err_print();
+        // Ignore the OSError
+        PyErr_Clear();
+        // TODO(picnixz): strerror() is locale dependent but not PySys_FormatStderr().
+        PySys_FormatStderr("%S: can't open file %R: [Errno %d] %s\n",
+                           program_name, filename, errno, strerror(errno));
         return 2;
     }
 
@@ -467,8 +423,8 @@ pymain_run_file_obj(PyObject *filename, int skip_source_first_line)
 
     struct _Py_stat_struct sb;
     if (_Py_fstat_noraise(fileno(fp), &sb) == 0 && S_ISDIR(sb.st_mode)) {
-        pymain_error_format("%R is a directory, cannot continue",
-                            filename);
+        PySys_FormatStderr("%S: %R is a directory, cannot continue\n",
+                           program_name, filename);
         fclose(fp);
         return 1;
     }
@@ -495,9 +451,16 @@ pymain_run_file(const PyConfig *config)
     if (filename == NULL) {
         return pymain_exit_err_print();
     }
+    PyObject *program_name = PyUnicode_FromWideChar(config->program_name, -1);
+    if (program_name == NULL) {
+        Py_DECREF(filename);
+        return pymain_exit_err_print();
+    }
 
-    int exitcode = pymain_run_file_obj(filename, config->skip_source_first_line);
-    Py_XDECREF(filename);
+    int exitcode = pymain_run_file_obj(program_name, filename,
+                                       config->skip_source_first_line);
+    Py_DECREF(filename);
+    Py_DECREF(program_name);
     return exitcode;
 }
 
@@ -506,27 +469,24 @@ static int
 pymain_run_startup(PyConfig *config, int *exitcode)
 {
     int ret = 0;
-    PyObject *startup = NULL;
-
     if (!config->use_environment) {
-        goto done;
+        return 0;
     }
+    PyObject *startup = NULL;
 #ifdef MS_WINDOWS
     const wchar_t *env = _wgetenv(L"PYTHONSTARTUP");
     if (env == NULL || env[0] == L'\0') {
-        goto done;
+        return 0;
     }
-
-    startup = PyUnicode_FromWideChar(env, -1);
+    startup = PyUnicode_FromWideChar(env, wcslen(env));
     if (startup == NULL) {
         goto error;
     }
 #else
     const char *env = _Py_GetEnv(config->use_environment, "PYTHONSTARTUP");
     if (env == NULL) {
-        goto done;
+        return 0;
     }
-
     startup = PyUnicode_DecodeFSDefault(env);
     if (startup == NULL) {
         goto error;
@@ -536,9 +496,14 @@ pymain_run_startup(PyConfig *config, int *exitcode)
         goto error;
     }
 
-    FILE *fp = Py_fopen(startup, "r");
+    FILE *fp = _Py_fopen_obj(startup, "r");
     if (fp == NULL) {
-        pymain_error("Could not open PYTHONSTARTUP");
+        int save_errno = errno;
+        PyErr_Clear();
+        PySys_WriteStderr("Could not open PYTHONSTARTUP\n");
+
+        errno = save_errno;
+        PyErr_SetFromErrnoWithFilenameObjects(PyExc_OSError, startup, NULL);
         goto error;
     }
 
@@ -565,11 +530,16 @@ error:
 static int
 pymain_run_interactive_hook(int *exitcode)
 {
-    PyObject *hook;
-    if (PySys_GetOptionalAttrString("__interactivehook__", &hook) < 0) {
+    PyObject *sys, *hook, *result;
+    sys = PyImport_ImportModule("sys");
+    if (sys == NULL) {
         goto error;
     }
+
+    hook = PyObject_GetAttrString(sys, "__interactivehook__");
+    Py_DECREF(sys);
     if (hook == NULL) {
+        PyErr_Clear();
         return 0;
     }
 
@@ -578,34 +548,29 @@ pymain_run_interactive_hook(int *exitcode)
         goto error;
     }
 
-    PyObject *result = _PyObject_CallNoArgs(hook);
+    result = _PyObject_CallNoArgs(hook);
     Py_DECREF(hook);
     if (result == NULL) {
         goto error;
     }
     Py_DECREF(result);
+
     return 0;
 
 error:
-    pymain_error("Failed calling sys.__interactivehook__:");
+    PySys_WriteStderr("Failed calling sys.__interactivehook__\n");
     return pymain_err_print(exitcode);
 }
 
 
-static int
-pymain_set_inspect(PyConfig *config, int inspect, int *exitcode)
+static void
+pymain_set_inspect(PyConfig *config, int inspect)
 {
-    PyObject *value = PyLong_FromLong(inspect);
-    if (value == NULL || PyConfig_Set("inspect", value) < 0) {
-        Py_XDECREF(value);
-        pymain_error("Could not set the inspect flag");
-        return pymain_err_print(exitcode);
-    }
-    else {
-        assert(config->inspect == inspect);
-    }
-    Py_XDECREF(value);
-    return 0;
+    config->inspect = inspect;
+_Py_COMP_DIAG_PUSH
+_Py_COMP_DIAG_IGNORE_DEPR_DECLS
+    Py_InspectFlag = inspect;
+_Py_COMP_DIAG_POP
 }
 
 
@@ -613,28 +578,22 @@ static int
 _pymain_run_repl(PyConfig *config, int startup)
 {
     if (pymain_check_signals() < 0) {
-        goto error;
+        return pymain_exit_err_print();
     }
 
     if (PySys_Audit("cpython.run_stdin", NULL) < 0) {
-        goto error;
+        return pymain_exit_err_print();
     }
 
     if (isatty(fileno(stdin))
         && !_Py_GetEnv(config->use_environment, "PYTHON_BASIC_REPL"))
     {
-        PyObject *pyrepl = PyImport_ImportModule("_pyrepl");
-        if (pyrepl != NULL) {
-            int exitcode = pymain_run_pyrepl(startup);
-            Py_DECREF(pyrepl);
-            return exitcode;
+        if (startup) {
+            return pymain_run_pyrepl();
         }
-
-        if (!PyErr_ExceptionMatches(PyExc_ModuleNotFoundError)) {
-            pymain_error("Could not import _pyrepl.main");
-            goto error;
+        else {
+            return pymain_run_module(L"_pyrepl", 0);
         }
-        PyErr_Clear();
     }
 
     PyCompilerFlags cf = _PyCompilerFlags_INIT;
@@ -645,13 +604,10 @@ _pymain_run_repl(PyConfig *config, int startup)
         Py_DECREF(stdin_obj);
     }
     if (result == NULL) {
-        goto error;
+        return pymain_exit_err_print();
     }
     Py_DECREF(result);
     return 0;
-
-error:
-    return pymain_exit_err_print();
 }
 
 static int
@@ -659,11 +615,9 @@ pymain_run_stdin(PyConfig *config)
 {
     if (stdin_is_interactive(config)) {
         // do exit on SystemExit
-        int exitcode;
-        if (pymain_set_inspect(config, 0, &exitcode)) {
-            return exitcode;
-        }
+        pymain_set_inspect(config, 0);
 
+        int exitcode;
         if (pymain_run_startup(config, &exitcode)) {
             return exitcode;
         }
@@ -683,18 +637,14 @@ pymain_repl(PyConfig *config, int *exitcode)
     /* Check this environment variable at the end, to give programs the
        opportunity to set it from Python. */
     if (!config->inspect && _Py_GetEnv(config->use_environment, "PYTHONINSPECT")) {
-        if (pymain_set_inspect(config, 1, exitcode)) {
-            return;
-        }
+        pymain_set_inspect(config, 1);
     }
 
     if (!(config->inspect && stdin_is_interactive(config) && config_run_code(config))) {
         return;
     }
 
-    if (pymain_set_inspect(config, 0, exitcode)) {
-        return;
-    }
+    pymain_set_inspect(config, 0);
     if (pymain_run_interactive_hook(exitcode)) {
         return;
     }
@@ -703,71 +653,15 @@ pymain_repl(PyConfig *config, int *exitcode)
 }
 
 
-static int
-pymain_set_path0(PyObject *main_importer_path)
-{
-    PyConfig *config = (PyConfig *)_Py_GetConfig();
-
-    PyObject *path0 = NULL;
-    if (main_importer_path != NULL) {
-        path0 = Py_NewRef(main_importer_path);
-    }
-    else if (!config->safe_path) {
-        int res = _PyPathConfig_ComputeSysPath0(&config->argv, &path0);
-        if (res < 0) {
-            return -1;
-        }
-        else if (res == 0) {
-            Py_CLEAR(path0);
-        }
-    }
-
-    if (path0 == NULL) {
-        return 0;
-    }
-
-    // XXX Apply config->sys_path_0 in init_interp_main().  We have
-    // to be sure to get readline/rlcompleter imported at the correct time.
-    wchar_t *wstr = PyUnicode_AsWideCharString(path0, NULL);
-    if (wstr == NULL) {
-        goto error;
-    }
-
-    PyStatus status = PyConfig_SetString(config, &config->sys_path_0, wstr);
-    PyMem_Free(wstr);
-    if (_PyStatus_EXCEPTION(status)) {
-        _PyErr_SetFromPyStatus(status);
-        goto error;
-    }
-
-    int res = pymain_sys_path_add_path0(path0);
-    Py_DECREF(path0);
-
-    return res;
-
-error:
-    Py_DECREF(path0);
-    return -1;
-}
-
-
 static void
 pymain_run_python(int *exitcode)
 {
-    PyInterpreterState *interp = _PyInterpreterState_GET();
-    /* pymain_repl() and pymain_run_stdin() modify the config */
-    PyConfig *config = (PyConfig*)_PyInterpreterState_GetConfig(interp);
-
-    // Process command line options which want to exit Python
-    int cmdline_exitcode = _PyConfig_ProcessDeferredCmdlineOption(config);
-    if (cmdline_exitcode >= 0) {
-        *exitcode = cmdline_exitcode;
-        return;
-    }
-
     int set_running_main = 0;
 
     PyObject *main_importer_path = NULL;
+    PyInterpreterState *interp = _PyInterpreterState_GET();
+    /* pymain_run_stdin() modify the config */
+    PyConfig *config = (PyConfig*)_PyInterpreterState_GetConfig(interp);
 
     /* ensure path config is written into global variables */
     PyStatus status = _PyPathConfig_UpdateGlobal(config);
@@ -781,8 +675,16 @@ pymain_run_python(int *exitcode)
     // at that point.
     assert(config->sys_path_0 == NULL);
 
-    if (pymain_get_importer(config, &main_importer_path, exitcode)) {
-        return;
+    if (config->run_filename != NULL) {
+        /* If filename is a package (ex: directory or ZIP file) which contains
+           __main__.py, main_importer_path is set to filename and will be
+           prepended to sys.path.
+
+           Otherwise, main_importer_path is left unchanged. */
+        if (pymain_get_importer(config->run_filename, &main_importer_path,
+                                exitcode)) {
+            return;
+        }
     }
 
     // import readline and rlcompleter before script dir is added to sys.path
@@ -790,8 +692,38 @@ pymain_run_python(int *exitcode)
         goto error;
     }
 
-    if (pymain_set_path0(main_importer_path) < 0) {
-        goto error;
+    PyObject *path0 = NULL;
+    if (main_importer_path != NULL) {
+        path0 = Py_NewRef(main_importer_path);
+    }
+    else if (!config->safe_path) {
+        int res = _PyPathConfig_ComputeSysPath0(&config->argv, &path0);
+        if (res < 0) {
+            goto error;
+        }
+        else if (res == 0) {
+            Py_CLEAR(path0);
+        }
+    }
+    // XXX Apply config->sys_path_0 in init_interp_main().  We have
+    // to be sure to get readline/rlcompleter imported at the correct time.
+    if (path0 != NULL) {
+        wchar_t *wstr = PyUnicode_AsWideCharString(path0, NULL);
+        if (wstr == NULL) {
+            Py_DECREF(path0);
+            goto error;
+        }
+        config->sys_path_0 = _PyMem_RawWcsdup(wstr);
+        PyMem_Free(wstr);
+        if (config->sys_path_0 == NULL) {
+            Py_DECREF(path0);
+            goto error;
+        }
+        int res = pymain_sys_path_add_path0(interp, path0);
+        Py_DECREF(path0);
+        if (res < 0) {
+            goto error;
+        }
     }
 
     pymain_header(config);
@@ -899,8 +831,6 @@ Py_RunMain(void)
 {
     int exitcode = 0;
 
-    _PyRuntime.signals.unhandled_keyboard_interrupt = 0;
-
     pymain_run_python(&exitcode);
 
     if (Py_FinalizeEx() < 0) {
@@ -923,7 +853,10 @@ static int
 pymain_main(_PyArgv *args)
 {
     PyStatus status = pymain_init(args);
-    assert(!_PyStatus_IS_EXIT(status));
+    if (_PyStatus_IS_EXIT(status)) {
+        pymain_free();
+        return status.exitcode;
+    }
     if (_PyStatus_EXCEPTION(status)) {
         pymain_exit_error(status);
     }

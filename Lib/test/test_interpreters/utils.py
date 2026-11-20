@@ -2,17 +2,21 @@ from collections import namedtuple
 import contextlib
 import errno
 import json
+import io
 import logging
 import os
 import os.path
+import pickle
+import queue
 #import select
 import subprocess
 import sys
 import tempfile
-from textwrap import dedent
+from textwrap import dedent, indent
 import threading
 import types
 import unittest
+import warnings
 
 from test import support
 
@@ -22,7 +26,7 @@ try:
     import _interpreters
 except ImportError as exc:
     raise unittest.SkipTest(str(exc))
-from concurrent import interpreters
+from test.support import interpreters
 
 
 try:

@@ -26,6 +26,8 @@ on top of pyrepl.  Not all functionalities are supported.  Contains
 extensions for multiline input.
 """
 
+from __future__ import annotations
+
 import warnings
 from dataclasses import dataclass, field
 
@@ -35,10 +37,8 @@ import sys
 from rlcompleter import Completer as RLCompleter
 
 from . import commands, historical_reader
-from .completing_reader import CompletingReader, stripcolor
+from .completing_reader import CompletingReader
 from .console import Console as ConsoleType
-from ._module_completer import ModuleCompleter, make_default_module_completer
-from .fancycompleter import Completer as FancyCompleter, colorize_matches
 
 Console: type[ConsoleType]
 _error: tuple[type[Exception], ...] | type[Exception]
@@ -53,10 +53,13 @@ ENCODING = sys.getdefaultencoding() or "latin1"
 
 # types
 Command = commands.Command
-from collections.abc import Callable, Collection, Mapping
-from .types import Callback, Completer, KeySpec, CommandName, CompletionAction
+from collections.abc import Callable, Collection
+from .types import Callback, Completer, KeySpec, CommandName
 
-lazy from typing import Any
+TYPE_CHECKING = False
+
+if TYPE_CHECKING:
+    from typing import Any, Mapping
 
 
 MoreLinesCallable = Callable[[str], bool]
@@ -87,7 +90,6 @@ __all__ = [
     # "set_pre_input_hook",
     "set_startup_hook",
     "write_history_file",
-    "append_history_file",
     # ---- multiline extensions ----
     "multiline_input",
 ]
@@ -98,8 +100,7 @@ __all__ = [
 class ReadlineConfig:
     readline_completer: Completer | None = None
     completer_delims: frozenset[str] = frozenset(" \t\n`~!@#$%^&*()-=+[{]}\\|;:'\",<>/?")
-    module_completer: ModuleCompleter = field(default_factory=make_default_module_completer)
-    colorize_completions: Callable[[list[str], list[Any]], list[str]] | None = None
+
 
 @dataclass(kw_only=True)
 class ReadlineAlikeReader(historical_reader.HistoricalReader, CompletingReader):
@@ -120,6 +121,9 @@ class ReadlineAlikeReader(historical_reader.HistoricalReader, CompletingReader):
         self.commands["backspace_dedent"] = backspace_dedent
         self.commands["backspace-dedent"] = backspace_dedent
 
+    def error(self, msg: str = "none") -> None:
+        pass  # don't show error messages by default
+
     def get_stem(self) -> str:
         b = self.buffer
         p = self.pos - 1
@@ -128,17 +132,14 @@ class ReadlineAlikeReader(historical_reader.HistoricalReader, CompletingReader):
             p -= 1
         return "".join(b[p + 1 : self.pos])
 
-    def get_completions(self, stem: str) -> tuple[list[str], CompletionAction | None]:
-        module_completions = self.get_module_completions()
-        if module_completions is not None:
-            return module_completions
+    def get_completions(self, stem: str) -> list[str]:
         if len(stem) == 0 and self.more_lines is not None:
             b = self.buffer
             p = self.pos
             while p > 0 and b[p - 1] != "\n":
                 p -= 1
             num_spaces = 4 - ((self.pos - p) % 4)
-            return [" " * num_spaces], None
+            return [" " * num_spaces]
         result = []
         function = self.config.readline_completer
         if function is not None:
@@ -156,23 +157,10 @@ class ReadlineAlikeReader(historical_reader.HistoricalReader, CompletingReader):
                     break
                 result.append(next)
                 state += 1
-            # Emulate readline's sorting using the visible text rather than
-            # the raw ANSI escape sequences used for colorized matches.
-            result.sort(key=stripcolor)
-        return result, None
-
-    def get_module_completions(self) -> tuple[list[str], CompletionAction | None] | None:
-        line = stripcolor(self.get_line())
-        colorize_completions = self.config.colorize_completions
-        result = self.config.module_completer.get_completions(
-            line, include_values=bool(colorize_completions)
-        )
-        if result is None:
-            return None
-        names, values, action = result
-        if colorize_completions:
-            names = colorize_completions(names, values)
-        return names, action
+            # emulate the behavior of the standard readline that sorts
+            # the completions before displaying them.
+            result.sort()
+        return result
 
     def get_trimmed_history(self, maxlength: int) -> list[str]:
         if maxlength >= 0:
@@ -279,7 +267,11 @@ class maybe_accept(commands.Command):
     def do(self) -> None:
         r: ReadlineAlikeReader
         r = self.reader  # type: ignore[assignment]
-        r.invalidate_overlay()  # hide completion menu, if visible
+        r.dirty = True  # this is needed to hide the completion menu, if visible
+
+        if self.reader.in_bracketed_paste:
+            r.insert("\n")
+            return
 
         # if there are already several lines and the cursor
         # is not on the last one, always insert a new \n.
@@ -339,9 +331,9 @@ class backspace_dedent(commands.Command):
                             break
             r.pos -= repeat
             del b[r.pos : r.pos + repeat]
-            r.invalidate_buffer(r.pos)
+            r.dirty = True
         else:
-            self.reader.debug("can't backspace at start")
+            self.reader.error("can't backspace at start")
 
 
 # ____________________________________________________________
@@ -377,8 +369,7 @@ class _ReadlineWrapper:
         prompt_str = str(prompt)
         reader.ps1 = prompt_str
         sys.audit("builtins.input", prompt_str)
-        with reader.suspend_history_writes(), reader.suspend_colorization():
-            result = reader.readline(startup_hook=self.startup_hook)
+        result = reader.readline(startup_hook=self.startup_hook)
         sys.audit("builtins.input/result", result)
         return result
 
@@ -416,12 +407,8 @@ class _ReadlineWrapper:
     def get_completer_delims(self) -> str:
         return "".join(sorted(self.config.completer_delims))
 
-    def _histline(self, line: str, *, sanitize_nuls: bool = False) -> str:
+    def _histline(self, line: str) -> str:
         line = line.rstrip("\n")
-        if "\0" in line:
-            if not sanitize_nuls:
-                raise ValueError("embedded null character")
-            line = line.replace("\0", "")
         return line
 
     def get_history_length(self) -> int:
@@ -454,16 +441,12 @@ class _ReadlineWrapper:
                 if line.endswith("\r"):
                     buffer.append(line+'\n')
                 else:
-                    line = self._histline(line, sanitize_nuls=True)
+                    line = self._histline(line)
                     if buffer:
-                        line = self._histline(
-                            "".join(buffer).replace("\r", "") + line,
-                            sanitize_nuls=True,
-                        )
+                        line = self._histline("".join(buffer).replace("\r", "") + line)
                         del buffer[:]
                     if line:
                         history.append(line)
-        self.set_history_length(self.get_current_history_length())
 
     def write_history_file(self, filename: str = gethistoryfile()) -> None:
         maxlength = self.saved_history_length
@@ -474,19 +457,6 @@ class _ReadlineWrapper:
             for entry in history:
                 entry = entry.replace("\n", "\r\n")  # multiline history support
                 f.write(entry + "\n")
-
-    def append_history_file(self, filename: str = gethistoryfile()) -> None:
-        reader = self.get_reader()
-        saved_length = self.get_history_length()
-        length = self.get_current_history_length() - saved_length
-        history = reader.get_trimmed_history(length)
-        f = open(os.path.expanduser(filename), "a",
-                 encoding="utf-8", newline="\n")
-        with f:
-            for entry in history:
-                entry = entry.replace("\n", "\r\n")  # multiline history support
-                f.write(entry + "\n")
-        self.set_history_length(saved_length + length)
 
     def clear_history(self) -> None:
         del self.get_reader().history[:]
@@ -557,7 +527,6 @@ set_history_length = _wrapper.set_history_length
 get_current_history_length = _wrapper.get_current_history_length
 read_history_file = _wrapper.read_history_file
 write_history_file = _wrapper.write_history_file
-append_history_file = _wrapper.append_history_file
 clear_history = _wrapper.clear_history
 get_history_item = _wrapper.get_history_item
 remove_history_item = _wrapper.remove_history_item
@@ -619,19 +588,7 @@ def _setup(namespace: Mapping[str, Any]) -> None:
     # set up namespace in rlcompleter, which requires it to be a bona fide dict
     if not isinstance(namespace, dict):
         namespace = dict(namespace)
-    use_basic_completer = (
-        not sys.flags.ignore_environment
-        and os.getenv("PYTHON_BASIC_COMPLETER")
-    )
-    completer_cls = RLCompleter if use_basic_completer else FancyCompleter
-    completer = completer_cls(namespace)
-    _wrapper.config.readline_completer = completer.complete
-    if isinstance(completer, FancyCompleter) and completer.use_colors:
-        theme = completer.theme
-        def _colorize(names: list[str], values: list[object]) -> list[str]:
-            return colorize_matches(names, values, theme)
-        _wrapper.config.colorize_completions = _colorize
-    _wrapper.config.module_completer = ModuleCompleter(namespace)
+    _wrapper.config.readline_completer = RLCompleter(namespace).complete
 
     # this is not really what readline.c does.  Better than nothing I guess
     import builtins

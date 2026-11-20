@@ -21,6 +21,12 @@
 #  include <sys/termio.h>
 #endif
 
+// Apparently, on SGI, termios.h won't define CTRL if _XOPEN_SOURCE
+// is defined, so we define it here.
+#if defined(__sgi)
+#  define CTRL(c) ((c)&037)
+#endif
+
 // We could do better. Check bpo-32660
 #if defined(__sun)
 #  include <sys/filio.h>
@@ -254,7 +260,7 @@ termios_tcsetattr_impl(PyObject *module, int fd, int when, PyObject *term)
         }
         else {
             PyErr_SetString(PyExc_TypeError,
-     "tcsetattr: elements of attributes must be bytes objects of length 1 or integers");
+     "tcsetattr: elements of attributes must be characters or integers");
                         return NULL;
                 }
     }
@@ -306,7 +312,6 @@ termios_tcsendbreak_impl(PyObject *module, int fd, int duration)
 }
 
 /*[clinic input]
-@permit_long_summary
 termios.tcdrain
 
     fd: fildes
@@ -317,7 +322,7 @@ Wait until all output written to file descriptor fd has been transmitted.
 
 static PyObject *
 termios_tcdrain_impl(PyObject *module, int fd)
-/*[clinic end generated code: output=5fd86944c6255955 input=d1557e60b5ec66c5]*/
+/*[clinic end generated code: output=5fd86944c6255955 input=c99241b140b32447]*/
 {
     termiosmodulestate *state = PyModule_GetState(module);
     int r;
@@ -495,24 +500,19 @@ termios_tcsetwinsize_impl(PyObject *module, int fd, PyObject *winsz)
     PyObject *tmp_item;
     long winsz_0, winsz_1;
     tmp_item = PySequence_GetItem(winsz, 0);
-    if (tmp_item == NULL) {
-        return NULL;
-    }
     winsz_0 = PyLong_AsLong(tmp_item);
-    Py_DECREF(tmp_item);
     if (winsz_0 == -1 && PyErr_Occurred()) {
+        Py_XDECREF(tmp_item);
         return NULL;
     }
+    Py_XDECREF(tmp_item);
     tmp_item = PySequence_GetItem(winsz, 1);
-    if (tmp_item == NULL) {
-        return NULL;
-    }
     winsz_1 = PyLong_AsLong(tmp_item);
-    Py_DECREF(tmp_item);
     if (winsz_1 == -1 && PyErr_Occurred()) {
+        Py_XDECREF(tmp_item);
         return NULL;
     }
-
+    Py_XDECREF(tmp_item);
 
     termiosmodulestate *state = PyModule_GetState(module);
 
@@ -1353,21 +1353,9 @@ termios_exec(PyObject *mod)
     }
 
     while (constant->name != NULL) {
-        if (strncmp(constant->name, "TIO", 3) == 0) {
-            // gh-119770: Convert value to unsigned int for ioctl() constants,
-            // constants can be negative on macOS whereas ioctl() expects an
-            // unsigned long 'request'.
-            unsigned int value = constant->value & UINT_MAX;
-            if (PyModule_Add(mod, constant->name,
-                             PyLong_FromUnsignedLong(value)) < 0) {
-                return -1;
-            }
-        }
-        else {
-            if (PyModule_AddIntConstant(
-                mod, constant->name, constant->value) < 0) {
-                return -1;
-            }
+        if (PyModule_AddIntConstant(
+            mod, constant->name, constant->value) < 0) {
+            return -1;
         }
         ++constant;
     }

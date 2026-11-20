@@ -1,9 +1,7 @@
-import copy
 import errno
 import sys
 import os
 import io
-import ntpath
 from hashlib import sha256
 from contextlib import contextmanager, ExitStack
 from random import Random
@@ -12,7 +10,6 @@ import shutil
 import re
 import warnings
 import stat
-import time
 
 import unittest
 import unittest.mock
@@ -41,10 +38,6 @@ try:
     import lzma
 except ImportError:
     lzma = None
-try:
-    from compression import zstd
-except ImportError:
-    zstd = None
 
 def sha256sum(data):
     return sha256(data).hexdigest()
@@ -55,7 +48,6 @@ tarname = support.findfile("testtar.tar", subdir="archivetestdata")
 gzipname = os.path.join(TEMPDIR, "testtar.tar.gz")
 bz2name = os.path.join(TEMPDIR, "testtar.tar.bz2")
 xzname = os.path.join(TEMPDIR, "testtar.tar.xz")
-zstname = os.path.join(TEMPDIR, "testtar.tar.zst")
 tmpname = os.path.join(TEMPDIR, "tmp.tar")
 dotlessname = os.path.join(TEMPDIR, "testtar")
 SPACE = b" "
@@ -99,12 +91,6 @@ class LzmaTest:
     open = lzma.LZMAFile if lzma else None
     taropen = tarfile.TarFile.xzopen
 
-@support.requires_zstd()
-class ZstdTest:
-    tarname = zstname
-    suffix = 'zst'
-    open = zstd.ZstdFile if zstd else None
-    taropen = tarfile.TarFile.zstopen
 
 class ReadTest(TarTest):
 
@@ -256,19 +242,6 @@ class UstarReadTest(ReadTest, unittest.TestCase):
         self.add_dir_and_getmember('bar')
         self.add_dir_and_getmember('a'*101)
 
-    def test_extract_name_with_trailing_slash(self):
-        # gh-127636: './mydir/' is deliberately a regular-file member
-        # (REGTYPE, not DIRTYPE) whose stored name ends in a slash.  It
-        # extracts as a file.  Do not "fix" this by setting DIRTYPE; the
-        # trailing-slash name on a non-directory is what is being tested.
-        with tarfile.open(tmpname, 'w') as tar:
-            tar.addfile(tarfile.TarInfo('./mydir/'))
-        with os_helper.temp_dir() as tmpdir, tarfile.open(tmpname) as tar:
-            names = tar.getnames()
-            self.assertEqual(names, ['./mydir/'])
-            tar.extract(names[0], tmpdir, filter='fully_trusted')
-            self.assertTrue(os.path.isfile(os.path.join(tmpdir, 'mydir')))
-
     @unittest.skipUnless(hasattr(os, "getuid") and hasattr(os, "getgid"),
                          "Missing getuid or getgid implementation")
     def add_dir_and_getmember(self, name):
@@ -299,8 +272,6 @@ class Bz2UstarReadTest(Bz2Test, UstarReadTest):
 class LzmaUstarReadTest(LzmaTest, UstarReadTest):
     pass
 
-class ZstdUstarReadTest(ZstdTest, UstarReadTest):
-    pass
 
 class ListTest(ReadTest, unittest.TestCase):
 
@@ -405,8 +376,6 @@ class Bz2ListTest(Bz2Test, ListTest):
 class LzmaListTest(LzmaTest, ListTest):
     pass
 
-class ZstdListTest(ZstdTest, ListTest):
-    pass
 
 class CommonReadTest(ReadTest):
 
@@ -801,24 +770,6 @@ class MiscReadTestBase(CommonReadTest):
             tar.close()
             os_helper.rmtree(DIR)
 
-    @staticmethod
-    def test_extractall_default_filter():
-        # Test that the default filter is now "data", and the other filter types are not used.
-        DIR = pathlib.Path(TEMPDIR) / "extractall_default_filter"
-        with (
-            os_helper.temp_dir(DIR),
-            tarfile.open(tarname, encoding="iso8859-1") as tar,
-            unittest.mock.patch("tarfile.data_filter", wraps=tarfile.data_filter) as mock_data_filter,
-            unittest.mock.patch("tarfile.tar_filter", wraps=tarfile.tar_filter) as mock_tar_filter,
-            unittest.mock.patch("tarfile.fully_trusted_filter", wraps=tarfile.fully_trusted_filter) as mock_ft_filter
-        ):
-            directories = [t for t in tar if t.isdir()]
-            tar.extractall(DIR, directories)
-
-            mock_data_filter.assert_called()
-            mock_ft_filter.assert_not_called()
-            mock_tar_filter.assert_not_called()
-
     @os_helper.skip_unless_working_chmod
     def test_extract_directory(self):
         dirtype = "ustar/dirtype"
@@ -834,6 +785,31 @@ class MiscReadTestBase(CommonReadTest):
                     self.assertEqual(os.stat(extracted).st_mode & 0o777, 0o755)
         finally:
             os_helper.rmtree(DIR)
+
+    def test_deprecation_if_no_filter_passed_to_extractall(self):
+        DIR = pathlib.Path(TEMPDIR) / "extractall"
+        with (
+            os_helper.temp_dir(DIR),
+            tarfile.open(tarname, encoding="iso8859-1") as tar
+        ):
+            directories = [t for t in tar if t.isdir()]
+            with self.assertWarnsRegex(DeprecationWarning, "Use the filter argument") as cm:
+                tar.extractall(DIR, directories)
+            # check that the stacklevel of the deprecation warning is correct:
+            self.assertEqual(cm.filename, __file__)
+
+    def test_deprecation_if_no_filter_passed_to_extract(self):
+        dirtype = "ustar/dirtype"
+        DIR = pathlib.Path(TEMPDIR) / "extractall"
+        with (
+            os_helper.temp_dir(DIR),
+            tarfile.open(tarname, encoding="iso8859-1") as tar
+        ):
+            tarinfo = tar.getmember(dirtype)
+            with self.assertWarnsRegex(DeprecationWarning, "Use the filter argument") as cm:
+                tar.extract(tarinfo, path=DIR)
+            # check that the stacklevel of the deprecation warning is correct:
+            self.assertEqual(cm.filename, __file__)
 
     def test_extractall_pathlike_dir(self):
         DIR = os.path.join(TEMPDIR, "extractall")
@@ -996,8 +972,6 @@ class Bz2MiscReadTest(Bz2Test, MiscReadTestBase, unittest.TestCase):
 class LzmaMiscReadTest(LzmaTest, MiscReadTestBase, unittest.TestCase):
     pass
 
-class ZstdMiscReadTest(ZstdTest, MiscReadTestBase, unittest.TestCase):
-    pass
 
 class StreamReadTest(CommonReadTest, unittest.TestCase):
 
@@ -1061,44 +1035,6 @@ class StreamReadTest(CommonReadTest, unittest.TestCase):
         finally:
             tar1.close()
 
-    def test_ignore_zeros_concatenated(self):
-        # gh-159643: reading past the end of the compressed data
-        # must not raise EOFError.
-        with self.open(tmpname, "wb") as fobj:
-            for name in ("a", "b"):
-                with tarfile.open(fileobj=fobj, mode="w") as tar:
-                    tar.addfile(tarfile.TarInfo(name))
-        with tarfile.open(tmpname, self.mode, ignore_zeros=True) as tar:
-            self.assertEqual(tar.getnames(), ["a", "b"])
-
-    def test_no_end_of_archive_blocks(self):
-        # gh-159643
-        tarinfo = tarfile.TarInfo("a")
-        tarinfo.size = 5
-        with self.open(tmpname, "wb") as fobj:
-            fobj.write(tarinfo.tobuf())
-            fobj.write(b"hello".ljust(tarfile.BLOCKSIZE, b"\0"))
-        with tarfile.open(tmpname, self.mode) as tar:
-            self.assertEqual(tar.getnames(), ["a"])
-
-    def test_data_after_end_of_stream(self):
-        # gh-159643: with a small bufsize, the compressed data spans
-        # several reads of the file and the padding that follows it
-        # is not read together with the end of the compressed data.
-        bufsize = tarfile.BLOCKSIZE
-        data = Random(0).randbytes(8 * bufsize)
-        tarinfo = tarfile.TarInfo("a")
-        tarinfo.size = len(data)
-        with self.open(tmpname, "wb") as fobj:
-            with tarfile.open(fileobj=fobj, mode="w") as tar:
-                tar.addfile(tarinfo, io.BytesIO(data))
-        with open(tmpname, "ab") as fobj:
-            fobj.write(bytes(4 * bufsize))
-        with tarfile.open(tmpname, self.mode, bufsize=bufsize,
-                          ignore_zeros=True) as tar:
-            members = [(m.name, tar.extractfile(m).read()) for m in tar]
-        self.assertEqual(members, [("a", data)])
-
 class GzipStreamReadTest(GzipTest, GzipReadTestBase, StreamReadTest):
     pass
 
@@ -1106,9 +1042,6 @@ class Bz2StreamReadTest(Bz2Test, StreamReadTest):
     pass
 
 class LzmaStreamReadTest(LzmaTest, StreamReadTest):
-    pass
-
-class ZstdStreamReadTest(ZstdTest, StreamReadTest):
     pass
 
 class TarStreamModeReadTest(StreamModeTest, unittest.TestCase):
@@ -1125,9 +1058,6 @@ class Bz2StreamModeReadTest(Bz2Test, TarStreamModeReadTest):
     pass
 
 class LzmaStreamModeReadTest(LzmaTest, TarStreamModeReadTest):
-    pass
-
-class ZstdStreamModeReadTest(ZstdTest, TarStreamModeReadTest):
     pass
 
 class DetectReadTest(TarTest, unittest.TestCase):
@@ -1191,40 +1121,6 @@ class Bz2DetectReadTest(Bz2Test, DetectReadTest):
 class LzmaDetectReadTest(LzmaTest, DetectReadTest):
     pass
 
-class ZstdDetectReadTest(ZstdTest, DetectReadTest):
-    pass
-
-
-@support.requires_zstd()
-class ZstdOpenTest(unittest.TestCase):
-    """
-    See: https://github.com/python/cpython/issues/150077
-    """
-    def test_zstopen_closes_fileobj_on_base_exception(self):
-        path = os_helper.TESTFN + ".tar.zst"
-        self.addCleanup(os_helper.unlink, path)
-        with tarfile.open(path, "w:zst"):
-            pass
-
-        opened = []
-        real_ZstdFile = zstd.ZstdFile
-
-        def tracking_ZstdFile(*args, **kwargs):
-            fileobj = real_ZstdFile(*args, **kwargs)
-            opened.append(fileobj)
-            return fileobj
-
-        with (
-            unittest.mock.patch("compression.zstd.ZstdFile", tracking_ZstdFile),
-            unittest.mock.patch.object(
-                tarfile.TarFile, "taropen", side_effect=KeyboardInterrupt),
-            self.assertRaises(KeyboardInterrupt),
-        ):
-            tarfile.TarFile.zstopen(path)
-
-        self.assertEqual(len(opened), 1)
-        self.assertTrue(opened[0].closed)
-
 
 class GzipBrokenHeaderCorrectException(GzipTest, unittest.TestCase):
     """
@@ -1241,72 +1137,6 @@ class GzipBrokenHeaderCorrectException(GzipTest, unittest.TestCase):
         )
         with self.assertRaises(tarfile.ReadError):
             tarfile.open(fileobj=f, mode='r|gz')
-
-
-class FileInFileExceptionWrappingTest(unittest.TestCase):
-    """
-    See: https://github.com/python/cpython/issues/156057
-
-    _FileInFile.read() must wrap whatever exception type its
-    underlying fileobj.read() raises for corrupt compressed data,
-    using the exception class attribute each TarFile.*open()
-    classmethod configures, in tarfile.ReadError -- and must not
-    swallow an exception of an unconfigured type.
-    """
-
-    class _FakeFileobj:
-        def __init__(self, exc):
-            self.exc = exc
-
-        def seek(self, position):
-            pass
-
-        def read(self, size):
-            raise self.exc
-
-    def test_wraps_configured_exception_type(self):
-        class Boom(Exception):
-            pass
-
-        fif = tarfile._FileInFile(
-            self._FakeFileobj(Boom("simulated corrupt compressed data")),
-            offset=0, size=10, name="member", exception=Boom)
-        with self.assertRaises(tarfile.ReadError):
-            fif.read()
-
-    def test_does_not_wrap_unconfigured_exception_type(self):
-        class Boom(Exception):
-            pass
-
-        class Unrelated(Exception):
-            pass
-
-        fif = tarfile._FileInFile(
-            self._FakeFileobj(Unrelated("not the configured exception type")),
-            offset=0, size=10, name="member", exception=Boom)
-        with self.assertRaises(Unrelated):
-            fif.read()
-
-
-@support.requires_gzip()
-class GzipExtractfileWrapsCompressionErrorTest(unittest.TestCase):
-    """
-    See: https://github.com/python/cpython/issues/156057
-
-    Confirms the real gzopen() -> ExFileObject -> _FileInFile wiring:
-    a zlib.error raised while reading a member's compressed data past
-    the header surfaces as tarfile.ReadError, not the raw zlib.error.
-    """
-
-    def test_extractfile_read_wraps_zlib_error(self):
-        with tarfile.open(gzipname, mode='r:gz') as tar:
-            tarinfo = tar.getmember("ustar/regtype")
-            with tar.extractfile(tarinfo) as fobj:
-                with unittest.mock.patch.object(
-                        tar.fileobj, "read",
-                        side_effect=zlib.error("simulated corrupt data")):
-                    with self.assertRaises(tarfile.ReadError):
-                        fobj.read()
 
 
 class MemberReadTest(ReadTest, unittest.TestCase):
@@ -1549,34 +1379,6 @@ class GNUReadTest(LongnameTest, ReadTest, unittest.TestCase):
             self.assertEqual(tar.getnames(), ["sparse", "last"])
             self.assertEqual(tar.extractfile("last").read(), data)
 
-    def test_pax_size_with_gnu_longname(self):
-        # gh-159435: a GNU long-name header between a pax header and its
-        # member must not make the member header get read a second time.
-        long_name = "long-name-" * 12 + "file.txt"
-
-        def header(name, type, size):
-            info = tarfile.TarInfo(name)
-            info.type = type
-            info.size = size
-            return info.tobuf(tarfile.USTAR_FORMAT)
-
-        def padded(data):
-            return data + b"\0" * (-len(data) % tarfile.BLOCKSIZE)
-
-        pax_record = b"9 size=5\n"
-        buf = header("././@PaxHeader", tarfile.XHDTYPE, len(pax_record))
-        buf += padded(pax_record)
-        longname = long_name.encode() + b"\0"
-        buf += header("././@LongLink", tarfile.GNUTYPE_LONGNAME, len(longname))
-        buf += padded(longname)
-        buf += header("member-short", tarfile.REGTYPE, 5) + padded(b"hello")
-        buf += header("next.txt", tarfile.REGTYPE, 3) + padded(b"bye")
-        buf += b"\0" * (tarfile.BLOCKSIZE * 2)
-
-        with tarfile.open(fileobj=io.BytesIO(buf)) as tar:
-            self.assertEqual(tar.getnames(), [long_name, "next.txt"])
-            self.assertEqual(tar.extractfile("next.txt").read(), b"bye")
-
     @staticmethod
     def _fs_supports_holes():
         # Return True if the platform knows the st_blocks stat attribute and
@@ -1598,27 +1400,6 @@ class GNUReadTest(LongnameTest, ReadTest, unittest.TestCase):
             return (s.st_blocks * 512 < s.st_size)
         else:
             return False
-
-    def test_gnulong_dirname_strips_all_trailing_slashes(self):
-        # gh-149980: _proc_gnulong must normalize trailing slashes the same
-        # way _frombuf and _proc_builtin do (rstrip, not removesuffix), so
-        # a GNU long-name directory entry agrees with a short-name one.
-        long_name = "a" * 120 + "///"   # > 100 bytes => GNUTYPE_LONGNAME
-        short_name = "b" * 20 + "///"
-
-        buf = io.BytesIO()
-        with tarfile.open(fileobj=buf, mode="w",
-                          format=tarfile.GNU_FORMAT) as tar:
-            for name in (short_name, long_name):
-                info = tarfile.TarInfo(name=name)
-                info.type = tarfile.DIRTYPE
-                tar.addfile(info)
-
-        buf.seek(0)
-        with tarfile.open(fileobj=buf, mode="r") as tar:
-            names = [m.name for m in tar.getmembers()]
-
-        self.assertEqual(names, ["b" * 20, "a" * 120])
 
 
 class PaxReadTest(LongnameTest, ReadTest, unittest.TestCase):
@@ -1767,29 +1548,6 @@ class WriteTest(WriteTestBase, unittest.TestCase):
 
     prefix = "w:"
 
-    def test_addfile_sets_offsets(self):
-        # gh-150075: addfile() must set offset and offset_data on the
-        # TarInfo stored in the archive so they match a subsequent read.
-        data = b"data"
-
-        with tarfile.open(tmpname, self.mode) as tar:
-            t1 = tarfile.TarInfo("test1.txt")
-            t1.size = len(data)
-            tar.addfile(t1, io.BytesIO(data))
-
-            t2 = tarfile.TarInfo("test2.txt")
-            t2.size = len(data)
-            tar.addfile(t2, io.BytesIO(data))
-
-            write_members = tar.getmembers()
-
-        with tarfile.open(tmpname) as tar:
-            read_members = tar.getmembers()
-
-        for w, r in zip(write_members, read_members):
-            self.assertEqual(w.offset, r.offset)
-            self.assertEqual(w.offset_data, r.offset_data)
-
     def test_100_char_name(self):
         # The name field in a tar header stores strings of at most 100 chars.
         # If a string is shorter than 100 chars it has to be padded with '\0',
@@ -1921,22 +1679,6 @@ class WriteTest(WriteTestBase, unittest.TestCase):
             try:
                 tarinfo = tar.gettarinfo(path)
                 self.assertEqual(tarinfo.size, 0)
-            finally:
-                tar.close()
-        finally:
-            os_helper.unlink(path)
-
-    @os_helper.skip_unless_symlink
-    def test_symlink_target_normalization(self):
-        # Test for gh-151669.
-        path = os.path.join(TEMPDIR, "symlink")
-        target = "subdir/link/target"
-        os.symlink(target.replace("/", os.sep), path)
-        try:
-            tar = tarfile.open(tmpname, self.mode)
-            try:
-                tarinfo = tar.gettarinfo(path)
-                self.assertEqual(tarinfo.linkname, target)
             finally:
                 tar.close()
         finally:
@@ -2093,7 +1835,7 @@ class WriteTest(WriteTestBase, unittest.TestCase):
             try:
                 for t in tar:
                     if t.name != ".":
-                        self.assertStartsWith(t.name, "./")
+                        self.assertTrue(t.name.startswith("./"), t.name)
             finally:
                 tar.close()
 
@@ -2134,8 +1876,6 @@ class Bz2WriteTest(Bz2Test, WriteTest):
 class LzmaWriteTest(LzmaTest, WriteTest):
     pass
 
-class ZstdWriteTest(ZstdTest, WriteTest):
-    pass
 
 class StreamWriteTest(WriteTestBase, unittest.TestCase):
 
@@ -2200,66 +1940,12 @@ class GzipStreamWriteTest(GzipTest, StreamWriteTest):
         payload = pathlib.Path(tmpname).read_text(encoding='latin-1')
         assert os.path.dirname(tmpname) not in payload
 
-    def test_create_with_mtime(self):
-        tarfile.open(tmpname, self.mode, mtime=0).close()
-        with self.open(tmpname, 'r') as fobj:
-            fobj.read()
-            self.assertEqual(fobj.mtime, 0)
-
-    def test_create_with_mtime_out_of_range(self):
-        # gh-133998: an mtime outside the gzip header's 32-bit range is
-        # stored as 0 rather than raising struct.error.
-        self.addCleanup(os_helper.unlink, tmpname)
-        for mtime in (-1, 2**32):
-            with self.subTest(mtime=mtime):
-                tarfile.open(tmpname, self.mode, mtime=mtime).close()
-                with self.open(tmpname, 'r') as fobj:
-                    fobj.read()
-                    self.assertEqual(fobj.mtime, 0)
-
-    def test_create_with_mtime_at_boundary(self):
-        # gh-133998: the largest in-range mtime is preserved, not clamped.
-        mtime = 2**32 - 1
-        tarfile.open(tmpname, self.mode, mtime=mtime).close()
-        with self.open(tmpname, 'r') as fobj:
-            fobj.read()
-            self.assertEqual(fobj.mtime, mtime)
-
-    def test_create_with_out_of_range_clock(self):
-        # gh-133998: an out-of-range system clock (mtime defaulting to
-        # time.time()) is stored as 0 rather than raising struct.error.
-        for clock in (-1, 2**32):
-            with self.subTest(clock=clock):
-                with unittest.mock.patch('time.time', return_value=float(clock)):
-                    tarfile.open(tmpname, self.mode).close()
-                with self.open(tmpname, 'r') as fobj:
-                    fobj.read()
-                    self.assertEqual(fobj.mtime, 0)
-                os_helper.unlink(tmpname)
-
-    def test_create_with_float_mtime(self):
-        # gh-133998: a float mtime is truncated like gzip, not rejected.
-        tarfile.open(tmpname, self.mode, mtime=123456789.9).close()
-        with self.open(tmpname, 'r') as fobj:
-            fobj.read()
-            self.assertEqual(fobj.mtime, 123456789)
-
-    def test_create_without_mtime(self):
-        before = int(time.time())
-        tarfile.open(tmpname, self.mode).close()
-        after = int(time.time())
-        with self.open(tmpname, 'r') as fobj:
-            fobj.read()
-            self.assertTrue(before <= fobj.mtime <= after)
 
 class Bz2StreamWriteTest(Bz2Test, StreamWriteTest):
     decompressor = bz2.BZ2Decompressor if bz2 else None
 
 class LzmaStreamWriteTest(LzmaTest, StreamWriteTest):
     decompressor = lzma.LZMADecompressor if lzma else None
-
-class ZstdStreamWriteTest(ZstdTest, StreamWriteTest):
-    decompressor = zstd.ZstdDecompressor if zstd else None
 
 class _CompressedWriteTest(TarTest):
     # This is not actually a standalone test.
@@ -2557,19 +2243,6 @@ class GzipCreateTest(GzipTest, CreateTest):
         with tarfile.open(tmpname, 'r:gz', compresslevel=1) as tobj:
             pass
 
-    def test_create_with_mtime(self):
-        tarfile.open(tmpname, self.mode, mtime=0).close()
-        with self.open(tmpname, 'rb') as fobj:
-            fobj.read()
-            self.assertEqual(fobj.mtime, 0)
-
-    def test_create_without_mtime(self):
-        before = int(time.time())
-        tarfile.open(tmpname, self.mode).close()
-        after = int(time.time())
-        with self.open(tmpname, 'r') as fobj:
-            fobj.read()
-            self.assertTrue(before <= fobj.mtime <= after)
 
 class Bz2CreateTest(Bz2Test, CreateTest):
 
@@ -2588,14 +2261,6 @@ class LzmaCreateTest(LzmaTest, CreateTest):
         with tarfile.open(tmpname, self.mode, preset=1) as tobj:
             tobj.add(self.file_path)
 
-
-class ZstdCreateTest(ZstdTest, CreateTest):
-
-    # Unlike gz and bz2, zstd uses the level keyword instead of compresslevel.
-    # It does not allow for level to be specified when reading.
-    def test_create_with_level(self):
-        with tarfile.open(tmpname, self.mode, level=1) as tobj:
-            tobj.add(self.file_path)
 
 class CreateWithXModeTest(CreateTest):
 
@@ -2649,43 +2314,6 @@ class HardlinkTest(unittest.TestCase):
 
 
 class PaxWriteTest(GNUWriteTest):
-
-    def test_100_byte_names(self):
-        for field, offset in (("name", 0), ("linkname", 157)):
-            with self.subTest(field=field):
-                name = "a" * 100
-                tarinfo = tarfile.TarInfo("test")
-                if field == "linkname":
-                    tarinfo.type = tarfile.SYMTYPE
-                setattr(tarinfo, field, name)
-                header = tarinfo.tobuf(format=tarfile.PAX_FORMAT)
-                self.assertEqual(len(header), tarfile.BLOCKSIZE)
-                self.assertEqual(header[offset:offset + 100],
-                                 name.encode("ascii"))
-                with tarfile.open(fileobj=io.BytesIO(header)) as tar:
-                    member = tar.next()
-                    self.assertEqual(getattr(member, field), name)
-                    self.assertEqual(member.pax_headers, {})
-
-    def test_owner_names(self):
-        for field, offset in (("uname", 265), ("gname", 297)):
-            for length in (0, 31, 32, 33, 40):
-                with self.subTest(field=field, length=length):
-                    name = "a" * length
-                    tarinfo = tarfile.TarInfo("test")
-                    setattr(tarinfo, field, name)
-                    header = tarinfo.tobuf(format=tarfile.PAX_FORMAT)
-                    # The base header must leave room for a NUL terminator.
-                    base_header = header[-tarfile.BLOCKSIZE:]
-                    self.assertEqual(base_header[offset:offset + 32],
-                                     name[:31].encode().ljust(32, b"\0"))
-                    with tarfile.open(fileobj=io.BytesIO(header)) as tar:
-                        member = tar.next()
-                        self.assertEqual(getattr(member, field), name)
-                        if length > 31:
-                            self.assertEqual(member.pax_headers[field], name)
-                        else:
-                            self.assertNotIn(field, member.pax_headers)
 
     def _test(self, name, link=None):
         # See GNUWriteTest.
@@ -2742,35 +2370,6 @@ class PaxWriteTest(GNUWriteTest):
                         self.fail("unable to convert pax header field")
         finally:
             tar.close()
-
-    def test_pax_global_header_empty_archive(self):
-        # An archive that contains only a global header and no regular
-        # members should be opened successfully (gh-149578).
-        pax_headers = {"foo": "bar"}
-
-        # Create a PAX archive with global headers but no file entries.
-        with tarfile.open(tmpname, "w", format=tarfile.PAX_FORMAT,
-                          pax_headers=pax_headers):
-            pass
-
-        # Reading the archive should work and preserve global headers.
-        with tarfile.open(tmpname) as tar:
-            self.assertEqual(tar.pax_headers, pax_headers)
-            self.assertEqual(tar.getmembers(), [])
-
-        # Appending to the archive should work.
-        with tarfile.open(tmpname, "a") as tar:
-            self.assertEqual(tar.pax_headers, pax_headers)
-            self.assertEqual(tar.getmembers(), [])
-            tar.addfile(tarfile.TarInfo("test"))
-
-        # Verify the appended member is present and global headers
-        # are preserved.
-        with tarfile.open(tmpname) as tar:
-            self.assertEqual(tar.pax_headers, pax_headers)
-            members = tar.getmembers()
-            self.assertEqual(len(members), 1)
-            self.assertEqual(members[0].name, "test")
 
     def test_pax_extended_header(self):
         # The fields from the pax header have priority over the
@@ -3144,8 +2743,6 @@ class Bz2AppendTest(Bz2Test, AppendTestBase, unittest.TestCase):
 class LzmaAppendTest(LzmaTest, AppendTestBase, unittest.TestCase):
     pass
 
-class ZstdAppendTest(ZstdTest, AppendTestBase, unittest.TestCase):
-    pass
 
 class LimitsTest(unittest.TestCase):
 
@@ -3298,7 +2895,7 @@ class MiscTest(unittest.TestCase):
             str(excinfo.exception),
         )
 
-    @os_helper.skip_unless_symlink
+    @unittest.skipUnless(os_helper.can_symlink(), 'requires symlink support')
     @unittest.skipUnless(hasattr(os, 'chmod'), "missing os.chmod")
     @unittest.mock.patch('os.chmod')
     def test_deferred_directory_attributes_update(self, mock_chmod):
@@ -3483,7 +3080,7 @@ class CommandLineTest(unittest.TestCase):
                  support.findfile('tokenize_tests-no-coding-cookie-'
                                   'and-utf8-bom-sig-only.txt',
                                   subdir='tokenizedata')]
-        for filetype in (GzipTest, Bz2Test, LzmaTest, ZstdTest):
+        for filetype in (GzipTest, Bz2Test, LzmaTest):
             if not filetype.open:
                 continue
             try:
@@ -3680,13 +3277,9 @@ def root_is_uid_gid_0():
         import pwd, grp
     except ImportError:
         return False
-    try:
-        if pwd.getpwuid(0).pw_name != 'root':
-            return False
-    except KeyError:
-        # On Cygwin, there is no root user (uid 0)
+    if pwd.getpwuid(0)[0] != 'root':
         return False
-    if grp.getgrgid(0).gr_name != 'root':
+    if grp.getgrgid(0)[0] != 'root':
         return False
     return True
 
@@ -3854,16 +3447,6 @@ class ReplaceTests(ReadTest, unittest.TestCase):
         with self.assertRaises(TypeError):
             member.replace(offset=123456789)
 
-    def test_copy_replace(self):
-        member = self.tar.getmember('ustar/regtype')
-        replaced = copy.replace(member, name='misc/other', mode=0o644)
-        self.assertEqual(replaced.name, 'misc/other')
-        self.assertEqual(replaced.mode, 0o644)
-        self.assertEqual(replaced.size, member.size)
-        self.assertEqual(member.name, 'ustar/regtype')
-        with self.assertRaises(TypeError):
-            copy.replace(member, offset=123456789)
-
 
 class NoneInfoExtractTests(ReadTest):
     # These mainly check that all kinds of members are extracted successfully
@@ -3897,7 +3480,7 @@ class NoneInfoExtractTests(ReadTest):
         got_paths = set(
             p.relative_to(directory)
             for p in pathlib.Path(directory).glob('**/*'))
-        if self.extraction_filter in (None, 'data'):
+        if self.extraction_filter == 'data':
             # The 'data' filter is expected to reject special files
             for path in 'ustar/fifotype', 'ustar/blktype', 'ustar/chrtype':
                 got_paths.discard(pathlib.Path(path))
@@ -4365,47 +3948,6 @@ class TestExtractionFilters(unittest.TestCase):
                         tarfile.AbsolutePathError,
                         """['"].*escaped.evil['"] has an absolute path""")
 
-    def test_drive_relative(self):
-        # Test names and link targets that have a drive but no root.
-        # They are not absolute, but os.path.join() does not put them
-        # below a destination that has no drive or another drive.
-        # Windows path handling is used on all platforms.
-        dest = r'C:\outerdir\dest'
-        with support.swap_attr(os, 'path', ntpath):
-            for name in 'C:escaped.evil', 'x/../C:escaped.evil':
-                for filter in tarfile.tar_filter, tarfile.data_filter:
-                    with self.subTest(name=name, filter=filter.__name__):
-                        with self.assertRaises(tarfile.AbsolutePathError):
-                            filter(tarfile.TarInfo(name), dest)
-
-            for linkname in 'C:escaped.evil', 'x/../C:escaped.evil', './C:evil':
-                for type in tarfile.SYMTYPE, tarfile.LNKTYPE:
-                    with self.subTest(linkname=linkname, type=type):
-                        member = tarfile.TarInfo('link')
-                        member.type = type
-                        member.linkname = linkname
-                        with self.assertRaises(tarfile.AbsoluteLinkError):
-                            tarfile.data_filter(member, dest)
-
-            member = tarfile.TarInfo('x/../C/benign.txt')
-            member = tarfile.data_filter(member, dest)
-            self.assertEqual(member.name, r'C\benign.txt')
-
-    @unittest.skipUnless(os.name == 'nt', 'requires Windows drives')
-    def test_drive_relative_to_cwd(self):
-        # Test a name like 'C:escaped.evil' with a destination that has no
-        # drive. The file must not be created in the current directory.
-        with os_helper.temp_cwd() as cwd:
-            drive = os.path.splitdrive(cwd)[0]
-            with ArchiveMaker() as arc:
-                arc.add(f'{drive}escaped.evil')
-
-            for filter in 'tar', 'data':
-                with self.subTest(filter=filter), arc.open() as tar:
-                    with self.assertRaises(tarfile.AbsolutePathError):
-                        tar.extractall('dest', filter=filter)
-                    self.assertFalse(os.path.lexists('escaped.evil'))
-
     def test_parent_dir_out_and_back(self):
         # Test a member that leaves the destination and comes back.
         # The containment check looks at the resolved path, which stays
@@ -4432,21 +3974,23 @@ class TestExtractionFilters(unittest.TestCase):
             arc.add('current', symlink_to='.')
 
             # effectively points to ./../
-            if self.dotdot_resolves_early and os_helper.can_symlink():
-                arc.add('parent', symlink_to='current/../..')
-            else:
-                arc.add('parent', symlink_to='current/..')
+            arc.add('parent', symlink_to='current/..')
 
             arc.add('parent/evil')
 
         if os_helper.can_symlink():
             with self.check_context(arc.open(), 'fully_trusted'):
-                self.expect_file('current', symlink_to='.')
-                if self.dotdot_resolves_early:
-                    self.expect_file('parent', symlink_to='current/../..')
+                if self.raised_exception is not None:
+                    # Windows will refuse to create a file that's a symlink to itself
+                    # (and tarfile doesn't swallow that exception)
+                    self.expect_exception(FileExistsError)
+                    # The other cases will fail with this error too.
+                    # Skip the rest of this test.
+                    return
                 else:
+                    self.expect_file('current', symlink_to='.')
                     self.expect_file('parent', symlink_to='current/..')
-                self.expect_file('../evil')
+                    self.expect_file('../evil')
 
             with self.check_context(arc.open(), 'tar'):
                 self.expect_exception(
@@ -4529,9 +4073,6 @@ class TestExtractionFilters(unittest.TestCase):
                                  check_flag=False)):
             if sys.platform == 'win32':
                 self.expect_exception((FileNotFoundError, FileExistsError))
-            elif sys.platform == 'cygwin':
-                exc = self.expect_exception(OSError)
-                self.assertEqual(exc.errno, errno.ELOOP)
             elif self.raised_exception:
                 # Cannot symlink/hardlink: tarfile falls back to getmember()
                 self.expect_exception(KeyError)
@@ -4553,8 +4094,7 @@ class TestExtractionFilters(unittest.TestCase):
                         # 206: ERROR_FILENAME_EXCED_RANGE
                         self.assertIn(exc.winerror, (3, 5, 206))
                     else:
-                        self.assertIn(exc.errno,
-                                      (errno.ENAMETOOLONG, errno.ELOOP))
+                        self.assertEqual(exc.errno, errno.ENAMETOOLONG)
 
     @symlink_test
     def test_parent_symlink2(self):
@@ -4615,62 +4155,6 @@ class TestExtractionFilters(unittest.TestCase):
                 self.expect_file('parent/evil')
 
     @symlink_test
-    def test_parent_symlink3(self):
-        # Test a dangling symlink reached through a symlink to a directory
-
-        with ArchiveMaker() as arc:
-
-            # `current` links to `.` which is both the destination directory
-            # and `current` itself
-            arc.add('current', symlink_to='.')
-
-            # `current/link` is also available as `./link`, and points
-            # to a file outside the destination which does not exist yet
-            arc.add('current/link', symlink_to='../evil')
-
-            # Writing through the link creates `../evil`
-            arc.add('current/link', content='evil')
-
-        with self.check_context(arc.open(), 'fully_trusted'):
-            if os_helper.can_symlink():
-                self.expect_file('current', symlink_to='.')
-                self.expect_file('link', symlink_to='../evil')
-                self.expect_file('../evil', content='evil')
-            else:
-                self.expect_file('current/link', content='evil')
-
-        with self.check_context(arc.open(), 'tar'):
-            if os_helper.can_symlink():
-                # Fail when extracting a file outside destination
-                self.expect_exception(
-                        tarfile.OutsideDestinationError,
-                        "'current/link' would be extracted to "
-                        + """['"].*evil['"], which is outside """
-                        + "the destination")
-            else:
-                self.expect_file('current/link', content='evil')
-
-        with self.check_context(arc.open(), 'data'):
-            if os_helper.can_symlink():
-                if self.dotdot_resolves_early:
-                    # 'current/../evil' normalises to 'evil', so the link is
-                    # created; fail when extracting a file through it
-                    self.expect_exception(
-                            tarfile.OutsideDestinationError,
-                            "'current/link' would be extracted to "
-                            + """['"].*evil['"], which is outside """
-                            + "the destination")
-                else:
-                    # Fail as soon as we have a symlink outside the destination
-                    self.expect_exception(
-                            tarfile.LinkOutsideDestinationError,
-                            "'current/link' would link to "
-                            + """['"].*evil['"], which is outside """
-                            + "the destination")
-            else:
-                self.expect_file('current/link', content='evil')
-
-    @symlink_test
     def test_absolute_symlink(self):
         # Test symlink to an absolute path
         # Inspired by 'dirsymlink' in jwilk/traversal-archives
@@ -4699,21 +4183,6 @@ class TestExtractionFilters(unittest.TestCase):
             self.expect_exception(
                 tarfile.AbsoluteLinkError,
                 "'parent' is a link to an absolute path")
-
-    @symlink_test
-    @os_helper.skip_unless_symlink
-    def test_symlink_target_seperator_rewrite_on_windows(self):
-        with ArchiveMaker() as arc:
-            arc.add('link', symlink_to="relative/test/path")
-
-        with self.check_context(arc.open(), 'fully_trusted'):
-            self.expect_file('link', type=tarfile.SYMTYPE)
-            link_path = os.path.normpath(self.destdir / "link")
-            link_target = os.readlink(link_path)
-            if os.name == "nt":
-                self.assertEqual(link_target, "relative\\test\\path")
-            else:
-                self.assertEqual(link_target, "relative/test/path")
 
     def test_absolute_hardlink(self):
         # Test hardlink to an absolute path
@@ -4990,33 +4459,6 @@ class TestExtractionFilters(unittest.TestCase):
                 else:
                     self.expect_file("a/b/s", symlink_to=os.path.join('..', 'escape'))
                     self.expect_file("s", symlink_to=os.path.join('..', 'escape'))
-
-    @symlink_test
-    def test_sneaky_hardlink_fallback_attrs(self):
-        # Test that when a hardlink is extracted as a copy of a symlink
-        # member, the hardlink's attributes are not applied to the file
-        # the symlink points to.
-        with ArchiveMaker() as arc:
-            arc.add("a/s", symlink_to=os.path.join("..", "flag"))
-            arc.add("s", hardlink_to=os.path.join("a", "s"),
-                    mode='-rwxr-xr-x', mtime=86400, uid=1337, gid=1337)
-
-        for filter in 'tar', 'fully_trusted':
-            with (
-                self.subTest(filter),
-                unittest.mock.patch("os.chown", create=True) as mock_chown,
-                self.check_context(arc.open(), filter) as cc,
-            ):
-                if not os_helper.can_symlink():
-                    self.expect_file("a/")
-                else:
-                    self.expect_file("a/s", symlink_to=os.path.join('..', 'flag'))
-                    self.expect_file("s", symlink_to=os.path.join('..', 'flag'))
-                st = (cc.outerdir / 'flag').stat()
-                self.assertNotEqual(st.st_mtime, 86400)
-                if sys.platform != "win32":
-                    self.assertNotEqual(st.st_mode & 0o777, 0o755)
-                mock_chown.assert_not_called()
 
     @symlink_test
     @os_helper.skip_unless_hardlink
@@ -5390,15 +4832,24 @@ class TestExtractionFilters(unittest.TestCase):
                            errorlevel=1)
             self.assertEqual(tar.getnames(), ['\ud800'])
             with self.assertRaises(UnicodeEncodeError):
-                tar.extractall()
+                tar.extractall(filter=tarfile.tar_filter)
             self.assertEqual(os.listdir(), [])
 
             tar = arc.open(encoding='utf-8', errors='surrogatepass',
                            errorlevel=0, debug=1)
             with support.captured_stderr() as stderr:
-                tar.extractall()
+                tar.extractall(filter=tarfile.tar_filter)
             self.assertEqual(os.listdir(), [])
             self.assertIn('tarfile: UnicodeEncodeError ', stderr.getvalue())
+
+    def test_default_filter_warns(self):
+        """Ensure the default filter warns"""
+        with ArchiveMaker() as arc:
+            arc.add('foo')
+        with warnings_helper.check_warnings(
+                ('Python 3.14', DeprecationWarning)):
+            with self.check_context(arc.open(), None):
+                self.expect_file('foo')
 
     def test_change_default_filter_on_instance(self):
         tar = tarfile.TarFile(tarname, 'r')
@@ -5769,14 +5220,6 @@ class OffsetValidationTests(unittest.TestCase):
             self.assertEqual(members[0].offset, expected_offset)
 
 
-class TestModule(unittest.TestCase):
-    def test_deprecated_module_attributes(self):
-        support.check_deprecated_module_attributes(
-            self, tarfile, "version", "__author__", "__credits__",
-            remove=(3, 20),
-        )
-
-
 def setUpModule():
     os_helper.unlink(TEMPDIR)
     os.makedirs(TEMPDIR)
@@ -5787,7 +5230,7 @@ def setUpModule():
         data = fobj.read()
 
     # Create compressed tarfiles.
-    for c in GzipTest, Bz2Test, LzmaTest, ZstdTest:
+    for c in GzipTest, Bz2Test, LzmaTest:
         if c.open:
             os_helper.unlink(c.tarname)
             testtarnames.append(c.tarname)

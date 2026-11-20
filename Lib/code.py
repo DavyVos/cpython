@@ -7,11 +7,12 @@
 
 import builtins
 import sys
+import traceback
 from codeop import CommandCompiler, compile_command
-lazy import traceback
 
 __all__ = ["InteractiveInterpreter", "InteractiveConsole", "interact",
            "compile_command"]
+
 
 class InteractiveInterpreter:
     """Base class for InteractiveConsole.
@@ -125,7 +126,7 @@ class InteractiveInterpreter:
         """
         try:
             typ, value, tb = sys.exc_info()
-            self._showtraceback(typ, value, tb.tb_next, "")
+            self._showtraceback(typ, value, tb.tb_next, '')
         finally:
             typ = value = tb = None
 
@@ -139,7 +140,7 @@ class InteractiveInterpreter:
                 and not value.text and value.lineno is not None
                 and len(lines) >= value.lineno):
             value.text = lines[value.lineno - 1]
-        sys.last_exc = sys.last_value = value
+        sys.last_exc = sys.last_value = value = value.with_traceback(tb)
         if sys.excepthook is sys.__excepthook__:
             self._excepthook(typ, value, tb)
         else:
@@ -219,17 +220,12 @@ class InteractiveConsole(InteractiveInterpreter):
         """
         try:
             sys.ps1
-            delete_ps1_after = False
         except AttributeError:
             sys.ps1 = ">>> "
-            delete_ps1_after = True
         try:
             sys.ps2
-            delete_ps2_after = False
         except AttributeError:
             sys.ps2 = "... "
-            delete_ps2_after = True
-
         cprt = 'Type "help", "copyright", "credits" or "license" for more information.'
         if banner is None:
             self.write("Python %s on %s\n%s\n(%s)\n" %
@@ -291,12 +287,6 @@ class InteractiveConsole(InteractiveInterpreter):
 
             if _quit is not None:
                 builtins.quit = _quit
-
-            if delete_ps1_after:
-                del sys.ps1
-
-            if delete_ps2_after:
-                del sys.ps2
 
             if exitmsg is None:
                 self.write('now exiting %s...\n' % self.__class__.__name__)
@@ -376,7 +366,7 @@ def interact(banner=None, readfunc=None, local=None, exitmsg=None, local_exit=Fa
         console.raw_input = readfunc
     else:
         try:
-            import readline  # noqa: F401
+            import readline
         except ImportError:
             pass
     console.interact(banner, exitmsg)
@@ -387,7 +377,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-q', action='store_true',
-                       help="don't print version and copyright messages")
+                        help="don't print version and copyright messages")
     args = parser.parse_args()
     if args.q or sys.flags.quiet:
         banner = ''

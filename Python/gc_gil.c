@@ -1,5 +1,5 @@
 #include "Python.h"
-#include "pycore_freelist.h"   // _PyObject_ClearFreeLists()
+#include "pycore_pystate.h"   // _Py_ClearFreeLists()
 
 #ifndef Py_GIL_DISABLED
 

@@ -282,30 +282,7 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
         # path object (see Issue #27493), but self.baseFilename will be a string
         filename = self.baseFilename
         if os.path.exists(filename):
-            # Use the minimum of file creation and modification time as
-            # the base of the rollover calculation
-            creation_time = modification_time = None
-            if hasattr(os, 'statx'):
-                statx_result = os.statx(filename,
-                        os.STATX_BTIME|os.STATX_CTIME|os.STATX_MTIME)
-                # Use stx_btime whenever it is available or use stx_ctime
-                # instead otherwise
-                creation_time = statx_result.stx_btime
-                if creation_time is None:
-                    creation_time = statx_result.stx_ctime
-                modification_time = statx_result.stx_mtime
-            if creation_time is None or modification_time is None:
-                stat_result = os.stat(filename)
-                # Use st_birthtime whenever it is available or use st_ctime
-                # instead otherwise
-                if creation_time is None:
-                    try:
-                        creation_time = stat_result.st_birthtime
-                    except AttributeError:
-                        creation_time = stat_result.st_ctime
-                if modification_time is None:
-                    modification_time = stat_result.st_mtime
-            t = int(min(creation_time, modification_time))
+            t = int(os.stat(filename).st_mtime)
         else:
             t = int(time.time())
         self.rolloverAt = self.computeRollover(t)
@@ -459,20 +436,16 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
             timeTuple = time.gmtime(t)
         else:
             timeTuple = time.localtime(t)
-            # DST affects calendar-based intervals, not fixed-duration ones.
-            if self.when == 'MIDNIGHT' or self.when.startswith('W'):
-                # A record can arrive well after the scheduled rollover.
-                dstAtRollover = time.localtime(self.rolloverAt)[-1]
-                dstThen = timeTuple[-1]
-                if dstAtRollover != dstThen:
-                    if dstAtRollover:
-                        addend = 3600
-                    else:
-                        addend = -3600
-                    timeTuple = time.localtime(t + addend)
+            dstNow = time.localtime(currentTime)[-1]
+            dstThen = timeTuple[-1]
+            if dstNow != dstThen:
+                if dstNow:
+                    addend = 3600
+                else:
+                    addend = -3600
+                timeTuple = time.localtime(t + addend)
         dfn = self.rotation_filename(self.baseFilename + "." +
                                      time.strftime(self.suffix, timeTuple))
-        self.rolloverAt = self.computeRollover(currentTime)
         if os.path.exists(dfn):
             # Already rolled over.
             return
@@ -486,6 +459,7 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
                 os.remove(s)
         if not self.delay:
             self.stream = self._open()
+        self.rolloverAt = self.computeRollover(currentTime)
 
 class WatchedFileHandler(logging.FileHandler):
     """
@@ -890,13 +864,12 @@ class SysLogHandler(logging.Handler):
     }
 
     def __init__(self, address=('localhost', SYSLOG_UDP_PORT),
-                 facility=LOG_USER, socktype=None, timeout=None):
+                 facility=LOG_USER, socktype=None):
         """
         Initialize a handler.
 
-        If address is specified as a string or bytes, a UNIX socket is used.
-        To log to a local syslogd, "SysLogHandler(address="/dev/log")" can be
-        used.
+        If address is specified as a string, a UNIX socket is used. To log to a
+        local syslogd, "SysLogHandler(address="/dev/log")" can be used.
         If facility is not specified, LOG_USER is used. If socktype is
         specified as socket.SOCK_DGRAM or socket.SOCK_STREAM, that specific
         socket type will be used. For Unix sockets, you can also specify a
@@ -908,7 +881,6 @@ class SysLogHandler(logging.Handler):
         self.address = address
         self.facility = facility
         self.socktype = socktype
-        self.timeout = timeout
         self.socket = None
         # The address is resolved again when emitting an event.
         try:
@@ -951,7 +923,7 @@ class SysLogHandler(logging.Handler):
         address = self.address
         socktype = self.socktype
 
-        if not isinstance(address, (list, tuple)):
+        if isinstance(address, str):
             self.unixsocket = True
             # Syslog server may be unavailable during handler initialisation.
             # C's openlog() function also ignores connection errors.
@@ -974,8 +946,6 @@ class SysLogHandler(logging.Handler):
                 err = sock = None
                 try:
                     sock = socket.socket(af, socktype, proto)
-                    if self.timeout:
-                        sock.settimeout(self.timeout)
                     if socktype == socket.SOCK_STREAM:
                         sock.connect(sa)
                     break
@@ -1165,7 +1135,7 @@ class NTEventLogHandler(logging.Handler):
     """
     A handler class which sends events to the NT Event Log. Adds a
     registry entry for the specified application name. If no dllname is
-    provided and pywin32 installed, win32service.pyd (which contains some basic message
+    provided, win32service.pyd (which contains some basic message
     placeholders) is used. Note that use of these placeholders will make
     your event logs big, as the entire message source is held in the log.
     If you want slimmer logs, you have to pass in the name of your own DLL
@@ -1173,46 +1143,38 @@ class NTEventLogHandler(logging.Handler):
     """
     def __init__(self, appname, dllname=None, logtype="Application"):
         logging.Handler.__init__(self)
-        import _winapi
-        self._winapi = _winapi
-        self.appname = appname
-        if not dllname:
-            # backward compatibility
-            try:
-                import win32evtlogutil
-                dllname = os.path.split(win32evtlogutil.__file__)
+        try:
+            import win32evtlogutil, win32evtlog
+            self.appname = appname
+            self._welu = win32evtlogutil
+            if not dllname:
+                dllname = os.path.split(self._welu.__file__)
                 dllname = os.path.split(dllname[0])
                 dllname = os.path.join(dllname[0], r'win32service.pyd')
-            except ImportError:
-                pass
-        self.dllname = dllname
-        self.logtype = logtype
-        # Administrative privileges are required to add a source to the registry.
-        # This may not be available for a user that just wants to add to an
-        # existing source - handle this specific case.
-        try:
-            self._add_source_to_registry(appname, dllname, logtype)
-        except PermissionError:
-            pass
-        self.deftype = _winapi.EVENTLOG_ERROR_TYPE
-        self.typemap = {
-            logging.DEBUG: _winapi.EVENTLOG_INFORMATION_TYPE,
-            logging.INFO: _winapi.EVENTLOG_INFORMATION_TYPE,
-            logging.WARNING: _winapi.EVENTLOG_WARNING_TYPE,
-            logging.ERROR: _winapi.EVENTLOG_ERROR_TYPE,
-            logging.CRITICAL: _winapi.EVENTLOG_ERROR_TYPE,
-        }
-
-    @staticmethod
-    def _add_source_to_registry(appname, dllname, logtype):
-        import winreg
-
-        key_path = f"SYSTEM\\CurrentControlSet\\Services\\EventLog\\{logtype}\\{appname}"
-
-        with winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, key_path) as key:
-            if dllname:
-                winreg.SetValueEx(key, "EventMessageFile", 0, winreg.REG_EXPAND_SZ, dllname)
-            winreg.SetValueEx(key, "TypesSupported", 0, winreg.REG_DWORD, 7)  # All types are supported
+            self.dllname = dllname
+            self.logtype = logtype
+            # Administrative privileges are required to add a source to the registry.
+            # This may not be available for a user that just wants to add to an
+            # existing source - handle this specific case.
+            try:
+                self._welu.AddSourceToRegistry(appname, dllname, logtype)
+            except Exception as e:
+                # This will probably be a pywintypes.error. Only raise if it's not
+                # an "access denied" error, else let it pass
+                if getattr(e, 'winerror', None) != 5:  # not access denied
+                    raise
+            self.deftype = win32evtlog.EVENTLOG_ERROR_TYPE
+            self.typemap = {
+                logging.DEBUG   : win32evtlog.EVENTLOG_INFORMATION_TYPE,
+                logging.INFO    : win32evtlog.EVENTLOG_INFORMATION_TYPE,
+                logging.WARNING : win32evtlog.EVENTLOG_WARNING_TYPE,
+                logging.ERROR   : win32evtlog.EVENTLOG_ERROR_TYPE,
+                logging.CRITICAL: win32evtlog.EVENTLOG_ERROR_TYPE,
+         }
+        except ImportError:
+            print("The Python Win32 extensions for NT (service, event "\
+                        "logging) appear not to be available.")
+            self._welu = None
 
     def getMessageID(self, record):
         """
@@ -1253,20 +1215,15 @@ class NTEventLogHandler(logging.Handler):
         Determine the message ID, event category and event type. Then
         log the message in the NT event log.
         """
-        try:
-            id = self.getMessageID(record)
-            cat = self.getEventCategory(record)
-            type = self.getEventType(record)
-            msg = self.format(record)
-
-            # Get a handle to the event log
-            handle = self._winapi.RegisterEventSource(None, self.appname)
+        if self._welu:
             try:
-                self._winapi.ReportEvent(handle, type, cat, id, msg)
-            finally:
-                self._winapi.DeregisterEventSource(handle)
-        except Exception:
-            self.handleError(record)
+                id = self.getMessageID(record)
+                cat = self.getEventCategory(record)
+                type = self.getEventType(record)
+                msg = self.format(record)
+                self._welu.ReportEvent(self.appname, id, cat, type, [msg])
+            except Exception:
+                self.handleError(record)
 
     def close(self):
         """
@@ -1584,19 +1541,6 @@ class QueueListener(object):
         self.handlers = handlers
         self._thread = None
         self.respect_handler_level = respect_handler_level
-
-    def __enter__(self):
-        """
-        For use as a context manager. Starts the listener.
-        """
-        self.start()
-        return self
-
-    def __exit__(self, *args):
-        """
-        For use as a context manager. Stops the listener.
-        """
-        self.stop()
 
     def dequeue(self, block):
         """

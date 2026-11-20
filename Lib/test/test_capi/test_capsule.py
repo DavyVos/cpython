@@ -93,11 +93,12 @@ class CapsuleImportTests(unittest.TestCase):
         self.check_import(f'{name}.capsule')
 
     def test_submodule(self):
-        # A submodule not imported by its package is imported if needed.
-        self.assertNotIn('capsule_pkg.sub', sys.modules)
-        self.check_import('capsule_pkg.sub.capsule')
-        self.assertIn('capsule_pkg.sub', sys.modules)
-        # It is also found if already imported.
+        # Only the first component is imported; a submodule not imported
+        # by its package is not found.
+        self.assertRaises(AttributeError,
+                          _testlimitedcapi.PyCapsule_Import, 'capsule_pkg.sub.capsule')
+        # It is found after explicit import.
+        importlib.import_module('capsule_pkg.sub')
         self.check_import('capsule_pkg.sub.capsule')
         # A submodule imported by its package is found.
         self.check_import('capsule_autopkg.sub.capsule')
@@ -105,34 +106,36 @@ class CapsuleImportTests(unittest.TestCase):
     def test_invalid_name(self):
         pycapsule_import = _testlimitedcapi.PyCapsule_Import
         # Non-existing module.
-        self.assertRaisesRegex(ModuleNotFoundError,
-            "No module named 'capsule_nonexistent'",
+        self.assertRaisesRegex(ImportError,
+            'PyCapsule_Import could not import module "capsule_nonexistent"',
             pycapsule_import, 'capsule_nonexistent.capsule')
         # Non-UTF-8 module name.
-        self.assertRaises(UnicodeDecodeError,
-                          pycapsule_import, b'\xff\xfe.capsule')
+        self.assertRaisesRegex(ImportError,
+            'PyCapsule_Import could not import module',
+            pycapsule_import, b'\xff\xfe.capsule')
         # Empty module name.
-        self.assertRaisesRegex(ValueError, 'Empty module name',
-                               pycapsule_import, '.capsule_mod.capsule')
+        self.assertRaisesRegex(ImportError,
+            'PyCapsule_Import could not import module ""',
+            pycapsule_import, '.capsule_mod.capsule')
         # Empty name.
-        self.assertRaisesRegex(AttributeError, 'is not valid',
-                               pycapsule_import, '')
+        self.assertRaisesRegex(ImportError,
+            'PyCapsule_Import could not import module ""',
+            pycapsule_import, '')
         # Only a dot.
-        self.assertRaisesRegex(ValueError, 'Empty module name',
-                               pycapsule_import, '.')
+        self.assertRaisesRegex(ImportError,
+            'PyCapsule_Import could not import module ""',
+            pycapsule_import, '.')
         # Non-existing attribute.
-        self.assertRaisesRegex(AttributeError, 'is not valid',
-                               pycapsule_import, 'capsule_mod.nonexistent')
+        self.assertRaises(AttributeError,
+                          pycapsule_import, 'capsule_mod.nonexistent')
         # Empty attribute name.
-        self.assertRaisesRegex(AttributeError, 'is not valid',
-                               pycapsule_import, 'capsule_mod.')
+        self.assertRaises(AttributeError, pycapsule_import, 'capsule_mod.')
         # Consecutive dots.
-        self.assertRaisesRegex(ModuleNotFoundError,
-            "No module named 'capsule_mod.'",
-            pycapsule_import, 'capsule_mod..capsule')
+        self.assertRaises(AttributeError,
+                          pycapsule_import, 'capsule_mod..capsule')
         # Attribute of an object which is not a module.
-        self.assertRaisesRegex(AttributeError, 'is not valid',
-                               pycapsule_import, 'capsule_mod.not_capsule.capsule')
+        self.assertRaises(AttributeError,
+                          pycapsule_import, 'capsule_mod.not_capsule.capsule')
         # No attribute name.
         self.assertRaisesRegex(AttributeError, 'is not valid',
                                pycapsule_import, 'capsule_mod')
@@ -159,9 +162,13 @@ class CapsuleImportTests(unittest.TestCase):
                                pycapsule_import, 'capsule_mod.nullname')
 
     def test_error_from_import(self):
-        # The exception raised during importing the module is propagated.
-        self.assertRaises(ZeroDivisionError,
-                          _testlimitedcapi.PyCapsule_Import, 'capsule_broken.capsule')
+        # The exception raised during importing the module is replaced
+        # with generic ImportError.
+        with self.assertRaises(ImportError) as cm:
+            _testlimitedcapi.PyCapsule_Import('capsule_broken.capsule')
+        self.assertEqual(str(cm.exception),
+                         'PyCapsule_Import could not import '
+                         'module "capsule_broken"')
 
     def test_error_from_attribute_lookup(self):
         self.assertRaises(FloatingPointError,

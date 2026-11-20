@@ -1,6 +1,7 @@
 from unittest import mock
 from test import support
-from test.support import force_not_colorized, socket_helper, control_characters_c0
+from test.support import socket_helper, control_characters_c0
+from test.support.testcase import ExtraAssertions
 from test.test_httpservers import NoLogRequestHandler
 from unittest import TestCase
 from wsgiref.util import setup_testing_defaults
@@ -122,14 +123,14 @@ def compare_generic_iter(make_it, match):
         raise AssertionError("Too many items from .__next__()", it)
 
 
-class IntegrationTests(TestCase):
+class IntegrationTests(TestCase, ExtraAssertions):
 
     def check_hello(self, out, has_length=True):
         pyver = (python_implementation() + "/" +
                 sys.version.split()[0])
         self.assertEqual(out,
             ("HTTP/1.0 200 OK\r\n"
-            "Server: WSGIServer " + pyver + "\r\n"
+            "Server: WSGIServer/0.2 " + pyver +"\r\n"
             "Content-Type: text/plain\r\n"
             "Date: Mon, 05 Jun 2006 18:49:54 GMT\r\n" +
             (has_length and  "Content-Length: 13\r\n" or "") +
@@ -169,9 +170,9 @@ class IntegrationTests(TestCase):
             start_response("200 OK", ('Content-Type','text/plain'))
             return ["Hello, world!"]
         out, err = run_amock(validator(bad_app))
-        self.assertEndsWith(out,
+        self.assertTrue(out.endswith(
             b"A server error occurred.  Please contact the administrator."
-        )
+        ))
         self.assertEqual(
             err.splitlines()[-2],
             "AssertionError: Headers (('Content-Type', 'text/plain')) must"
@@ -194,9 +195,9 @@ class IntegrationTests(TestCase):
         for status, exc_message in tests:
             with self.subTest(status=status):
                 out, err = run_amock(create_bad_app(status))
-                self.assertEndsWith(out,
+                self.assertTrue(out.endswith(
                     b"A server error occurred.  Please contact the administrator."
-                )
+                ))
                 self.assertEqual(err.splitlines()[-2], exc_message)
 
     def test_wsgi_input(self):
@@ -205,9 +206,9 @@ class IntegrationTests(TestCase):
             s("200 OK", [("Content-Type", "text/plain; charset=utf-8")])
             return [b"data"]
         out, err = run_amock(validator(bad_app))
-        self.assertEndsWith(out,
+        self.assertTrue(out.endswith(
             b"A server error occurred.  Please contact the administrator."
-        )
+        ))
         self.assertEqual(
             err.splitlines()[-2], "AssertionError"
         )
@@ -301,7 +302,6 @@ class IntegrationTests(TestCase):
         self.assertEqual(err.splitlines()[-2],
                          'AssertionError: errors.close() must not be called')
 
-    @force_not_colorized
     def test_bytes_validation(self):
         def app(e, s):
             s("200 OK", [
@@ -310,13 +310,13 @@ class IntegrationTests(TestCase):
                 ])
             return [b"data"]
         out, err = run_amock(validator(app))
-        self.assertEndsWith(err, '"GET / HTTP/1.0" 200 4\n')
+        self.assertTrue(err.endswith('"GET / HTTP/1.0" 200 4\n'))
         ver = sys.version.split()[0].encode('ascii')
         py  = python_implementation().encode('ascii')
         pyver = py + b"/" + ver
         self.assertEqual(
                 b"HTTP/1.0 200 OK\r\n"
-                b"Server: WSGIServer " + pyver + b"\r\n"
+                b"Server: WSGIServer/0.2 "+ pyver + b"\r\n"
                 b"Content-Type: text/plain; charset=utf-8\r\n"
                 b"Date: Wed, 24 Dec 2008 13:29:32 GMT\r\n"
                 b"\r\n"
@@ -983,15 +983,6 @@ class HandlerTests(TestCase):
                         base.start_response('200 OK', [('x', c0)])
                 else:
                     base.start_response('200 OK', [('x', c0)])
-
-
-class TestModule(unittest.TestCase):
-    def test_deprecated_module_attributes(self):
-        from wsgiref import simple_server
-
-        support.check_deprecated_module_attributes(
-            self, simple_server, "__version__", remove=(3, 20),
-        )
 
 
 if __name__ == "__main__":

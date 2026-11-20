@@ -1,4 +1,7 @@
-"""turtledemo/sorting_animation.py
+#!/usr/bin/env python3
+"""
+
+         sorting_animation.py
 
 A minimal sorting algorithm animation:
 Sorts a shelf of 10 blocks using insertion
@@ -8,6 +11,9 @@ Shelves are implemented using builtin lists.
 
 Blocks are turtles with shape "square", but
 stretched to rectangles by shapesize()
+ ---------------------------------------
+       To exit press space button
+ ---------------------------------------
 """
 from turtle import *
 import random
@@ -178,6 +184,7 @@ def enable_keys():
     onkey(start_ssort, "s")
     onkey(start_qsort, "q")
     onkey(randomize, "r")
+    onkey(bye, "space")
 
 def main():
     getscreen().clearscreen()
@@ -190,7 +197,7 @@ def main():
     return "EVENTLOOP"
 
 instructions1 = "press i for insertion sort, s for selection sort, q for quicksort"
-instructions2 = "r to randomize"
+instructions2 = "spacebar to quit, r to randomize"
 
 if __name__=="__main__":
     msg = main()

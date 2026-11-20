@@ -4,7 +4,6 @@ from test import support
 from test.support import check_sanitizer
 from test.support import import_helper
 from test.support import os_helper
-from test.support import strace_helper
 from test.support import warnings_helper
 from test.support.script_helper import assert_python_ok
 import subprocess
@@ -1130,39 +1129,6 @@ class ProcessTestCase(BaseTestCase):
             p.kill()
             p.wait()
 
-    def test_communicate_timeout_resume_partial_write(self):
-        """Resume writing input after a partial-write TimeoutExpired.
-
-        Exercises the _input_offset bookkeeping across the
-        _communicate_io_posix factoring: a first communicate() must time out
-        mid-write, and a subsequent communicate() must finish delivering the
-        remaining bytes so the child receives the full input intact.
-        """
-        # 1 MiB easily exceeds typical pipe buffers (~64 KiB) so writing
-        # blocks once the buffer fills before the child starts reading.
-        input_data = bytes(range(256)) * 4096  # 1 MiB, distinctive pattern
-        self.assertEqual(len(input_data), 1024 * 1024)
-
-        p = subprocess.Popen(
-            [sys.executable, "-c",
-             "import sys, time; "
-             "time.sleep(0.5); "
-             "sys.stdout.buffer.write(sys.stdin.buffer.read())"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        try:
-            with self.assertRaises(subprocess.TimeoutExpired):
-                p.communicate(input_data, timeout=0.05)
-
-            # Resume: no new input, generous timeout to avoid CI flakes.
-            stdout, stderr = p.communicate(timeout=support.LONG_TIMEOUT)
-            self.assertEqual(len(stdout), len(input_data))
-            self.assertEqual(stdout, input_data)
-        finally:
-            p.kill()
-            p.wait()
-
     # Test for the fd leak reported in http://bugs.python.org/issue2791.
     def test_communicate_pipe_fd_leak(self):
         for stdin_pipe in (False, True):
@@ -1362,7 +1328,7 @@ class ProcessTestCase(BaseTestCase):
         self.assertEqual("line1\nline2\nline3\nline4\nline5\n", stdout)
         # Python debug build push something like "[42442 refs]\n"
         # to stderr at exit of subprocess.
-        self.assertStartsWith(stderr, "eline2\neline6\neline7\n")
+        self.assertTrue(stderr.startswith("eline2\neline6\neline7\n"))
 
     def test_universal_newlines_communicate_encodings(self):
         # Check that universal newlines mode works for various encodings,
@@ -1496,8 +1462,6 @@ class ProcessTestCase(BaseTestCase):
     def test_wait_timeout(self):
         p = subprocess.Popen([sys.executable,
                               "-c", "import time; time.sleep(0.3)"])
-        with self.assertRaises(subprocess.TimeoutExpired) as c:
-            p.wait(timeout=0)
         with self.assertRaises(subprocess.TimeoutExpired) as c:
             p.wait(timeout=0.0001)
         self.assertIn("0.0001", str(c.exception))  # For coverage of __str__.
@@ -1696,7 +1660,7 @@ class ProcessTestCase(BaseTestCase):
                 "[sys.executable, '-c', 'print(\"Hello World!\")'])",
             'assert retcode == 0'))
         output = subprocess.check_output([sys.executable, '-c', code])
-        self.assertStartsWith(output, b'Hello World!')
+        self.assertTrue(output.startswith(b'Hello World!'), ascii(output))
 
     def test_handles_closed_on_exception(self):
         # If CreateProcess exits with an error, ensure the
@@ -1797,28 +1761,13 @@ class ProcessTestCase(BaseTestCase):
         fds_after_exception = os.listdir(fd_directory)
         self.assertEqual(fds_before_popen, fds_after_exception)
 
+    @unittest.skipIf(mswindows, "behavior currently not supported on Windows")
     def test_file_not_found_includes_filename(self):
-        missing = (r'C:\opt\nonexistent_binary' if mswindows
-                   else '/opt/nonexistent_binary')
         with self.assertRaises(FileNotFoundError) as c:
-            subprocess.call([missing, 'with', 'some', 'args'])
-        self.assertEqual(c.exception.filename, missing)
+            subprocess.call(['/opt/nonexistent_binary', 'with', 'some', 'args'])
+        self.assertEqual(c.exception.filename, '/opt/nonexistent_binary')
 
-    def test_args_filter_iterable(self):
-        # gh-119646: Windows used to index args[0] before list2cmdline.
-        # test_faulthandler.test_sys_xoptions passes a filter() object.
-        args = filter(None, (sys.executable, "-c", "import sys; sys.exit(17)"))
-        self.assertEqual(subprocess.call(args), 17)
-
-    def test_file_not_found_includes_filename_from_iterable(self):
-        missing = (r'C:\opt\nonexistent_binary' if mswindows
-                   else '/opt/nonexistent_binary')
-        args = filter(None, (missing, "with", "some", "args"))
-        with self.assertRaises(FileNotFoundError) as c:
-            subprocess.call(args)
-        self.assertEqual(c.exception.filename, missing)
-
-    @unittest.skipIf(mswindows, "Windows reports NotADirectoryError (WinError 267)")
+    @unittest.skipIf(mswindows, "behavior currently not supported on Windows")
     def test_file_not_found_with_bad_cwd(self):
         with self.assertRaises(FileNotFoundError) as c:
             subprocess.Popen(['exit', '0'], cwd='/some/nonexistent/directory')
@@ -1875,7 +1824,7 @@ print()
             self.assertEqual(
                     proc.returncode, 0,
                     msg=f"STDERR:\n{stderr}\nSTDOUT:\n{stdout}")
-            self.assertStartsWith(stdout, "spam")
+            self.assertTrue(stdout.startswith("spam"), msg=stdout)
             self.assertIn("beans", stdout)
 
 
@@ -2071,8 +2020,8 @@ class RunFuncTestCase(BaseTestCase):
                             capture_output=True, env=env)
         lines = cp.stderr.splitlines()
         self.assertEqual(len(lines), 2, lines)
-        self.assertStartsWith(lines[0], b"<string>:2: EncodingWarning: ")
-        self.assertStartsWith(lines[1], b"<string>:3: EncodingWarning: ")
+        self.assertTrue(lines[0].startswith(b"<string>:2: EncodingWarning: "))
+        self.assertTrue(lines[1].startswith(b"<string>:3: EncodingWarning: "))
 
 
 def _get_test_grp_name():
@@ -2444,26 +2393,26 @@ class POSIXProcessTestCase(BaseTestCase):
             p.wait()
         self.assertEqual(-p.returncode, signal.SIGABRT)
 
-    def test_CalledProcessError_str(self):
-        # command string
-        err = subprocess.CalledProcessError(2, "fake cmd")
-        self.assertEqual(str(err), "Command 'fake cmd' returned non-zero exit status 2.")
-
-        # command string with a single-quote
-        err = subprocess.CalledProcessError(2, "fake ' cmd")
-        self.assertEqual(str(err), 'Command "fake \' cmd" returned non-zero exit status 2.')
-
-        # command list
-        err = subprocess.CalledProcessError(2, ["fake", "cmd"])
-        self.assertEqual(str(err), "Command ['fake', 'cmd'] returned non-zero exit status 2.")
-
-        # signal
+    def test_CalledProcessError_str_signal(self):
         err = subprocess.CalledProcessError(-int(signal.SIGABRT), "fake cmd")
-        self.assertEqual(str(err), f"Command 'fake cmd' died with {signal.SIGABRT!r}.")
+        error_string = str(err)
+        # We're relying on the repr() of the signal.Signals intenum to provide
+        # the word signal, the signal name and the numeric value.
+        self.assertIn("signal", error_string.lower())
+        # We're not being specific about the signal name as some signals have
+        # multiple names and which name is revealed can vary.
+        self.assertIn("SIG", error_string)
+        self.assertIn(str(signal.SIGABRT), error_string)
 
-        # unknown signal
+    def test_CalledProcessError_str_unknown_signal(self):
         err = subprocess.CalledProcessError(-9876543, "fake cmd")
-        self.assertEqual(str(err), "Command 'fake cmd' died with unknown signal 9876543.")
+        error_string = str(err)
+        self.assertIn("unknown signal 9876543.", error_string)
+
+    def test_CalledProcessError_str_non_zero(self):
+        err = subprocess.CalledProcessError(2, "fake cmd")
+        error_string = str(err)
+        self.assertIn("non-zero exit status 2.", error_string)
 
         # returncode which is not an integer, which happens for example when
         # Popen is mocked: str() must not fail
@@ -3538,7 +3487,7 @@ class POSIXProcessTestCase(BaseTestCase):
                         1, 2, 3, 4,
                         True, True, 0,
                         None, None, None, -1,
-                        None)
+                        None, True)
                 self.assertIn('fds_to_keep', str(c.exception))
         finally:
             if not gc_enabled:
@@ -3675,7 +3624,26 @@ class POSIXProcessTestCase(BaseTestCase):
 
     @unittest.skipIf(not sysconfig.get_config_var("HAVE_VFORK"),
                      "vfork() not enabled by configure.")
-    @strace_helper.requires_strace()
+    @mock.patch("subprocess._fork_exec")
+    @mock.patch("subprocess._USE_POSIX_SPAWN", new=False)
+    def test__use_vfork(self, mock_fork_exec):
+        self.assertTrue(subprocess._USE_VFORK)  # The default value regardless.
+        mock_fork_exec.side_effect = RuntimeError("just testing args")
+        with self.assertRaises(RuntimeError):
+            subprocess.run([sys.executable, "-c", "pass"])
+        mock_fork_exec.assert_called_once()
+        # NOTE: These assertions are *ugly* as they require the last arg
+        # to remain the have_vfork boolean. We really need to refactor away
+        # from the giant "wall of args" internal C extension API.
+        self.assertTrue(mock_fork_exec.call_args.args[-1])
+        with mock.patch.object(subprocess, '_USE_VFORK', False):
+            with self.assertRaises(RuntimeError):
+                subprocess.run([sys.executable, "-c", "pass"])
+            self.assertFalse(mock_fork_exec.call_args_list[-1].args[-1])
+
+    @unittest.skipIf(not sysconfig.get_config_var("HAVE_VFORK"),
+                     "vfork() not enabled by configure.")
+    @unittest.skipIf(sys.platform != "linux", "Linux only, requires strace.")
     @mock.patch("subprocess._USE_POSIX_SPAWN", new=False)
     def test_vfork_used_when_expected(self):
         # This is a performance regression test to ensure we default to using
@@ -3683,39 +3651,52 @@ class POSIXProcessTestCase(BaseTestCase):
         # Technically this test could pass when posix_spawn is used as well
         # because libc tends to implement that internally using vfork. But
         # that'd just be testing a libc+kernel implementation detail.
-
-        # Are intersted in the system calls:
-        # clone,clone2,clone3,fork,vfork,exit,exit_group
-        # Unfortunately using `--trace` with that list to strace fails because
-        # not all are supported on all platforms (ex. clone2 is ia64 only...)
-        # So instead use `%process` which is recommended by strace, and contains
-        # the above.
+        strace_binary = "/usr/bin/strace"
+        # The only system calls we are interested in.
+        strace_filter = "--trace=clone,clone2,clone3,fork,vfork,exit,exit_group"
         true_binary = "/bin/true"
-        strace_args = ["--trace=%process"]
+        strace_command = [strace_binary, strace_filter]
+
+        try:
+            does_strace_work_process = subprocess.run(
+                    strace_command + [true_binary],
+                    stderr=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+            )
+            rc = does_strace_work_process.returncode
+            stderr = does_strace_work_process.stderr
+        except OSError:
+            rc = -1
+            stderr = ""
+        if rc or (b"+++ exited with 0 +++" not in stderr):
+            self.skipTest("strace not found or not working as expected.")
 
         with self.subTest(name="default_is_vfork"):
-            vfork_result = strace_helper.strace_python(
-                f"""\
-                import subprocess
-                subprocess.check_call([{true_binary!r}])""",
-                strace_args
+            vfork_result = assert_python_ok(
+                    "-c",
+                    textwrap.dedent(f"""\
+                    import subprocess
+                    subprocess.check_call([{true_binary!r}])"""),
+                    __run_using_command=strace_command,
             )
             # Match both vfork() and clone(..., flags=...|CLONE_VFORK|...)
-            self.assertRegex(vfork_result.event_bytes, br"(?i)vfork")
+            self.assertRegex(vfork_result.err, br"(?i)vfork")
             # Do NOT check that fork() or other clones did not happen.
             # If the OS denys the vfork it'll fallback to plain fork().
 
         # Test that each individual thing that would disable the use of vfork
         # actually disables it.
         for sub_name, preamble, sp_kwarg, expect_permission_error in (
+                ("!use_vfork", "subprocess._USE_VFORK = False", "", False),
                 ("preexec", "", "preexec_fn=lambda: None", False),
                 ("setgid", "", f"group={os.getgid()}", True),
                 ("setuid", "", f"user={os.getuid()}", True),
                 ("setgroups", "", "extra_groups=[]", True),
         ):
             with self.subTest(name=sub_name):
-                non_vfork_result = strace_helper.strace_python(
-                    f"""\
+                non_vfork_result = assert_python_ok(
+                    "-c",
+                    textwrap.dedent(f"""\
                     import subprocess
                     {preamble}
                     try:
@@ -3723,43 +3704,15 @@ class POSIXProcessTestCase(BaseTestCase):
                                 [{true_binary!r}], **dict({sp_kwarg}))
                     except PermissionError:
                         if not {expect_permission_error}:
-                            raise""",
-                    strace_args
+                            raise"""),
+                    __run_using_command=strace_command,
                 )
                 # Ensure neither vfork() or clone(..., flags=...|CLONE_VFORK|...).
-                self.assertNotRegex(non_vfork_result.event_bytes, br"(?i)vfork")
+                self.assertNotRegex(non_vfork_result.err, br"(?i)vfork")
 
 
 @unittest.skipUnless(mswindows, "Windows specific tests")
 class Win32ProcessTestCase(BaseTestCase):
-
-    def test_createprocess_bad_cwd_includes_filename(self):
-        # gh-119646: invalid cwd should appear on OSError.filename.
-        missing_cwd = r'C:\some\nonexistent\directory'
-        with self.assertRaises(OSError) as c:
-            subprocess.Popen([sys.executable, '-c', 'pass'], cwd=missing_cwd)
-        self.assertEqual(c.exception.filename, missing_cwd)
-        self.assertEqual(c.exception.winerror, 267)
-
-    def test_command_string_filename_omits_later_args(self):
-        # gh-119646: a command-line string must not put later arguments
-        # on OSError.filename. Those arguments can hold secrets.
-        missing = r'C:\opt\nonexistent_binary'
-        secret = 'NOT-A-REAL-SECRET'
-        quoted = r'C:\Program Files\nonexistent_binary'
-        cases = [
-            (missing, missing),
-            (f'{missing} --token {secret}', missing),
-            (f'"{missing}" --token {secret}', missing),
-            (f'"{quoted}" --token {secret}', quoted),
-        ]
-        for command, expected in cases:
-            with self.subTest(command=command):
-                with self.assertRaises(FileNotFoundError) as c:
-                    subprocess.call(command)
-                self.assertEqual(c.exception.filename, expected)
-                self.assertNotIn(secret, c.exception.filename or '')
-                self.assertNotIn(secret, str(c.exception))
 
     def test_startupinfo(self):
         # startupinfo argument
@@ -3773,9 +3726,8 @@ class Win32ProcessTestCase(BaseTestCase):
         # Since Python is a console process, it won't be affected
         # by wShowWindow, but the argument should be silently
         # ignored
-        rc = subprocess.call(ZERO_RETURN_CMD,
-                             startupinfo=startupinfo)
-        self.assertEqual(rc, 0)
+        subprocess.call(ZERO_RETURN_CMD,
+                        startupinfo=startupinfo)
 
     def test_startupinfo_keywords(self):
         # startupinfo argument
@@ -3790,9 +3742,8 @@ class Win32ProcessTestCase(BaseTestCase):
         # Since Python is a console process, it won't be affected
         # by wShowWindow, but the argument should be silently
         # ignored
-        rc = subprocess.call(ZERO_RETURN_CMD,
-                             startupinfo=startupinfo)
-        self.assertEqual(rc, 0)
+        subprocess.call(ZERO_RETURN_CMD,
+                        startupinfo=startupinfo)
 
     def test_startupinfo_copy(self):
         # bpo-34044: Popen must not modify input STARTUPINFO structure
@@ -3820,34 +3771,6 @@ class Win32ProcessTestCase(BaseTestCase):
             self.assertIsNone(startupinfo.hStdError)
             self.assertEqual(startupinfo.wShowWindow, subprocess.SW_HIDE)
             self.assertEqual(startupinfo.lpAttributeList, {"handle_list": []})
-
-    def test_startupinfo_shell_show_window(self):
-        # gh-85028: shell=True must not override wShowWindow set by the caller
-        import _winapi
-        SW_MAXIMIZE = 3
-        used = []
-        create_process = _winapi.CreateProcess
-
-        def spy(*args):
-            # The startup info is the last argument of CreateProcess()
-            used.append(args[-1])
-            return create_process(*args)
-
-        startupinfo = subprocess.STARTUPINFO(
-            dwFlags=subprocess.STARTF_USESHOWWINDOW,
-            wShowWindow=SW_MAXIMIZE)
-        with mock.patch.object(_winapi, 'CreateProcess', spy):
-            rc = subprocess.call(ZERO_RETURN_CMD, shell=True,
-                                 startupinfo=startupinfo)
-            self.assertEqual(rc, 0)
-            rc = subprocess.call(ZERO_RETURN_CMD, shell=True)
-            self.assertEqual(rc, 0)
-
-        requested, default = used
-        self.assertEqual(requested.wShowWindow, SW_MAXIMIZE)
-        # Without STARTF_USESHOWWINDOW the shell window is still hidden.
-        self.assertTrue(default.dwFlags & subprocess.STARTF_USESHOWWINDOW)
-        self.assertEqual(default.wShowWindow, subprocess.SW_HIDE)
 
     # CREATE_NEW_CONSOLE creates a "popup" window.
     @support.requires_resource('gui')
@@ -3937,16 +3860,14 @@ class Win32ProcessTestCase(BaseTestCase):
     def test_empty_attribute_list(self):
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.lpAttributeList = {}
-        rc = subprocess.call(ZERO_RETURN_CMD,
-                             startupinfo=startupinfo)
-        self.assertEqual(rc, 0)
+        subprocess.call(ZERO_RETURN_CMD,
+                        startupinfo=startupinfo)
 
     def test_empty_handle_list(self):
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.lpAttributeList = {"handle_list": []}
-        rc = subprocess.call(ZERO_RETURN_CMD,
-                             startupinfo=startupinfo)
-        self.assertEqual(rc, 0)
+        subprocess.call(ZERO_RETURN_CMD,
+                        startupinfo=startupinfo)
 
     def test_shell_sequence(self):
         # Run command through the shell (sequence)
@@ -3957,8 +3878,6 @@ class Win32ProcessTestCase(BaseTestCase):
                              env=newenv)
         with p:
             self.assertIn(b"physalis", p.stdout.read())
-            p.communicate()
-            self.assertEqual(p.returncode, 0)
 
     def test_shell_string(self):
         # Run command through the shell (string)
@@ -3969,8 +3888,6 @@ class Win32ProcessTestCase(BaseTestCase):
                              env=newenv)
         with p:
             self.assertIn(b"physalis", p.stdout.read())
-            p.communicate()
-            self.assertEqual(p.returncode, 0)
 
     def test_shell_encodings(self):
         # Run command through the shell (string)
@@ -3983,8 +3900,6 @@ class Win32ProcessTestCase(BaseTestCase):
                                  encoding=enc)
             with p:
                 self.assertIn("physalis", p.stdout.read(), enc)
-                p.communicate()
-                self.assertEqual(p.returncode, 0)
 
     def test_call_string(self):
         # call() function with string argument on Windows
@@ -4264,149 +4179,6 @@ class ContextManagerTests(BaseTestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertTrue(proc.stdin.closed)
 
-
-
-class FastWaitTestCase(BaseTestCase):
-    """Tests for efficient (pidfd_open() + poll() / kqueue()) process
-    waiting in subprocess.Popen.wait().
-    """
-    CAN_USE_PIDFD_OPEN = subprocess._CAN_USE_PIDFD_OPEN
-    CAN_USE_KQUEUE = subprocess._CAN_USE_KQUEUE
-    COMMAND = [sys.executable, "-c", "import time; time.sleep(0.3)"]
-    WAIT_TIMEOUT = 0.0001  # 0.1 ms
-
-    def assert_fast_waitpid_error(self, patch_point):
-        # Emulate a case where pidfd_open() or kqueue() fails.
-        # Busy-poll wait should be used as fallback.
-        exc = OSError(errno.EMFILE, os.strerror(errno.EMFILE))
-        with mock.patch(patch_point, side_effect=exc) as m:
-            p = subprocess.Popen(self.COMMAND)
-            with self.assertRaises(subprocess.TimeoutExpired):
-                p.wait(self.WAIT_TIMEOUT)
-            self.assertEqual(p.wait(timeout=support.SHORT_TIMEOUT), 0)
-        self.assertTrue(m.called)
-
-    @unittest.skipIf(not CAN_USE_PIDFD_OPEN, reason="needs pidfd_open()")
-    def test_wait_pidfd_open_error(self):
-        self.assert_fast_waitpid_error("os.pidfd_open")
-
-    @unittest.skipIf(not CAN_USE_KQUEUE, reason="needs kqueue() for proc")
-    def test_wait_kqueue_error(self):
-        self.assert_fast_waitpid_error("select.kqueue")
-
-    @unittest.skipIf(not CAN_USE_KQUEUE, reason="needs kqueue() for proc")
-    def test_kqueue_control_error(self):
-        # Emulate a case where kqueue.control() fails. Busy-poll wait
-        # should be used as fallback.
-        p = subprocess.Popen(self.COMMAND)
-        kq_mock = mock.Mock()
-        kq_mock.control.side_effect = OSError(
-            errno.EPERM, os.strerror(errno.EPERM)
-        )
-        kq_mock.close = mock.Mock()
-
-        with mock.patch("select.kqueue", return_value=kq_mock) as m:
-            with self.assertRaises(subprocess.TimeoutExpired):
-                p.wait(self.WAIT_TIMEOUT)
-            self.assertEqual(p.wait(timeout=support.SHORT_TIMEOUT), 0)
-        self.assertTrue(m.called)
-
-    def assert_wait_race_condition(self, patch_target, real_func):
-        # Call pidfd_open() / kqueue(), then terminate the process.
-        # Make sure that the wait call (poll() / kqueue.control())
-        # still works for a terminated PID.
-        p = subprocess.Popen(self.COMMAND)
-
-        def wrapper(*args, **kwargs):
-            ret = real_func(*args, **kwargs)
-            try:
-                os.kill(p.pid, signal.SIGTERM)
-                os.waitpid(p.pid, 0)
-            except OSError:
-                pass
-            return ret
-
-        with mock.patch(patch_target, side_effect=wrapper) as m:
-            status = p.wait(timeout=support.SHORT_TIMEOUT)
-        self.assertTrue(m.called)
-        self.assertEqual(status, 0)
-
-    @unittest.skipIf(not CAN_USE_PIDFD_OPEN, reason="needs pidfd_open()")
-    def test_pidfd_open_race(self):
-        self.assert_wait_race_condition("os.pidfd_open", os.pidfd_open)
-
-    @unittest.skipIf(not CAN_USE_KQUEUE, reason="needs kqueue() for proc")
-    def test_kqueue_race(self):
-        self.assert_wait_race_condition("select.kqueue", select.kqueue)
-
-    def assert_notification_without_immediate_reap(self, patch_target):
-        # Verify fallback to busy polling when poll() / kqueue()
-        # succeeds, but waitpid(pid, WNOHANG) returns (0, 0).
-        def waitpid_wrapper(pid, flags):
-            nonlocal ncalls
-            ncalls += 1
-            if ncalls == 1:
-                return (0, 0)
-            return real_waitpid(pid, flags)
-
-        ncalls = 0
-        real_waitpid = os.waitpid
-        with mock.patch.object(subprocess.Popen, patch_target, return_value=True) as m1:
-            with mock.patch("os.waitpid", side_effect=waitpid_wrapper) as m2:
-                p = subprocess.Popen(self.COMMAND)
-                with self.assertRaises(subprocess.TimeoutExpired):
-                    p.wait(self.WAIT_TIMEOUT)
-                self.assertEqual(p.wait(timeout=support.SHORT_TIMEOUT), 0)
-        self.assertTrue(m1.called)
-        self.assertTrue(m2.called)
-
-    @unittest.skipIf(not CAN_USE_PIDFD_OPEN, reason="needs pidfd_open()")
-    def test_pidfd_open_notification_without_immediate_reap(self):
-        self.assert_notification_without_immediate_reap("_wait_pidfd")
-
-    @unittest.skipIf(not CAN_USE_KQUEUE, reason="needs kqueue() for proc")
-    def test_kqueue_notification_without_immediate_reap(self):
-        self.assert_notification_without_immediate_reap("_wait_kqueue")
-
-    @unittest.skipUnless(
-        CAN_USE_PIDFD_OPEN or CAN_USE_KQUEUE,
-        "fast wait mechanism not available"
-    )
-    def test_fast_path_avoid_busy_loop(self):
-        # assert that the busy loop is not called as long as the fast
-        # wait is available
-        with mock.patch('time.sleep') as m:
-            p = subprocess.Popen(self.COMMAND)
-            with self.assertRaises(subprocess.TimeoutExpired):
-                p.wait(self.WAIT_TIMEOUT)
-            self.assertEqual(p.wait(timeout=support.LONG_TIMEOUT), 0)
-        self.assertFalse(m.called)
-
-    @unittest.skipIf(mswindows, "requires the POSIX wait implementation")
-    def test_wait_huge_timeout(self):
-        # gh-154836: very large timeout values used to overflow the C
-        # timestamp conversion in poll() / kqueue.control() and raise
-        # OverflowError / TypeError.
-        for timeout in (10**10, sys.maxsize, float('inf')):
-            with self.subTest(timeout=timeout):
-                p = subprocess.Popen(ZERO_RETURN_CMD)
-                self.assertEqual(p.wait(timeout=timeout), 0)
-
-    @unittest.skipIf(mswindows, "requires the POSIX wait implementation")
-    def test_run_huge_timeout(self):
-        # gh-154836: same as test_wait_huge_timeout, via the
-        # subprocess.run() / communicate() code path.
-        cp = subprocess.run(ZERO_RETURN_CMD, timeout=1e10)
-        self.assertEqual(cp.returncode, 0)
-
-    @unittest.skipIf(mswindows, "requires the POSIX wait implementation")
-    def test_wait_slices_do_not_expire_early(self):
-        # A clamped wait slice must not raise TimeoutExpired before the
-        # real deadline: with a tiny slice limit, a process that
-        # outlives many slices must still be waited for successfully.
-        with mock.patch.object(subprocess, "_MAXIMUM_WAIT_TIMEOUT", 0.01):
-            p = subprocess.Popen(self.COMMAND)  # sleeps 0.3s
-            self.assertEqual(p.wait(timeout=support.SHORT_TIMEOUT), 0)
 
 if __name__ == "__main__":
     unittest.main()

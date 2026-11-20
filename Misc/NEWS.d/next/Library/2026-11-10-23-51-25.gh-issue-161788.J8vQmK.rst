@@ -1,1 +1,0 @@
-:func:`shutil.which` now accepts path-like objects for the command.

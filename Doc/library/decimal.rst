@@ -4,6 +4,14 @@
 .. module:: decimal
    :synopsis: Implementation of the General Decimal Arithmetic Specification.
 
+.. moduleauthor:: Eric Price <eprice at tjhsst.edu>
+.. moduleauthor:: Facundo Batista <facundo at taniquetil.com.ar>
+.. moduleauthor:: Raymond Hettinger <python at rcn.com>
+.. moduleauthor:: Aahz <aahz at pobox.com>
+.. moduleauthor:: Tim Peters <tim.one at comcast.net>
+.. moduleauthor:: Stefan Krah <skrah at bytereef.org>
+.. sectionauthor:: Raymond D. Hettinger <python at rcn.com>
+
 **Source code:** :source:`Lib/decimal.py`
 
 .. import modules for testing inline doctests with the Sphinx doctest builder
@@ -22,7 +30,7 @@
 
 --------------
 
-The :mod:`!decimal` module provides support for fast correctly rounded
+The :mod:`decimal` module provides support for fast correctly rounded
 decimal floating-point arithmetic. It offers several advantages over the
 :class:`float` datatype:
 
@@ -281,7 +289,7 @@ For more advanced work, it may be useful to create alternate contexts using the
 :meth:`Context` constructor.  To make an alternate active, use the :func:`setcontext`
 function.
 
-In accordance with the standard, the :mod:`!decimal` module provides two ready to
+In accordance with the standard, the :mod:`decimal` module provides two ready to
 use standard contexts, :const:`BasicContext` and :const:`ExtendedContext`. The
 former is especially useful for debugging because many of the traps are
 enabled:
@@ -613,23 +621,6 @@ Decimal objects
           Decimal('-Infinity')
 
       .. versionadded:: 3.1
-
-   .. classmethod:: from_number(number, /)
-
-      Alternative constructor that only accepts instances of
-      :class:`float`, :class:`int` or :class:`Decimal`, but not strings
-      or tuples.
-
-      .. doctest::
-
-          >>> Decimal.from_number(314)
-          Decimal('314')
-          >>> Decimal.from_number(0.1)
-          Decimal('0.1000000000000000055511151231257827021181583404541015625')
-          >>> Decimal.from_number(Decimal('3.14'))
-          Decimal('3.14')
-
-      .. versionadded:: 3.14
 
    .. method:: fma(other, third, context=None)
 
@@ -1045,14 +1036,6 @@ function to temporarily change the active context.
    .. versionchanged:: 3.11
       :meth:`localcontext` now supports setting context attributes through the use of keyword arguments.
 
-.. function:: IEEEContext(bits)
-
-   Return a context object initialized to the proper values for one of the
-   IEEE interchange formats.  The argument must be a multiple of 32 and less
-   than :const:`IEEE_CONTEXT_MAX_BITS`.
-
-   .. versionadded:: 3.14
-
 New contexts can also be created using the :class:`Context` constructor
 described below. In addition, the module provides three pre-made contexts:
 
@@ -1181,14 +1164,6 @@ In addition to the three supplied contexts, new contexts can be created with the
    .. method:: copy()
 
       Return a duplicate of the context.
-
-      :class:`!Context` objects also support :func:`copy.replace`,
-      which returns a duplicate with the specified fields replaced.
-      Fields which are not specified keep the values
-      they have in the original context.
-
-      .. versionchanged:: 3.16
-         Added support for :func:`copy.replace`.
 
    .. method:: copy_decimal(num, /)
 
@@ -1591,31 +1566,21 @@ In addition to the three supplied contexts, new contexts can be created with the
 Constants
 ---------
 
-.. data:: SPEC_VERSION
-
-   The highest version of the General Decimal Arithmetic
-   Specification that this implementation complies with.
-   See https://speleotrove.com/decimal/decarith.html for the specification.
-
-   .. versionadded:: 3.15
-
-
-The following constants are only relevant for the C module. They
+The constants in this section are only relevant for the C module. They
 are also included in the pure Python version for compatibility.
 
-+---------------------------------+---------------------+-------------------------------+
-|                                 |       32-bit        |            64-bit             |
-+=================================+=====================+===============================+
-| .. data:: MAX_PREC              |    ``425000000``    |    ``999999999999999999``     |
-+---------------------------------+---------------------+-------------------------------+
-| .. data:: MAX_EMAX              |    ``425000000``    |    ``999999999999999999``     |
-+---------------------------------+---------------------+-------------------------------+
-| .. data:: MIN_EMIN              |    ``-425000000``   |    ``-999999999999999999``    |
-+---------------------------------+---------------------+-------------------------------+
-| .. data:: MIN_ETINY             |    ``-849999999``   |    ``-1999999999999999997``   |
-+---------------------------------+---------------------+-------------------------------+
-| .. data:: IEEE_CONTEXT_MAX_BITS |    ``256``          |    ``512``                    |
-+---------------------------------+---------------------+-------------------------------+
++---------------------+---------------------+-------------------------------+
+|                     |       32-bit        |            64-bit             |
++=====================+=====================+===============================+
+| .. data:: MAX_PREC  |    ``425000000``    |    ``999999999999999999``     |
++---------------------+---------------------+-------------------------------+
+| .. data:: MAX_EMAX  |    ``425000000``    |    ``999999999999999999``     |
++---------------------+---------------------+-------------------------------+
+| .. data:: MIN_EMIN  |    ``-425000000``   |    ``-999999999999999999``    |
++---------------------+---------------------+-------------------------------+
+| .. data:: MIN_ETINY |    ``-849999999``   |    ``-1999999999999999997``   |
++---------------------+---------------------+-------------------------------+
+
 
 .. data:: HAVE_THREADS
 
@@ -1631,46 +1596,6 @@ are also included in the pure Python version for compatibility.
    is ``False``.  This is slightly faster in some nested context scenarios.
 
    .. versionadded:: 3.8.3
-
-The following constants are only available in the C module.
-
-.. data:: LIBMPDEC_VERSION
-
-   The version string of the libmpdec library that was used for building
-   the module.
-   This may be different from the libmpdec library actually used at runtime,
-   which is available as :const:`libmpdec_version`.
-
-   .. versionadded:: 3.16
-
-.. data:: libmpdec_version
-
-   The version string of the libmpdec library actually loaded by the
-   interpreter.
-
-   .. versionadded:: 3.16
-
-.. data:: LIBMPDEC_VERSION_INFO
-
-   A named tuple containing the three components of the libmpdec library
-   version that was used for building the module:
-   *major*, *minor*, and *micro*.
-   All values are integers.
-   The components can also be accessed by name,
-   so ``decimal.LIBMPDEC_VERSION_INFO[0]`` is equivalent to
-   ``decimal.LIBMPDEC_VERSION_INFO.major`` and so on.
-   This may be different from the libmpdec library actually used at runtime,
-   which is available as :const:`libmpdec_version_info`.
-
-   .. versionadded:: 3.16
-
-.. data:: libmpdec_version_info
-
-   A named tuple containing the version of the libmpdec library
-   actually loaded by the interpreter,
-   with the same fields as :const:`LIBMPDEC_VERSION_INFO`.
-
-   .. versionadded:: 3.16
 
 
 Rounding modes
@@ -1887,7 +1812,7 @@ properties of addition:
    >>> u * (v+w)
    Decimal('0.0060000')
 
-The :mod:`!decimal` module makes it possible to restore the identities by
+The :mod:`decimal` module makes it possible to restore the identities by
 expanding the precision sufficiently to avoid loss of significance:
 
 .. doctest:: newcontext
@@ -1909,7 +1834,7 @@ expanding the precision sufficiently to avoid loss of significance:
 Special values
 ^^^^^^^^^^^^^^
 
-The number system for the :mod:`!decimal` module provides special values
+The number system for the :mod:`decimal` module provides special values
 including ``NaN``, ``sNaN``, ``-Infinity``, ``Infinity``,
 and two zeros, ``+0`` and ``-0``.
 
@@ -1978,20 +1903,13 @@ the current thread.
 
 If :func:`setcontext` has not been called before :func:`getcontext`, then
 :func:`getcontext` will automatically create a new context for use in the
-current thread.  New context objects have default values set from the
-:data:`decimal.DefaultContext` object.
+current thread.
 
-The :data:`sys.flags.thread_inherit_context` flag affects the context for
-new threads.  If the flag is false, new threads will start with an empty
-context.  In this case, :func:`getcontext` will create a new context object
-when called and use the default values from *DefaultContext*.  If the flag
-is true, new threads will start with a copy of context from the caller of
-:meth:`threading.Thread.start`.
-
-To control the defaults so that each thread will use the same values throughout
-the application, directly modify the *DefaultContext* object. This should be
-done *before* any threads are started so that there won't be a race condition
-between threads calling :func:`getcontext`. For example::
+The new context is copied from a prototype context called *DefaultContext*. To
+control the defaults so that each thread will use the same values throughout the
+application, directly modify the *DefaultContext* object. This should be done
+*before* any threads are started so that there won't be a race condition between
+threads calling :func:`getcontext`. For example::
 
    # Set applicationwide defaults for all threads about to be launched
    DefaultContext.prec = 12
@@ -2266,7 +2184,7 @@ applied to the *result* of the computation::
    Decimal('3.1416')
    >>> pi - Decimal('0.00005')        # Subtract unrounded numbers, then round
    Decimal('3.1415')
-   >>> pi + 0 - Decimal('0.00005')    # Intermediate values are rounded
+   >>> pi + 0 - Decimal('0.00005').   # Intermediate values are rounded
    Decimal('3.1416')
 
 Q: Some decimal values always print with exponential notation.  Is there a way

@@ -101,11 +101,9 @@ gc_collect(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
         .ob_item = { &_Py_ID(generation), },
     };
     #undef NUM_KEYWORDS
@@ -127,8 +125,7 @@ gc_collect(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *
     int generation = NUM_GENERATIONS - 1;
     Py_ssize_t _return_value;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 0, /*maxpos*/ 1, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 0, 1, 0, argsbuf);
     if (!args) {
         goto exit;
     }
@@ -224,14 +221,14 @@ PyDoc_STRVAR(gc_set_threshold__doc__,
 "Setting \'threshold0\' to zero disables collection.");
 
 #define GC_SET_THRESHOLD_METHODDEF    \
-    {"set_threshold", _PyCFunction_CAST(gc_set_threshold), METH_FASTCALL, gc_set_threshold__doc__},
+    {"set_threshold", (PyCFunction)gc_set_threshold, METH_VARARGS, gc_set_threshold__doc__},
 
 static PyObject *
 gc_set_threshold_impl(PyObject *module, int threshold0, int group_right_1,
                       int threshold1, int group_right_2, int threshold2);
 
 static PyObject *
-gc_set_threshold(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+gc_set_threshold(PyObject *module, PyObject *args)
 {
     PyObject *return_value = NULL;
     int threshold0;
@@ -240,27 +237,28 @@ gc_set_threshold(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     int group_right_2 = 0;
     int threshold2 = 0;
 
-    if (nargs < 1 || nargs > 3) {
-        PyErr_SetString(PyExc_TypeError, "gc.set_threshold requires 1 to 3 arguments");
-        goto exit;
-    }
-    threshold0 = PyLong_AsInt(args[0]);
-    if (threshold0 == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-    if (nargs >= 2) {
-        threshold1 = PyLong_AsInt(args[1]);
-        if (threshold1 == -1 && PyErr_Occurred()) {
+    switch (PyTuple_GET_SIZE(args)) {
+        case 1:
+            if (!PyArg_ParseTuple(args, "i:set_threshold", &threshold0)) {
+                goto exit;
+            }
+            break;
+        case 2:
+            if (!PyArg_ParseTuple(args, "ii:set_threshold", &threshold0, &threshold1)) {
+                goto exit;
+            }
+            group_right_1 = 1;
+            break;
+        case 3:
+            if (!PyArg_ParseTuple(args, "iii:set_threshold", &threshold0, &threshold1, &threshold2)) {
+                goto exit;
+            }
+            group_right_1 = 1;
+            group_right_2 = 1;
+            break;
+        default:
+            PyErr_SetString(PyExc_TypeError, "gc.set_threshold requires 1 to 3 arguments");
             goto exit;
-        }
-        group_right_1 = 1;
-    }
-    if (nargs >= 3) {
-        threshold2 = PyLong_AsInt(args[2]);
-        if (threshold2 == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        group_right_2 = 1;
     }
     return_value = gc_set_threshold_impl(module, threshold0, group_right_1, threshold1, group_right_2, threshold2);
 
@@ -314,24 +312,28 @@ PyDoc_STRVAR(gc_get_referrers__doc__,
     {"get_referrers", _PyCFunction_CAST(gc_get_referrers), METH_FASTCALL, gc_get_referrers__doc__},
 
 static PyObject *
-gc_get_referrers_impl(PyObject *module, PyObject *objs);
+gc_get_referrers_impl(PyObject *module, PyObject *args);
 
 static PyObject *
 gc_get_referrers(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
-    PyObject *objs = NULL;
+    PyObject *__clinic_args = NULL;
 
-    objs = PyTuple_FromArray(args, nargs);
-    if (objs == NULL) {
+    if (!_PyArg_CheckPositional("get_referrers", nargs, 0, PY_SSIZE_T_MAX)) {
         goto exit;
     }
-    return_value = gc_get_referrers_impl(module, objs);
+    __clinic_args = PyTuple_New(nargs - 0);
+    if (!__clinic_args) {
+        goto exit;
+    }
+    for (Py_ssize_t i = 0; i < nargs - 0; ++i) {
+        PyTuple_SET_ITEM(__clinic_args, i, Py_NewRef(args[0 + i]));
+    }
+    return_value = gc_get_referrers_impl(module, __clinic_args);
 
 exit:
-    /* Cleanup for objs */
-    Py_XDECREF(objs);
-
+    Py_XDECREF(__clinic_args);
     return return_value;
 }
 
@@ -345,24 +347,28 @@ PyDoc_STRVAR(gc_get_referents__doc__,
     {"get_referents", _PyCFunction_CAST(gc_get_referents), METH_FASTCALL, gc_get_referents__doc__},
 
 static PyObject *
-gc_get_referents_impl(PyObject *module, PyObject *objs);
+gc_get_referents_impl(PyObject *module, PyObject *args);
 
 static PyObject *
 gc_get_referents(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
 {
     PyObject *return_value = NULL;
-    PyObject *objs = NULL;
+    PyObject *__clinic_args = NULL;
 
-    objs = PyTuple_FromArray(args, nargs);
-    if (objs == NULL) {
+    if (!_PyArg_CheckPositional("get_referents", nargs, 0, PY_SSIZE_T_MAX)) {
         goto exit;
     }
-    return_value = gc_get_referents_impl(module, objs);
+    __clinic_args = PyTuple_New(nargs - 0);
+    if (!__clinic_args) {
+        goto exit;
+    }
+    for (Py_ssize_t i = 0; i < nargs - 0; ++i) {
+        PyTuple_SET_ITEM(__clinic_args, i, Py_NewRef(args[0 + i]));
+    }
+    return_value = gc_get_referents_impl(module, __clinic_args);
 
 exit:
-    /* Cleanup for objs */
-    Py_XDECREF(objs);
-
+    Py_XDECREF(__clinic_args);
     return return_value;
 }
 
@@ -394,11 +400,9 @@ gc_get_objects(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObje
     static struct {
         PyGC_Head _this_is_not_used;
         PyObject_VAR_HEAD
-        Py_hash_t ob_hash;
         PyObject *ob_item[NUM_KEYWORDS];
     } _kwtuple = {
         .ob_base = PyVarObject_HEAD_INIT(&PyTuple_Type, NUM_KEYWORDS)
-        .ob_hash = -1,
         .ob_item = { &_Py_ID(generation), },
     };
     #undef NUM_KEYWORDS
@@ -419,8 +423,7 @@ gc_get_objects(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObje
     Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 0;
     Py_ssize_t generation = -1;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser,
-            /*minpos*/ 0, /*maxpos*/ 1, /*minkw*/ 0, /*varpos*/ 0, argsbuf);
+    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 0, 1, 0, argsbuf);
     if (!args) {
         goto exit;
     }
@@ -583,4 +586,4 @@ gc_get_freeze_count(PyObject *module, PyObject *Py_UNUSED(ignored))
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=d0cb000f41ffe433 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=0041275fbac029b2 input=a9049054013a1b77]*/

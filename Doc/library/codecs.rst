@@ -4,6 +4,10 @@
 .. module:: codecs
    :synopsis: Encode and decode data and streams.
 
+.. moduleauthor:: Marc-André Lemburg <mal@lemburg.com>
+.. sectionauthor:: Marc-André Lemburg <mal@lemburg.com>
+.. sectionauthor:: Martin v. Löwis <martin@v.loewis.de>
+
 **Source code:** :source:`Lib/codecs.py`
 
 .. index::
@@ -59,25 +63,15 @@ any codec:
 
 The full details for each codec can also be looked up directly:
 
-.. function:: lookup(encoding, /)
+.. function:: lookup(encoding)
 
    Looks up the codec info in the Python codec registry and returns a
    :class:`CodecInfo` object as defined below.
 
-   This function first normalizes the *encoding*: all ASCII letters are
-   converted to lower case, spaces are replaced with hyphens.
-   Then encoding is looked up in the registry's cache. If not found, the list of
+   Encodings are first looked up in the registry's cache. If not found, the list of
    registered search functions is scanned. If no :class:`CodecInfo` object is
    found, a :exc:`LookupError` is raised. Otherwise, the :class:`CodecInfo` object
    is stored in the cache and returned to the caller.
-
-   .. versionchanged:: 3.9
-      Any characters except ASCII letters and digits and a dot are converted to underscore.
-
-   .. versionchanged:: 3.15
-      No characters are converted to underscore anymore.
-      Spaces are converted to hyphens.
-
 
 .. class:: CodecInfo(encode, decode, streamreader=None, streamwriter=None, incrementalencoder=None, incrementaldecoder=None, name=None)
 
@@ -170,16 +164,19 @@ these additional functions which use :func:`lookup` for the codec lookup:
 Custom codecs are made available by registering a suitable codec search
 function:
 
-.. function:: register(search_function, /)
+.. function:: register(search_function)
 
    Register a codec search function. Search functions are expected to take one
-   argument, being the encoding name in all lower case letters with spaces
-   converted to hyphens, and return a :class:`CodecInfo` object.
+   argument, being the encoding name in all lower case letters with hyphens
+   and spaces converted to underscores, and return a :class:`CodecInfo` object.
    In case a search function cannot find a given encoding, it should return
    ``None``.
 
+   .. versionchanged:: 3.9
+      Hyphens and spaces are converted to underscore.
 
-.. function:: unregister(search_function, /)
+
+.. function:: unregister(search_function)
 
    Unregister a codec search function and clear the registry's cache.
    If the search function is not registered, do nothing.
@@ -218,10 +215,6 @@ wider range of codecs when working with binary files:
 
    .. versionchanged:: 3.11
       The ``'U'`` mode has been removed.
-
-   .. deprecated:: 3.14
-
-      :func:`codecs.open` has been superseded by :func:`open`.
 
 
 .. function:: EncodedFile(file, data_encoding, file_encoding=None, errors='strict')
@@ -313,7 +306,7 @@ and writing to platform dependent files:
 Codec Base Classes
 ------------------
 
-The :mod:`!codecs` module defines a set of base classes which define the
+The :mod:`codecs` module defines a set of base classes which define the
 interfaces for working with codec objects, and can also be used as the basis
 for custom codec implementations.
 
@@ -445,7 +438,7 @@ In addition, the following error handler is specific to the given codecs:
 The set of allowed values can be extended by registering a new named error
 handler:
 
-.. function:: register_error(name, error_handler, /)
+.. function:: register_error(name, error_handler)
 
    Register the error handling function *error_handler* under the name *name*.
    The *error_handler* argument will be called during encoding and decoding
@@ -471,7 +464,7 @@ handler:
 Previously registered error handlers (including the standard error handlers)
 can be looked up by name:
 
-.. function:: lookup_error(name, /)
+.. function:: lookup_error(name)
 
    Return the error handler previously registered under the name *name*.
 
@@ -1073,7 +1066,7 @@ or with dictionaries as mapping tables. The following table lists the codecs by
 name, together with a few common aliases, and the languages for which the
 encoding is likely used. Neither the list of aliases nor the list of languages
 is meant to be exhaustive. Notice that spelling alternatives that only differ in
-case or use a space or a hyphen instead of an underscore are also valid aliases
+case or use a hyphen instead of an underscore are also valid aliases
 because they are equivalent when normalized by
 :func:`~encodings.normalize_encoding`. For example, ``'utf-8'`` is a valid
 alias for the ``'utf_8'`` codec.
@@ -1082,22 +1075,6 @@ alias for the ``'utf_8'`` codec.
 
    The below table lists the most common aliases, for a complete list
    refer to the source :source:`aliases.py <Lib/encodings/aliases.py>` file.
-
-On Windows, ``cpXXX`` codecs are available for all code pages.
-But only codecs listed in the following table are guaranteed to exist on
-other platforms.
-
-On platforms that provide the C library's :manpage:`iconv(3)` function
-(such as those using the GNU C Library),
-every encoding known to ``iconv`` for which Python has no built-in codec
-is available as well.
-Such an encoding is looked up by its ``iconv`` name (for example ``cp1133``).
-Prefixing the name with ``iconv:`` forces the use of the ``iconv``-based codec
-even when a built-in codec of the same name exists (for example ``iconv:latin1``),
-which is mostly useful for testing.
-
-.. versionchanged:: 3.16
-   Added support for encodings provided by the C library's ``iconv``.
 
 .. impl-detail::
 
@@ -1352,7 +1329,7 @@ particular, the following variants typically exist:
 +-----------------+--------------------------------+--------------------------------+
 | utf_8           | U8, UTF, utf8, cp65001         | all languages                  |
 +-----------------+--------------------------------+--------------------------------+
-| utf_8_sig       | utf8-sig                       | all languages                  |
+| utf_8_sig       |                                | all languages                  |
 +-----------------+--------------------------------+--------------------------------+
 
 .. versionchanged:: 3.4
@@ -1363,9 +1340,6 @@ particular, the following variants typically exist:
 
 .. versionchanged:: 3.8
    ``cp65001`` is now an alias to ``utf_8``.
-
-.. versionchanged:: 3.14
-   On Windows, ``cpXXX`` codecs are now available for all code pages.
 
 
 Python Specific Encodings
@@ -1395,6 +1369,15 @@ encodings.
 |                    |         | :mod:`encodings.idna`.    |
 |                    |         | Only ``errors='strict'``  |
 |                    |         | is supported.             |
+|                    |         |                           |
+|                    |         | .. warning::              |
+|                    |         |                           |
+|                    |         |    This codec builds on   |
+|                    |         |    ``punycode``, whose    |
+|                    |         |    algorithms scale       |
+|                    |         |    poorly, so limit the   |
+|                    |         |    length of untrusted    |
+|                    |         |    input.                 |
 +--------------------+---------+---------------------------+
 | mbcs               | ansi,   | Windows only: Encode the  |
 |                    | dbcs    | operand according to the  |
@@ -1449,14 +1432,6 @@ encodings.
 |                    |         | Beware that Python source |
 |                    |         | code actually uses UTF-8  |
 |                    |         | by default.               |
-+--------------------+---------+---------------------------+
-| utf-7-imap         | mUTF-7  | Modified UTF-7 encoding   |
-|                    |         | of :rfc:`3501` for IMAP4  |
-|                    |         | mailbox names.  Only      |
-|                    |         | ``errors='strict'`` is    |
-|                    |         | supported.                |
-|                    |         |                           |
-|                    |         | .. versionadded:: next    |
 +--------------------+---------+---------------------------+
 
 .. versionchanged:: 3.8
@@ -1575,8 +1550,8 @@ mapping. It is not supported by :meth:`str.encode` (which only produces
    Restoration of the ``rot13`` alias.
 
 
-:mod:`!encodings` --- Encodings package
----------------------------------------
+:mod:`encodings` --- Encodings package
+--------------------------------------
 
 .. module:: encodings
    :synopsis: Encodings package
@@ -1596,7 +1571,7 @@ This module implements the following functions:
 
 
 .. note::
-   The following functions should not be used directly, except for testing
+   The following function should not be used directly, except for testing
    purposes; :func:`codecs.lookup` should be used instead.
 
 
@@ -1616,18 +1591,6 @@ This module implements the following functions:
    are registered for future use.
 
 
-.. function:: win32_code_page_search_function(encoding)
-
-   Search for a Windows code page encoding *encoding* of the form ``cpXXXX``.
-
-   If the code page is valid and supported, return a :class:`codecs.CodecInfo`
-   object for it.
-
-   .. availability:: Windows.
-
-   .. versionadded:: 3.14
-
-
 This module implements the following exception:
 
 .. exception:: CodecRegistryError
@@ -1635,16 +1598,22 @@ This module implements the following exception:
    Raised when a codec is invalid or incompatible.
 
 
-:mod:`!encodings.idna` --- Internationalized Domain Names in Applications
--------------------------------------------------------------------------
+:mod:`encodings.idna` --- Internationalized Domain Names in Applications
+------------------------------------------------------------------------
 
 .. module:: encodings.idna
    :synopsis: Internationalized Domain Names implementation
+.. moduleauthor:: Martin v. Löwis
 
 This module implements :rfc:`3490` (Internationalized Domain Names in
-Applications) and :rfc:`3491` (Nameprep: A Stringprep Profile for
+Applications) and :rfc:`3492` (Nameprep: A Stringprep Profile for
 Internationalized Domain Names (IDN)). It builds upon the ``punycode`` encoding
 and :mod:`stringprep`.
+
+.. warning::
+
+   This module builds on ``punycode``, whose algorithms scale poorly, so limit
+   the length of untrusted input.
 
 If you need the IDNA 2008 standard from :rfc:`5891` and :rfc:`5895`, use the
 third-party :pypi:`idna` module.
@@ -1677,36 +1646,16 @@ When receiving host names from the wire (such as in reverse name lookup), no
 automatic conversion to Unicode is performed: applications wishing to present
 such host names to the user should decode them to Unicode.
 
-The module :mod:`!encodings.idna` also implements the nameprep procedure, which
+The module :mod:`encodings.idna` also implements the nameprep procedure, which
 performs certain normalizations on host names, to achieve case-insensitivity of
 international domain names, and to unify similar characters. The nameprep
 functions can be used directly if desired.
 
 
-.. function:: nameprep(label, *, limit=None)
+.. function:: nameprep(label)
 
    Return the nameprepped version of *label*. The implementation currently assumes
    query strings, so ``AllowUnassigned`` is true.
-
-   Raise :exc:`UnicodeEncodeError` if the nameprep algorithm emits an error.
-
-   If the *limit* argument is given, it should be set to the maximum size
-   of an encoded A-label (that is, 63 for IDNA).
-   :func:`!nameprep` will raise :exc:`UnicodeEncodeError` if the label is
-   **much** larger than *limit*.
-   Note that this is only a rough check meant to skip expensive processing
-   of extremely large input; the caller should check any exact
-   limits separately.
-
-   .. warning::
-
-      For backwards compatibility, label size is unlimited by default.
-      This may cause issues when processing the result with the
-      ``punycode`` encoding, whose algorithms scale poorly.
-
-   .. versionchanged:: 3.16
-
-      Added the *limit* parameter.
 
 
 .. function:: ToASCII(label)
@@ -1720,8 +1669,8 @@ functions can be used directly if desired.
    Convert a label to Unicode, as specified in :rfc:`3490`.
 
 
-:mod:`!encodings.mbcs` --- Windows ANSI codepage
-------------------------------------------------
+:mod:`encodings.mbcs` --- Windows ANSI codepage
+-----------------------------------------------
 
 .. module:: encodings.mbcs
    :synopsis: Windows ANSI codepage
@@ -1738,11 +1687,12 @@ This module implements the ANSI codepage (CP_ACP).
    Support any error handler.
 
 
-:mod:`!encodings.utf_8_sig` --- UTF-8 codec with BOM signature
---------------------------------------------------------------
+:mod:`encodings.utf_8_sig` --- UTF-8 codec with BOM signature
+-------------------------------------------------------------
 
 .. module:: encodings.utf_8_sig
    :synopsis: UTF-8 codec with BOM signature
+.. moduleauthor:: Walter Dörwald
 
 This module implements a variant of the UTF-8 codec. On encoding, a UTF-8 encoded
 BOM will be prepended to the UTF-8 encoded bytes. For the stateful encoder this

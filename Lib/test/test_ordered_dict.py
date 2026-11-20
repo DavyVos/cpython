@@ -12,7 +12,7 @@ import unittest
 import weakref
 from collections.abc import MutableMapping
 from test import mapping_tests, support
-from test.support import import_helper
+from test.support import import_helper, suppress_immortalization
 
 
 py_coll = import_helper.import_fresh_module('collections',
@@ -73,9 +73,6 @@ class OrderedDictTests:
         od = OrderedDict()
         od.update(dict(pairs))
         self.assertEqual(sorted(od.items()), pairs)                                 # dict input
-        od = OrderedDict()
-        od.update(frozendict(pairs))
-        self.assertEqual(sorted(od.items()), pairs)                                 # frozendict input
         od = OrderedDict()
         od.update(**dict(pairs))
         self.assertEqual(sorted(od.items()), pairs)                                 # kwds input
@@ -150,7 +147,7 @@ class OrderedDictTests:
     def test_abc(self):
         OrderedDict = self.OrderedDict
         self.assertIsInstance(OrderedDict(), MutableMapping)
-        self.assertIsSubclass(OrderedDict, MutableMapping)
+        self.assertTrue(issubclass(OrderedDict, MutableMapping))
 
     def test_clear(self):
         OrderedDict = self.OrderedDict
@@ -291,11 +288,9 @@ class OrderedDictTests:
         pairs = pairs[2:] + pairs[:2]
         od2 = OrderedDict(pairs)
         self.assertNotEqual(od1, od2)       # different order implies inequality
-        # comparison to regular (frozen)dict is not order sensitive
+        # comparison to regular dict is not order sensitive
         self.assertEqual(od1, dict(od2))
         self.assertEqual(dict(od2), od1)
-        self.assertEqual(od1, frozendict(od2))
-        self.assertEqual(frozendict(od1), od2)
         # different length implied inequality
         self.assertNotEqual(od1, OrderedDict(pairs[:-1]))
 
@@ -319,14 +314,14 @@ class OrderedDictTests:
         check(dup)
         self.assertIs(dup.x, od.x)
         self.assertIs(dup.z, od.z)
-        self.assertNotHasAttr(dup, 'y')
+        self.assertFalse(hasattr(dup, 'y'))
         dup = copy.deepcopy(od)
         check(dup)
         self.assertEqual(dup.x, od.x)
         self.assertIsNot(dup.x, od.x)
         self.assertEqual(dup.z, od.z)
         self.assertIsNot(dup.z, od.z)
-        self.assertNotHasAttr(dup, 'y')
+        self.assertFalse(hasattr(dup, 'y'))
         # pickle directly pulls the module, so we have to fake it
         with replaced_module('collections', self.module):
             for proto in range(pickle.HIGHEST_PROTOCOL + 1):
@@ -335,7 +330,7 @@ class OrderedDictTests:
                     check(dup)
                     self.assertEqual(dup.x, od.x)
                     self.assertEqual(dup.z, od.z)
-                    self.assertNotHasAttr(dup, 'y')
+                    self.assertFalse(hasattr(dup, 'y'))
         check(eval(repr(od)))
         update_test = OrderedDict()
         update_test.update(od)
@@ -674,6 +669,7 @@ class OrderedDictTests:
         dict.update(od, [('spam', 1)])
         self.assertNotIn('NULL', repr(od))
 
+    @suppress_immortalization()
     def test_reference_loop(self):
         # Issue 25935
         OrderedDict = self.OrderedDict
@@ -703,7 +699,6 @@ class OrderedDictTests:
         d |= list(b.items())
         expected = OrderedDict({0: 0, 1: 1, 2: 2, 3: 3})
         self.assertEqual(a | dict(b), expected)
-        self.assertEqual(a | frozendict(b), expected)
         self.assertEqual(a | b, expected)
         self.assertEqual(c, expected)
         self.assertEqual(d, expected)
@@ -712,17 +707,12 @@ class OrderedDictTests:
         c |= a
         expected = OrderedDict({1: 1, 2: 1, 3: 3, 0: 0})
         self.assertEqual(dict(b) | a, expected)
-        self.assertEqual(frozendict(b) | a, expected)
-        self.assertEqual(a.__ror__(frozendict(b)), expected)
         self.assertEqual(b | a, expected)
         self.assertEqual(c, expected)
 
         self.assertIs(type(a | b), OrderedDict)
         self.assertIs(type(dict(a) | b), OrderedDict)
-        self.assertIs(type(frozendict(a) | b), frozendict)
-        self.assertIs(type(b.__ror__(frozendict(a))), OrderedDict)
         self.assertIs(type(a | dict(b)), OrderedDict)
-        self.assertIs(type(a | frozendict(b)), OrderedDict)
 
         expected = a.copy()
         a |= ()

@@ -1,7 +1,5 @@
 #include "pyconfig.h"   // Py_GIL_DISABLED
-#ifdef Py_GIL_DISABLED
-#  define Py_TARGET_ABI3T 0x030f0000
-#else
+#ifndef Py_GIL_DISABLED
    // Need limited C API 3.6.1 for PySlice_Unpack() and PySlice_AdjustIndices()
    // and for PySlice_GetIndicesEx() implemented as a macro.
 #  define Py_LIMITED_API 0x03060100

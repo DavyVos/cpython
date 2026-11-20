@@ -1,3 +1,5 @@
+import gc
+import weakref
 import unittest
 from test.support import import_helper
 from collections import UserList

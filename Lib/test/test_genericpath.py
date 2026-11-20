@@ -2,15 +2,13 @@
 Tests common to genericpath, ntpath and posixpath
 """
 
-import copy
 import genericpath
 import os
-import pickle
 import sys
 import unittest
 import warnings
 from test import support
-from test.support import os_helper
+from test.support import os_helper, is_emscripten
 from test.support import warnings_helper
 from test.support.script_helper import assert_python_ok
 from test.support.os_helper import FakePath
@@ -34,10 +32,6 @@ class GenericTest:
                                 .format(self.pathmodule.__name__, attr))
 
     def test_commonprefix(self):
-        with warnings_helper.check_warnings((".*commonpath().*", DeprecationWarning)):
-            self.do_test_commonprefix()
-
-    def do_test_commonprefix(self):
         commonprefix = self.pathmodule.commonprefix
         self.assertEqual(
             commonprefix([]),
@@ -98,8 +92,8 @@ class GenericTest:
         for s1 in testlist:
             for s2 in testlist:
                 p = commonprefix([s1, s2])
-                self.assertStartsWith(s1, p)
-                self.assertStartsWith(s2, p)
+                self.assertTrue(s1.startswith(p))
+                self.assertTrue(s2.startswith(p))
                 if s1 != s2:
                     n = len(p)
                     self.assertNotEqual(s1[n:n+1], s2[n:n+1])
@@ -167,6 +161,7 @@ class GenericTest:
         self.assertIs(self.pathmodule.lexists(path=filename), True)
 
     @unittest.skipUnless(hasattr(os, "pipe"), "requires os.pipe()")
+    @unittest.skipIf(is_emscripten, "Emscripten pipe fds have no stat")
     def test_exists_fd(self):
         r, w = os.pipe()
         try:
@@ -325,21 +320,6 @@ class GenericTest:
             with open(filename, "rb", 0) as fp2:
                 fd2 = fp2.fileno()
                 self.assertTrue(self.pathmodule.sameopenfile(fd1, fd2))
-
-    def test_realpath_mode_values(self):
-        for name in 'ALL_BUT_LAST', 'ALLOW_MISSING':
-            with self.subTest(name):
-                mode = getattr(self.pathmodule, name)
-                self.assertEqual(repr(mode), 'os.path.' + name)
-                self.assertEqual(str(mode), 'os.path.' + name)
-                self.assertTrue(mode)
-                self.assertIs(copy.copy(mode), mode)
-                self.assertIs(copy.deepcopy(mode), mode)
-                for proto in range(pickle.HIGHEST_PROTOCOL+1):
-                    with self.subTest(protocol=proto):
-                        pickled = pickle.dumps(mode, proto)
-                        unpickled = pickle.loads(pickled)
-                        self.assertIs(unpickled, mode)
 
 
 class TestGenericTest(GenericTest, unittest.TestCase):
@@ -610,9 +590,8 @@ class PathLikeTests(unittest.TestCase):
         self.assertPathEqual(os.path.isdir)
 
     def test_path_commonprefix(self):
-        with warnings_helper.check_warnings((".*commonpath().*", DeprecationWarning)):
-            self.assertEqual(os.path.commonprefix([self.file_path, self.file_name]),
-                             self.file_name)
+        self.assertEqual(os.path.commonprefix([self.file_path, self.file_name]),
+                         self.file_name)
 
     def test_path_getsize(self):
         self.assertPathEqual(os.path.getsize)

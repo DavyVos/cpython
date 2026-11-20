@@ -1,58 +1,15 @@
 import contextlib
 import io
-import sys
-import warnings
 import unittest
-from unittest.mock import ANY, patch
+from unittest.mock import patch
 from textwrap import dedent
 
 from test.support import force_not_colorized
 
 from _pyrepl.console import InteractiveColoredConsole
-from _pyrepl.simple_interact import (
-    _more_lines,
-    run_multiline_interactive_console,
-)
+from _pyrepl.simple_interact import _more_lines
 
 class TestSimpleInteract(unittest.TestCase):
-    def test_prompts_are_converted_to_strings(self):
-        console = InteractiveColoredConsole()
-
-        class Prompt:
-            def __init__(self, value):
-                self.value = value
-
-            def __str__(self):
-                return self.value
-
-        with (
-            patch.object(sys, "ps1", Prompt("primary"), create=True),
-            patch.object(sys, "ps2", Prompt("secondary"), create=True),
-            patch("_pyrepl.readline._setup"),
-            patch(
-                "_pyrepl.simple_interact.multiline_input", side_effect=EOFError
-            ) as multiline_input,
-        ):
-            run_multiline_interactive_console(console)
-
-        multiline_input.assert_called_once_with(ANY, "primary", "secondary")
-
-    def test_ps1_str_error_uses_default_prompt(self):
-        class Prompt:
-            def __str__(self):
-                return 1 / 0
-
-        with (
-            patch.object(sys, "ps1", Prompt(), create=True),
-            patch("_pyrepl.readline._setup"),
-            patch(
-                "_pyrepl.simple_interact.multiline_input", side_effect=EOFError
-            ) as multiline_input,
-        ):
-            run_multiline_interactive_console(InteractiveColoredConsole())
-
-        multiline_input.assert_called_once_with(ANY, ">>> ", ANY)
-
     def test_multiple_statements(self):
         namespace = {}
         code = dedent("""\
@@ -155,7 +112,7 @@ class TestSimpleInteract(unittest.TestCase):
         r = """
     def f(x, x): ...
              ^
-SyntaxError: duplicate parameter 'x' in function definition"""
+SyntaxError: duplicate argument 'x' in function definition"""
         self.assertIn(r, f.getvalue())
 
     def test_runsource_shows_syntax_error_for_failed_compilation(self):
@@ -197,7 +154,7 @@ SyntaxError: duplicate parameter 'x' in function definition"""
         console = InteractiveColoredConsole()
         source = dedent("""\
         x: int = 1
-        print(__annotate__(1))
+        print(__annotations__)
         """)
         f = io.StringIO()
         with contextlib.redirect_stdout(f):
@@ -333,28 +290,3 @@ class TestMoreLines(unittest.TestCase):
         code = "if foo:"
         console = InteractiveColoredConsole(namespace, filename="<stdin>")
         self.assertTrue(_more_lines(console, code))
-
-
-class TestWarnings(unittest.TestCase):
-    def test_pep_765_warning(self):
-        """
-        Test that a SyntaxWarning emitted from the
-        AST optimizer is only shown once in the REPL.
-        """
-        # gh-131927
-        console = InteractiveColoredConsole()
-        code = dedent("""\
-        def f():
-            try:
-                return 1
-            finally:
-                return 2
-        """)
-
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            console.runsource(code)
-
-        count = sum("'return' in a 'finally' block" in str(w.message)
-                    for w in caught)
-        self.assertEqual(count, 1)
