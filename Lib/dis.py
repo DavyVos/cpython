@@ -668,8 +668,11 @@ def _get_name_info(name_index, get_name, **extrainfo):
        and an empty string for its repr.
     """
     if get_name is not None:
-        argval = get_name(name_index, **extrainfo)
-        return argval, argval
+        try:
+            argval = get_name(name_index, **extrainfo)
+            return argval, argval
+        except IndexError as e:
+            return UNKNOWN, ''
     else:
         return UNKNOWN, ''
 
